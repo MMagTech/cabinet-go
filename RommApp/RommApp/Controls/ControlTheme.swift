@@ -34,7 +34,7 @@ enum ControlTheme: String, CaseIterable {
 
     var detail: String {
         switch self {
-        case .system: return "Neo Geo red, yellow, green, blue and friends, matching the hardware each game came from."
+        case .system: return "Each handheld's own button colours, like the Game Boy's magenta and the PSP's symbols."
         case .monochrome: return "Every control the same neutral white."
         }
     }

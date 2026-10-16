@@ -2,9 +2,10 @@ import SwiftUI
 import UIKit
 
 /// Diagnostics for reporting a problem, split out of Settings on purpose:
-/// this is read-only information about what the emulator did last, not a
-/// setting anyone tunes, and it was confusing sitting in the same list as
-/// things people actually configure.
+/// this is read-only information, not a setting anyone tunes, and it was
+/// confusing sitting in the same list as things people actually
+/// configure. The web player's emulation summary and storage repair left
+/// with the web player (docs/scope-handheld.md).
 ///
 /// None of this touches the actual player: `PlayerView`'s webview is the
 /// only performance sensitive path in the app, and nothing here reads
@@ -15,10 +16,6 @@ import UIKit
 struct DebugView: View {
     @EnvironmentObject private var session: Session
     @State private var copied = false
-    @StateObject private var repairBridge = EmulatorCacheBridge()
-    @State private var showingRepairBridge = false
-    @State private var repairing = false
-    @State private var repaired = false
     /// Read once for the diagnostics text only. The artwork cache is
     /// deliberately not a setting: it manages its own size, re-downloads
     /// anything it drops, and clearing it fixes nothing, so there is
@@ -31,24 +28,6 @@ struct DebugView: View {
 
     var body: some View {
         List {
-            Section {
-                Text(EmulationInfo.summary)
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-                if EmulationInfo.recoveries > 0 {
-                    LabeledContent("Player reloads survived", value: "\(EmulationInfo.recoveries)")
-                }
-                if let vitals = EmulationInfo.vitalsAtDeath {
-                    Text("Last reload happened at: \(vitals)")
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
-                }
-            } header: {
-                Text("Emulation")
-            } footer: {
-                Text("Recorded from the last game you played.")
-            }
-
             Section {
                 LabeledContent("App", value: Self.appVersion)
                 LabeledContent("iOS", value: UIDevice.current.systemVersion)
@@ -85,28 +64,6 @@ struct DebugView: View {
 
             Section {
                 Button {
-                    showingRepairBridge = true
-                    repairing = true
-                } label: {
-                    if repairing {
-                        HStack(spacing: 10) {
-                            ProgressView()
-                            Text("Repairing")
-                        }
-                    } else {
-                        Label(
-                            repaired ? "Player storage repaired" : "Repair player storage",
-                            systemImage: repaired ? "checkmark" : "wrench.adjustable"
-                        )
-                    }
-                }
-                .disabled(repairing || repaired)
-            } footer: {
-                Text("If games hang on the loading screen, the player's core cache may be damaged, which can happen when iOS kills the app mid game. This deletes it so cores re-download fresh. Saves, states and cached games aren't touched.")
-            }
-
-            Section {
-                Button {
                     UIPasteboard.general.string = diagnosticsText
                     copied = true
                     Task {
@@ -124,23 +81,7 @@ struct DebugView: View {
                 Text("Report a bug opens a pre-filled GitHub issue draft, it doesn't post anything until you review and submit it there yourself.")
             }
         }
-        .background {
-            if showingRepairBridge, let serverURL = session.serverURL {
-                EmulatorCacheWebView(url: serverURL, bridge: repairBridge)
-                    .frame(width: 0, height: 0)
-                    .opacity(0)
-                    .accessibilityHidden(true)
-            }
-        }
-        .onChange(of: repairBridge.isReady) { _, ready in
-            guard ready else { return }
-            Task {
-                await repairBridge.repairPlayerStorage()
-                repairing = false
-                repaired = true
-            }
-        }
-        .navigationTitle("Debug")
+        .navigationTitle("Diagnostics")
         .navigationBarTitleDisplayMode(.inline)
         .task { artworkBytes = await CoverCache.shared.diskUsage() }
     }
