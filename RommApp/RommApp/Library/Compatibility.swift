@@ -140,16 +140,9 @@ private struct FavoriteBadge: ViewModifier {
     func body(content: Content) -> some View {
         content.overlay(alignment: .topLeading) {
             if session.isFavorite(romId: romId) {
-                Image(systemName: "star.fill")
+                Image(systemName: "heart.fill")
                     .font(compact ? .caption2 : .footnote)
-                    .foregroundStyle(.yellow)
-                    // Same idea as the warning triangle next door, much
-                    // smaller correction. A five pointed star's box is
-                    // bounded above by one point and below by two, so its
-                    // centre sits just under the box's, and box centring
-                    // leaves the points unevenly spaced from the ring by
-                    // about a twentieth of the glyph rather than a sixth.
-                    .offset(y: compact ? -0.5 : -0.75)
+                    .foregroundStyle(.pink)
                     .padding(compact ? 4 : 6)
                     .background(.regularMaterial, in: .circle)
                     .padding(compact ? 4 : 6)
@@ -235,7 +228,7 @@ private struct GameContextMenu: ViewModifier {
             } label: {
                 Label(
                     favorited ? "Unfavorite" : "Favorite",
-                    systemImage: favorited ? "star.slash" : "star"
+                    systemImage: favorited ? "heart.slash" : "heart"
                 )
             }
             Button {

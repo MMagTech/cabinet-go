@@ -523,8 +523,8 @@ struct GameLaunchView: View {
                 togglingFavorite = false
             }
         } label: {
-            Image(systemName: session.isFavorite(romId: rom.id) ? "star.fill" : "star")
-                .foregroundStyle(session.isFavorite(romId: rom.id) ? .yellow : .primary)
+            Image(systemName: session.isFavorite(romId: rom.id) ? "heart.fill" : "heart")
+                .foregroundStyle(session.isFavorite(romId: rom.id) ? .pink : .primary)
         }
         .disabled(togglingFavorite)
         .alert(
@@ -1494,12 +1494,12 @@ struct GameLaunchView: View {
             }
         } label: {
             ZStack {
-                Image(systemName: "star")
+                Image(systemName: "heart")
                     .foregroundStyle(.secondary)
-                Image(systemName: "star.fill")
-                    .foregroundStyle(.yellow)
+                Image(systemName: "heart.fill")
+                    .foregroundStyle(.pink)
                     // The colour arrives rather than cross-fades: the
-                    // fill rises from the bottom of the star, so there
+                    // fill rises from the bottom of the heart, so there
                     // is a moment where it is half full. A fade between
                     // two symbols is mush and reads as a checkbox.
                     .mask(alignment: .bottom) {

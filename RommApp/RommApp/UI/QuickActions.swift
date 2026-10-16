@@ -32,7 +32,7 @@ enum QuickAction: String {
             ),
             UIApplicationShortcutItem(
                 type: QuickAction.favorites.rawValue, localizedTitle: "Favorites",
-                localizedSubtitle: nil, icon: UIApplicationShortcutIcon(systemImageName: "star")
+                localizedSubtitle: nil, icon: UIApplicationShortcutIcon(systemImageName: "heart")
             ),
             UIApplicationShortcutItem(
                 type: QuickAction.recents.rawValue, localizedTitle: "Recents",

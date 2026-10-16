@@ -306,9 +306,9 @@ struct RomListView: View {
                                     .controlSize(.mini)
                             }
                             if session.isFavorite(romId: rom.id) {
-                                Image(systemName: "star.fill")
+                                Image(systemName: "heart.fill")
                                     .font(.caption)
-                                    .foregroundStyle(.yellow)
+                                    .foregroundStyle(.pink)
                             }
                             if compatibility.isMarked(rom.id) {
                                 Image(systemName: "exclamationmark.triangle.fill")
