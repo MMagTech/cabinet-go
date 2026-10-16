@@ -502,7 +502,7 @@
 					"$(PROJECT_DIR)/Vendor/ANGLE/include",
 				);
 				INFOPLIST_FILE = Info.plist;
-				INFOPLIST_KEY_CFBundleDisplayName = "Cabinet Dev";
+				INFOPLIST_KEY_CFBundleDisplayName = "Go Dev";
 				INFOPLIST_KEY_GCSupportsControllerUserInteraction = YES;
 				INFOPLIST_KEY_ITSAppUsesNonExemptEncryption = NO;
 				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = NO;
@@ -549,7 +549,7 @@
 					libGLESv2,
 				);
 				"OTHER_LDFLAGS[sdk=iphonesimulator*]" = "-lc++";
-				PRODUCT_BUNDLE_IDENTIFIER = com.mmagtech.CabinetDev;
+				PRODUCT_BUNDLE_IDENTIFIER = com.mmagtech.CabinetGo.dev;
 				PRODUCT_NAME = Cabinet;
 				SWIFT_EMIT_LOC_STRINGS = YES;
 				SWIFT_OBJC_BRIDGING_HEADER = "RommApp/Native/RommApp-Bridging-Header.h";
@@ -596,7 +596,7 @@
 					"$(PROJECT_DIR)/Vendor/ANGLE/include",
 				);
 				INFOPLIST_FILE = Info.plist;
-				INFOPLIST_KEY_CFBundleDisplayName = Cabinet;
+				INFOPLIST_KEY_CFBundleDisplayName = "Cabinet Go";
 				INFOPLIST_KEY_GCSupportsControllerUserInteraction = YES;
 				INFOPLIST_KEY_ITSAppUsesNonExemptEncryption = NO;
 				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = NO;
@@ -643,7 +643,7 @@
 					libGLESv2,
 				);
 				"OTHER_LDFLAGS[sdk=iphonesimulator*]" = "-lc++";
-				PRODUCT_BUNDLE_IDENTIFIER = com.mmagtech.Cabinet;
+				PRODUCT_BUNDLE_IDENTIFIER = com.mmagtech.CabinetGo;
 				PRODUCT_NAME = Cabinet;
 				SWIFT_EMIT_LOC_STRINGS = YES;
 				SWIFT_OBJC_BRIDGING_HEADER = "RommApp/Native/RommApp-Bridging-Header.h";
@@ -719,7 +719,7 @@
 				DEVELOPMENT_TEAM = ZMUB88RZ5D;
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_FILE = RommAppWidget/Info.plist;
-				INFOPLIST_KEY_CFBundleDisplayName = Cabinet;
+				INFOPLIST_KEY_CFBundleDisplayName = "Cabinet Go";
 				IPHONEOS_DEPLOYMENT_TARGET = 18.0;
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
@@ -727,7 +727,7 @@
 					"@executable_path/../../Frameworks",
 				);
 				MARKETING_VERSION = 1.0.1;
-				PRODUCT_BUNDLE_IDENTIFIER = com.mmagtech.CabinetDev.widget;
+				PRODUCT_BUNDLE_IDENTIFIER = com.mmagtech.CabinetGo.dev.widget;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SDKROOT = iphoneos;
 				SKIP_INSTALL = YES;
@@ -746,7 +746,7 @@
 				DEVELOPMENT_TEAM = ZMUB88RZ5D;
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_FILE = RommAppWidget/Info.plist;
-				INFOPLIST_KEY_CFBundleDisplayName = Cabinet;
+				INFOPLIST_KEY_CFBundleDisplayName = "Cabinet Go";
 				IPHONEOS_DEPLOYMENT_TARGET = 18.0;
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
@@ -754,7 +754,7 @@
 					"@executable_path/../../Frameworks",
 				);
 				MARKETING_VERSION = 1.0.1;
-				PRODUCT_BUNDLE_IDENTIFIER = com.mmagtech.Cabinet.widget;
+				PRODUCT_BUNDLE_IDENTIFIER = com.mmagtech.CabinetGo.widget;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SDKROOT = iphoneos;
 				SKIP_INSTALL = YES;

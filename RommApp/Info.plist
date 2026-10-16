@@ -8,9 +8,10 @@
 			<key>CFBundleTypeRole</key>
 			<string>Editor</string>
 			<key>CFBundleURLName</key>
-			<string>com.mmagtech.Cabinet.link</string>
+			<string>com.mmagtech.CabinetGo.link</string>
 			<key>CFBundleURLSchemes</key>
 			<array>
+				<string>cabinetgo</string>
 				<string>cabinet</string>
 			</array>
 		</dict>
@@ -27,15 +28,15 @@
 		<true/>
 	</dict>
 	<key>NSBluetoothAlwaysUsageDescription</key>
-	<string>Cabinet uses Bluetooth to measure the link between your iPhone and Apple TV for controller features.</string>
+	<string>Cabinet Go uses Bluetooth to measure the link to a nearby device for controller features.</string>
 	<key>NSBonjourServices</key>
 	<array>
 		<string>_cabinet-probe._udp</string>
 	</array>
 	<key>NSLocalNetworkUsageDescription</key>
-	<string>Cabinet uses your local network to reach your RomM server directly when you are at home, instead of going out to the internet and back.</string>
+	<string>Cabinet Go uses your local network to reach your RomM server directly when you are at home.</string>
 	<key>NSMotionUsageDescription</key>
-	<string>Cabinet uses motion to let you aim by tilting, for arcade games whose joystick also rotated.</string>
+	<string>Cabinet Go uses motion for games that are played by tilting, like WarioWare: Twisted.</string>
 	<key>UIApplicationSceneManifest</key>
 	<dict>
 		<key>UIApplicationSupportsMultipleScenes</key>

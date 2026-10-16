@@ -13,7 +13,7 @@ import Foundation
 /// it and Spotlight results carry it. One definition, so a change cannot
 /// reach three of them and miss the fourth.
 enum CabinetLink {
-    static let scheme = "cabinet"
+    static let scheme = "cabinetgo"
 
     static func play(romId: Int) -> URL? { url(host: "play", romId: romId) }
     static func game(romId: Int) -> URL? { url(host: "game", romId: romId) }

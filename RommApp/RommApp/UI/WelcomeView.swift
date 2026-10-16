@@ -27,7 +27,7 @@ struct WelcomeView: View {
             VStack(alignment: .leading, spacing: 28) {
                 Spacer()
 
-                Text("Cabinet")
+                Text("Cabinet Go")
                     .font(.largeTitle.bold())
 
                 // Two rows, no explaining sentence above them: the rows

@@ -294,7 +294,7 @@ actor RommClient {
         let body: [String: Any] = [
             "client_device_identifier": Self.deviceIdentifier,
             "name": deviceName.isEmpty ? devicePlatform : deviceName,
-            "client": "romm-ios",
+            "client": "cabinet-go",
             "platform": devicePlatform,
             "client_version": Self.appVersion,
             "requested_scopes": RommScopes.required,

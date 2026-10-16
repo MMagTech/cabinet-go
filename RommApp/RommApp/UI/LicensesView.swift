@@ -22,23 +22,23 @@ struct LicensesView: View {
     static let entries: [Entry] = [
         Entry(
             id: "cabinet",
-            name: "Cabinet",
+            name: "Cabinet Go",
             role: "This app",
-            summary: "Cabinet itself is free software under the MIT license.",
+            summary: "Cabinet Go itself is free software under the MIT license.",
             file: "cabinet-mit"
         ),
         Entry(
             id: "fbneo",
             name: "FinalBurn Neo",
             role: "Native arcade core",
-            summary: "FBNeo permits free non-commercial use. Cabinet is free, is not sold, and takes no donations, which satisfies those terms. FBNeo builds on code from the MAME project and is subject to MAME's license as well.",
+            summary: "FBNeo permits free non-commercial use. Cabinet Go is free, is not sold, and takes no donations, which satisfies those terms. FBNeo builds on code from the MAME project and is subject to MAME's license as well.",
             file: "fbneo"
         ),
         Entry(
             id: "mame2003-plus",
             name: "MAME 2003-Plus",
             role: "Native arcade core",
-            summary: "The classic MAME non-commercial license, as of MAME 0.78. Cabinet is free and is not sold, which satisfies those terms.",
+            summary: "The classic MAME non-commercial license, as of MAME 0.78. Cabinet Go is free and is not sold, which satisfies those terms.",
             file: "mame2003-plus"
         ),
         Entry(
@@ -66,7 +66,7 @@ struct LicensesView: View {
             id: "genesis-plus-gx",
             name: "Genesis Plus GX",
             role: "Native Genesis, Sega CD, Master System, Game Gear and 32X core",
-            summary: "Free for non-commercial use, with the same distribution terms Cabinet already meets for FBNeo.",
+            summary: "Free for non-commercial use, with the same distribution terms Cabinet Go already meets for FBNeo.",
             file: "genesis-plus-gx"
         ),
         Entry(
@@ -80,7 +80,7 @@ struct LicensesView: View {
             id: "snes9x",
             name: "Snes9x",
             role: "Native SNES core",
-            summary: "Free for non-commercial use. Cabinet is free and is not sold, which satisfies those terms.",
+            summary: "Free for non-commercial use. Cabinet Go is free and is not sold, which satisfies those terms.",
             file: "snes9x"
         ),
         Entry(
@@ -143,14 +143,14 @@ struct LicensesView: View {
             id: "opera",
             name: "Opera",
             role: "Native 3DO core",
-            summary: "Modified LGPL with FreeDO's non-commercial terms. Cabinet is free and is not sold, which satisfies those terms.",
+            summary: "Modified LGPL with FreeDO's non-commercial terms. Cabinet Go is free and is not sold, which satisfies those terms.",
             file: "opera"
         ),
         Entry(
             id: "picodrive",
             name: "PicoDrive",
             role: "Native Sega 32X core",
-            summary: "Free for non-commercial use. Cabinet is free and is not sold, which satisfies those terms.",
+            summary: "Free for non-commercial use. Cabinet Go is free and is not sold, which satisfies those terms.",
             file: "picodrive"
         ),
         Entry(

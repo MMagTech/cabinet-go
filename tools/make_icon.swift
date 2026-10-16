@@ -1,9 +1,21 @@
-// Renders Cabinet's app icon.
+// Renders Cabinet Go's app icon.
 //
 //   swift tools/make_icon.swift <output.png>
 //
-// Kept as a generator rather than a checked in binary so the icon can be
-// adjusted by editing numbers instead of opening a drawing program.
+// Cabinet Go is the handheld half of CabinetOS (docs/scope-handheld.md),
+// so its icon is Cabinet's arcade cabinet turned into a pocket console in
+// the same language: the same night sky, the cream body, the marquee's
+// pink to gold across the top, the cyan screen, a dark control and the
+// red and yellow buttons. Its output is
+// RommApp/RommApp/Assets.xcassets/AppIcon.appiconset/icon-1024.png; the
+// arcade cabinet it grew from is in git history before the rename.
+//
+// The Game Boy's own signatures are left out on purpose: one oversized
+// corner, a dark bezel carrying a stripe, and the two angled pills under
+// the buttons. Nintendo guards that look, and App Review is wary of an
+// emulator whose artwork resembles its hardware. Even corners, the
+// marquee on the body and a bezel in the cabinet's panel colour keep it a
+// generic handheld. A d-pad with two angled buttons is every handheld's.
 //
 // Follows Apple's icon rules: a single 1024 square, fully opaque, square
 // cornered because the system applies its own mask, no text, and a shape
@@ -23,8 +35,8 @@ guard let ctx = CGContext(
     bitmapInfo: CGImageAlphaInfo.noneSkipLast.rawValue
 ) else { fatalError("could not create context") }
 
-func rgb(_ r: Double, _ g: Double, _ b: Double) -> CGColor {
-    CGColor(red: r / 255, green: g / 255, blue: b / 255, alpha: 1)
+func rgb(_ r: Double, _ g: Double, _ b: Double, _ a: Double = 1) -> CGColor {
+    CGColor(red: r / 255, green: g / 255, blue: b / 255, alpha: a)
 }
 
 func rounded(_ x: Double, _ y: Double, _ w: Double, _ h: Double, _ r: Double) -> CGPath {
@@ -32,8 +44,19 @@ func rounded(_ x: Double, _ y: Double, _ w: Double, _ h: Double, _ r: Double) ->
            cornerWidth: r, cornerHeight: r, transform: nil)
 }
 
-// Backdrop: a dark arcade room, lit from above. The gradient keeps the icon
-// from reading as a flat sticker at large sizes.
+func fill(_ path: CGPath, _ color: CGColor) {
+    ctx.setFillColor(color)
+    ctx.addPath(path)
+    ctx.fillPath()
+}
+
+func dot(_ cx: Double, _ cy: Double, _ d: Double, _ color: CGColor) {
+    ctx.setFillColor(color)
+    ctx.fillEllipse(in: CGRect(x: cx - d / 2, y: cy - d / 2, width: d, height: d))
+}
+
+// Backdrop: Cabinet's dark arcade room, lit from above, unchanged so the
+// two icons sit together on a home screen.
 let backdrop = CGGradient(
     colorsSpace: space,
     colors: [rgb(58, 34, 104), rgb(18, 12, 38), rgb(9, 6, 20)] as CFArray,
@@ -44,31 +67,31 @@ ctx.drawLinearGradient(
     start: CGPoint(x: 0, y: side), end: CGPoint(x: 0, y: 0), options: []
 )
 
-// The cabinet body. A real cabinet has a tall empty lower half, but at icon
-// sizes that dead space just makes the shape bottom heavy, so the body is
-// cropped short of accurate proportions on purpose.
-ctx.setFillColor(rgb(238, 234, 226))
-ctx.addPath(rounded(268, 206, 488, 684, 56))
-ctx.fillPath()
+// The body, upright, with the same corner all round.
+fill(rounded(292, 150, 440, 740, 72), rgb(238, 234, 226))
 
-// Marquee: the lit sign across the top of every upright cabinet.
+// The marquee, kept from the cabinet: the lit sign is the family resemblance.
 let marquee = CGGradient(
     colorsSpace: space,
     colors: [rgb(255, 122, 199), rgb(255, 196, 87)] as CFArray,
     locations: [0, 1]
 )!
 ctx.saveGState()
-ctx.addPath(rounded(316, 762, 392, 84, 20))
+ctx.addPath(rounded(340, 810, 344, 40, 20))
 ctx.clip()
 ctx.drawLinearGradient(
     marquee,
-    start: CGPoint(x: 316, y: 0), end: CGPoint(x: 708, y: 0), options: []
+    start: CGPoint(x: 340, y: 0), end: CGPoint(x: 684, y: 0), options: []
 )
 ctx.restoreGState()
 
-// The screen, the brightest thing in the icon so the eye lands there first.
+// The bezel, in the cabinet's control panel colour rather than a dark frame.
+fill(rounded(340, 470, 344, 316, 30), rgb(206, 199, 188))
+
+// The screen, still the brightest thing in the icon, with the same soft
+// glow across the top of the glass as Cabinet's.
 ctx.saveGState()
-ctx.addPath(rounded(316, 446, 392, 284, 24))
+ctx.addPath(rounded(362, 492, 300, 272, 18))
 ctx.clip()
 let screen = CGGradient(
     colorsSpace: space,
@@ -77,42 +100,28 @@ let screen = CGGradient(
 )!
 ctx.drawLinearGradient(
     screen,
-    start: CGPoint(x: 0, y: 730), end: CGPoint(x: 0, y: 446), options: []
+    start: CGPoint(x: 0, y: 764), end: CGPoint(x: 0, y: 492), options: []
 )
-// A soft glow across the top of the glass. A hard edged band read as a seam
-// rather than a reflection, so this fades out instead.
 let sheen = CGGradient(
     colorsSpace: space,
-    colors: [
-        CGColor(red: 1, green: 1, blue: 1, alpha: 0.26),
-        CGColor(red: 1, green: 1, blue: 1, alpha: 0),
-    ] as CFArray,
+    colors: [rgb(255, 255, 255, 0.26), rgb(255, 255, 255, 0)] as CFArray,
     locations: [0, 1]
 )!
 ctx.drawLinearGradient(
     sheen,
-    start: CGPoint(x: 0, y: 730), end: CGPoint(x: 0, y: 590), options: []
+    start: CGPoint(x: 0, y: 764), end: CGPoint(x: 0, y: 628), options: []
 )
 ctx.restoreGState()
 
-// Control panel, stepped out from the body the way a real one overhangs.
-ctx.setFillColor(rgb(206, 199, 188))
-ctx.addPath(rounded(248, 312, 528, 112, 26))
-ctx.fillPath()
+// The d-pad, in the joystick's colour.
+let ink = rgb(58, 52, 68)
+fill(rounded(404 - 74, 318 - 25, 148, 50, 11), ink)
+fill(rounded(404 - 25, 318 - 74, 50, 148, 11), ink)
 
-// A joystick and two buttons: the smallest arrangement that still says arcade
-// rather than television.
-ctx.setFillColor(rgb(58, 52, 68))
-ctx.fillEllipse(in: CGRect(x: 320, y: 340, width: 56, height: 56))
-ctx.setFillColor(rgb(236, 64, 92))
-ctx.fillEllipse(in: CGRect(x: 474, y: 344, width: 50, height: 50))
-ctx.setFillColor(rgb(255, 196, 87))
-ctx.fillEllipse(in: CGRect(x: 558, y: 344, width: 50, height: 50))
-
-// Base, narrower than the body so the cabinet sits rather than floats.
-ctx.setFillColor(rgb(206, 199, 188))
-ctx.addPath(rounded(302, 172, 420, 58, 18))
-ctx.fillPath()
+// The arcade's two buttons, angled the way a handheld's are: red low on
+// the left, yellow high on the right.
+dot(578, 294, 64, rgb(236, 64, 92))
+dot(652, 344, 64, rgb(255, 196, 87))
 
 guard let image = ctx.makeImage() else { fatalError("could not render") }
 

@@ -110,7 +110,7 @@ struct DeepLinkHandler: ViewModifier {
                 // and wrong, which is what the television currently does
                 // whenever it cannot reach RomM.
                 problem = NetworkMonitor.shared.isOffline
-                    ? "Cabinet can't reach your server, and this game isn't downloaded to this phone."
+                    ? "Cabinet Go can't reach your server, and this game isn't downloaded to this phone."
                     : "It may have been removed from your library."
             }
         }

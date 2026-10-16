@@ -17,7 +17,7 @@ import UIKit
 /// would mean refactoring a shipped feature to serve an unshipped one.
 /// Worth revisiting once both have settled.
 enum WidgetSnapshot {
-    static let suite = "group.com.mmagtech.Cabinet"
+    static let suite = "group.com.mmagtech.CabinetGo"
     private static let key = "widget.snapshot"
 
     static var defaults: UserDefaults? { UserDefaults(suiteName: suite) }

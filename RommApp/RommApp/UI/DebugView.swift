@@ -88,7 +88,7 @@ struct DebugView: View {
 
     private var diagnosticsText: String {
         var lines = [
-            "Cabinet \(Self.appVersion), iOS \(UIDevice.current.systemVersion), \(Self.deviceModel)",
+            "Cabinet Go \(Self.appVersion), iOS \(UIDevice.current.systemVersion), \(Self.deviceModel)",
             "Free storage: \(Self.freeStorage)",
             "Artwork cache: \(ByteCountFormatter.string(fromByteCount: artworkBytes, countStyle: .file))",
             "RomM \(session.serverVersion ?? "unknown") at \(session.serverURL?.host ?? "unknown")",
