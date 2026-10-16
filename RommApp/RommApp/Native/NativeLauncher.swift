@@ -219,48 +219,14 @@ enum NativeLauncher {
     /// the same store and the same server row as every other platform's
     /// single save file.
     ///
-    /// A plain zip, laid out as `PSP/SAVEDATA/<GAMEID><TITLE>/...`, so the
-    /// file on the server is one a person can extract straight onto a
-    /// PPSSPP memory stick on any machine. That is the point of the
-    /// format: every other core here uploads the emulator's own bytes, a
-    /// PlayStation card is a PlayStation card and a VMU is a VMU, and
-    /// they all open in RetroArch or a standalone emulator. PSP used to
-    /// be the exception, written with FileWrapper's serialized
-    /// representation, which is Apple's rtfd directory archive and opens
-    /// nowhere but here. Changed 2026-09-17.
-    ///
-    /// NSFileCoordinator's .forUploading zips a directory, so this needs
-    /// no dependency either. It zips a staging copy rather than the live
-    /// directory so the archive carries the `PSP/SAVEDATA` prefix: the
-    /// zip's top-level entry is whatever item it was pointed at, and
-    /// pointing it at SAVEDATA itself would lose the path a person needs
-    /// to extract against.
+    /// A plain zip of SAVEDATA, rooted the way CabinetOS roots it: the
+    /// first path component is each save folder, `ULUS10002LUMINES/...`.
+    /// See PSPSaveZip for why, and for why it is written by hand. PSP once
+    /// uploaded Apple's rtfd archive (opens nowhere else, replaced
+    /// 2026-09-17), then a `PSP/SAVEDATA/`-prefixed zip that no other app
+    /// wrote (replaced 2026-10-15, never released).
     static func archivePSPSaveData(saveDir: URL) -> Data? {
-        let dir = pspSaveDataDirectory(saveDir: saveDir)
-        let fm = FileManager.default
-        guard let entries = try? fm.contentsOfDirectory(atPath: dir.path), !entries.isEmpty
-        else { return nil }
-
-        let staging = fm.temporaryDirectory
-            .appendingPathComponent("psp-zip-\(UUID().uuidString)", isDirectory: true)
-        let stagedPSP = staging.appendingPathComponent("PSP", isDirectory: true)
-        let stagedSaveData = stagedPSP.appendingPathComponent("SAVEDATA", isDirectory: true)
-        defer { try? fm.removeItem(at: staging) }
-        guard (try? fm.createDirectory(at: stagedSaveData, withIntermediateDirectories: true)) != nil
-        else { return nil }
-        for entry in entries {
-            try? fm.copyItem(at: dir.appendingPathComponent(entry),
-                             to: stagedSaveData.appendingPathComponent(entry))
-        }
-
-        var archived: Data?
-        var coordinationError: NSError?
-        NSFileCoordinator().coordinate(
-            readingItemAt: stagedPSP, options: [.forUploading], error: &coordinationError
-        ) { zipURL in
-            archived = try? Data(contentsOf: zipURL)
-        }
-        return archived
+        PSPSaveZip.archive(saveData: pspSaveDataDirectory(saveDir: saveDir))
     }
 
     /// Unpacks an archive over whatever is already on this device.
@@ -287,9 +253,10 @@ enum NativeLauncher {
         unpackPSPSaveDataZip(data, saveDir: saveDir)
     }
 
-    /// The zip written by `archivePSPSaveData`, whose entries carry the
-    /// `PSP/SAVEDATA/` prefix, so extracting into the save directory puts
-    /// every folder exactly where it belongs.
+    /// A zip of save folders: CabinetOS's layout, rooted at SAVEDATA, or
+    /// one carrying the `PSP/SAVEDATA/` prefix, which is how some other
+    /// tools lay out a memory stick and how this app wrote them for a
+    /// month before matching CabinetOS. Both land in the same place.
     ///
     /// Extracted to a staging directory first and then moved in one save
     /// folder at a time, rather than straight over the live tree, so a
@@ -309,9 +276,12 @@ enum NativeLauncher {
         try? fm.createDirectory(at: extracted, withIntermediateDirectories: true)
         guard archive_extract_all(zipURL.path, extracted.path) != 0 else { return }
 
-        let unpackedSaveData = extracted
+        let prefixed = extracted
             .appendingPathComponent("PSP", isDirectory: true)
             .appendingPathComponent("SAVEDATA", isDirectory: true)
+        var isDirectory: ObjCBool = false
+        let unpackedSaveData = fm.fileExists(atPath: prefixed.path, isDirectory: &isDirectory)
+            && isDirectory.boolValue ? prefixed : extracted
         guard let folders = try? fm.contentsOfDirectory(atPath: unpackedSaveData.path)
         else { return }
         let dir = pspSaveDataDirectory(saveDir: saveDir)

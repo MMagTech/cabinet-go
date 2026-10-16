@@ -438,9 +438,15 @@ final class MemoryCardSync {
     }
 
     private func uploadMemoryCard(_ data: Data, region: MemoryCardStore.Region = .saveRAM) async {
+        // PSP shares CabinetOS's row name for the same save, so the two
+        // apps keep one row rather than one each. Here, not at the capture,
+        // so the launch-time retry of a save that failed to upload uses it
+        // too.
+        let fileName = platform == .psp ? PSPSaveZip.rowName(title: rom.name ?? rom.fsName) : nil
         await Self.uploadCard(
             data, romId: rom.id, fileNameStem: rom.fsNameNoExt,
-            emulatorTag: core.emulatorTag, region: region, session: session
+            emulatorTag: core.emulatorTag, region: region, session: session,
+            fileName: fileName
         )
     }
 
@@ -450,9 +456,12 @@ final class MemoryCardSync {
     /// live in exactly one place. Extracted from the instance method
     /// above 2026-08-29 with identical behavior; the instance method now
     /// just fills in its session's values.
+    /// `fileName` overrides the usual `<stem> (Cabinet).<region>` row
+    /// name, for the one save that shares CabinetOS's own name: PSP.
     static func uploadCard(
         _ data: Data, romId: Int, fileNameStem: String, emulatorTag: String,
-        region: MemoryCardStore.Region = .saveRAM, session: Session
+        region: MemoryCardStore.Region = .saveRAM, session: Session,
+        fileName: String? = nil
     ) async {
         do {
             // The Cabinet marker keeps this row's filename distinct from
@@ -463,7 +472,7 @@ final class MemoryCardSync {
             // card of the same name.
             try await session.uploadSave(
                 romId: romId, emulator: emulatorTag,
-                fileName: "\(fileNameStem) (Cabinet).\(region.rawValue)", saveData: data
+                fileName: fileName ?? "\(fileNameStem) (Cabinet).\(region.rawValue)", saveData: data
             )
             // Re-list to learn the stamp the server just minted, so the
             // next launch recognises its own upload instead of pulling
