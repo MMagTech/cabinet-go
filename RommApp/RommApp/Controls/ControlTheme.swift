@@ -32,13 +32,6 @@ enum ControlTheme: String, CaseIterable {
         }
     }
 
-    var detail: String {
-        switch self {
-        case .system: return "Each handheld's own button colours, like the Game Boy's magenta and the PSP's symbols."
-        case .monochrome: return "Every control the same neutral white."
-        }
-    }
-
     /// The tint for one control, or nil when it should stay neutral.
     ///
     /// Hues are chosen to survive the low fill opacity these controls are

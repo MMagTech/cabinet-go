@@ -5,8 +5,9 @@ import SwiftUI
 /// (docs/scope-handheld.md); the TV controller, light gun aim, web player
 /// autosave, experimental cores and platform name source left with the
 /// features they belonged to. No core options either, the way CabinetOS
-/// has none: the app sets the values, and the few worth changing belong
-/// in the pause menu where their effect can be seen.
+/// has none: the app sets the values. And no helper text: a row is its
+/// label, with no footer, caption or subtitle explaining it, also as on
+/// CabinetOS.
 ///
 /// The destructive actions live here, behind a deliberate navigation, after one
 /// of them got fired by a stray tap when it sat inside the library list and
@@ -35,8 +36,6 @@ struct SettingsView: View {
                 ControllerStatusRow()
             } header: {
                 Text("Physical controller")
-            } footer: {
-                Text("On screen controls hide while one is connected.")
             }
 
             Section {
@@ -45,10 +44,6 @@ struct SettingsView: View {
                         Text(theme.label).tag(theme.rawValue)
                     }
                 }
-                Text(ControlTheme(rawValue: controlTheme)?.detail ?? "")
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-
                 VStack(alignment: .leading, spacing: 6) {
                     HStack {
                         Text("Touch control visibility")
@@ -60,12 +55,7 @@ struct SettingsView: View {
                     Slider(value: $controlOpacity, in: 0.25...1.0, step: 0.05)
                 }
 
-                VStack(alignment: .leading, spacing: 4) {
-                    Toggle("Raised controls", isOn: $raisedControls)
-                    Text("Off draws them flat, which is easier to read.")
-                        .font(.footnote)
-                        .foregroundStyle(.secondary)
-                }
+                Toggle("Raised controls", isOn: $raisedControls)
 
                 Toggle("Rumble", isOn: $rumbleEnabled)
             } header: {
@@ -93,8 +83,6 @@ struct SettingsView: View {
                 }
             } header: {
                 Text("Connection")
-            } footer: {
-                Text("If your server has a second address, Cabinet uses whichever one is on this network, and the other when you're away.")
             }
 
             Section {
@@ -103,8 +91,6 @@ struct SettingsView: View {
                 } label: {
                     Label("Storage", systemImage: "internaldrive")
                 }
-            } footer: {
-                Text("Games kept on this phone.")
             }
 
             Section {
@@ -113,8 +99,6 @@ struct SettingsView: View {
                 } label: {
                     Label("Licenses", systemImage: "doc.text")
                 }
-            } footer: {
-                Text("The software this app is built from, and the terms it ships under.")
             }
 
             Section {
@@ -123,8 +107,6 @@ struct SettingsView: View {
                 } label: {
                     Label("Diagnostics", systemImage: "ladybug")
                 }
-            } footer: {
-                Text("Diagnostics for reporting a problem.")
             }
 
             Section {
@@ -133,8 +115,6 @@ struct SettingsView: View {
                 creditLink("romm-ios-app", "https://github.com/ilyas-hallak/romm-ios-app")
             } header: {
                 Text("Credits")
-            } footer: {
-                Text("CabinetOS is the console half: every system, on the TV, with saves that cross to this phone. Cabinet talks to your RomM server, built by the RomM project and team, and was inspired by romm-ios-app, an earlier native client for RomM.")
             }
 
             Section {
@@ -144,8 +124,6 @@ struct SettingsView: View {
                 Button("Use a different server", role: .destructive) {
                     confirmingForget = true
                 }
-            } footer: {
-                Text("Unpairing signs this device out but remembers the server. Switching servers forgets everything.")
             }
         }
         .navigationTitle("Settings")
