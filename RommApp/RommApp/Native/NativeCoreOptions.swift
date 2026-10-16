@@ -160,31 +160,6 @@ enum NativeCoreOptions {
     /// them together, so without this those effects render as flicker.
     static let gameBoyAdvance: [NativeCoreOption] = [
         NativeCoreOption(
-            key: "mgba_color_correction",
-            label: "Screen colours",
-            detail: "The GBA and GBA SP's LCD did not reproduce colour the way a raw pixel dump does. Confirmed on device 2026-08-11: turning this on visibly shifted hues wrong compared to the same scene in the web player (blue reading as magenta), not subtly, so it defaults off pending a real fix. Verify against the web player before trusting this setting.",
-            // Values are the core's own: "GBA", "GBC", "Auto", or anything
-            // else (mapped from "Off" here) for a raw, uncorrected dump.
-            // "GBC" is deliberately not offered: this list only ever loads
-            // GBA carts, never GBC ones, which is Gambatte's system.
-            choices: [
-                // "OFF" uppercase, matching mGBA's own value list exactly
-                // (libretro_core_options.h:185). This read "Off" until
-                // 2026-08-17, which mGBA matches against none of its three
-                // known strings and so lands on ccType 0, the off path, by
-                // accident rather than by agreement. Harmless today and
-                // exactly the shape of the FBNeo frameskip casing bug
-                // above, so corrected while the values were being checked.
-                // A stored "Off" from before now fails the choices check in
-                // `value(_:for:)` and falls back to this default, which is
-                // the same setting it always meant.
-                .init(value: "OFF", label: "Off"),
-                .init(value: "GBA", label: "GBA / GBA SP"),
-                .init(value: "Auto", label: "Auto"),
-            ],
-            defaultValue: "OFF"
-        ),
-        NativeCoreOption(
             key: "mgba_interframe_blending",
             label: "Interframe blending",
             detail: "Blends consecutive frames. Games that flicker sprites for transparency need this to look right.",
@@ -196,7 +171,11 @@ enum NativeCoreOptions {
                 .init(value: "mix_smart", label: "Smart"),
                 .init(value: "lcd_ghosting", label: "LCD ghosting"),
             ],
-            defaultValue: "OFF"
+            // Smart, the value CabinetOS sets for mGBA (catalog.cpp), so a
+            // GBA game looks the same on the phone as on the console.
+            // Display only: it never reaches a save state. Nothing shows
+            // this option any more; the default is what every game gets.
+            defaultValue: "mix_smart"
         ),
     ]
 
