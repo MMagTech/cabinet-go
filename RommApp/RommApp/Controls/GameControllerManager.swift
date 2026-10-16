@@ -71,7 +71,7 @@ final class GameControllerManager: ObservableObject {
         weak var controller: GCController?
         weak var pad: GCExtendedGamepad?
         var name: String?
-        var bindings: [String: Int] = ControllerBindings.defaults
+        var bindings: [String: Int] = ControllerBindings.handheld
         var pressedInputs: Set<Int> = []
         var triggerDown: [String: Bool] = [:]
         /// Hysteresis state per digitized stick direction (RetroPad.up/
@@ -151,10 +151,6 @@ final class GameControllerManager: ObservableObject {
     /// screen can show both players rather than only whoever connected
     /// first.
     @Published private(set) var connectedNames: [String?] = Array(repeating: nil, count: GameControllerManager.maxPlayers)
-    /// Every button player 1's controller reports, by element name, so a
-    /// remap screen can show what actually exists rather than what was
-    /// assumed. Remapping stays a player-1 concern.
-    @Published private(set) var availableButtons: [String] = []
     /// Set when a controller is paired but does not present a standard
     /// gamepad, which no app can drive and no remapping can rescue.
     @Published private(set) var unsupportedController: String?
@@ -209,13 +205,7 @@ final class GameControllerManager: ObservableObject {
     /// for both reads as player 1's problem either way.
     var onDisconnect: ((Int) -> Void)?
 
-    /// While set, presses are reported here instead of driving the game, so
-    /// the remap screen can learn which physical button someone pressed.
-    var captureHandler: ((String) -> Void)?
-
     private var observers: [NSObjectProtocol] = []
-
-    var storageKey: String { controllerName ?? "unknown" }
 
     #if os(tvOS)
     /// Whether a running game owns the Menu button.
@@ -272,13 +262,6 @@ final class GameControllerManager: ObservableObject {
         for existing in GCController.controllers() where !Self.isSimulatorPhantom(existing) {
             attach(existing)
         }
-    }
-
-    /// Rebuilds handlers after the remap screen changes a binding. Player 1
-    /// only, matching where remapping is offered.
-    func reloadBindings() {
-        guard let controller = slots.first??.controller else { return }
-        attach(controller)
     }
 
     // MARK: Wiring
@@ -414,7 +397,6 @@ final class GameControllerManager: ObservableObject {
         bindMenuButton(gamepad, player: index)
         #endif
         slot.availableButtons = candidates.map(\.0) + [GCInputButtonMenu]
-        if index == 0 { availableButtons = slot.availableButtons }
     }
 
     /// The standard buttons by their canonical names, in binding-table
@@ -531,21 +513,12 @@ final class GameControllerManager: ObservableObject {
         }
     }
 
-    /// A physical button changed. In capture mode it names itself for the
-    /// remap screen; otherwise it drives whatever it is bound to.
-    /// Capture is a player-1 concern: the remap screen is reached from
-    /// Settings and always means "the pad I am holding", so a stray press
-    /// on player 2's pad must not hijack what is being learned.
+    /// A physical button changed: it drives whatever it is bound to.
     private func button(_ name: String, pressed: Bool, player: Int) {
-        // Tracked even while capturing or unbound: the hotkey combo is
-        // independent of the ordinary bindings table, and needs to know
-        // about a press regardless of what else is happening with it.
+        // Tracked even for unbound buttons: the stick clicks carry no
+        // binding, and the hotkey needs to know about them regardless.
         updateHotkeyState(name: name, pressed: pressed, player: player)
 
-        if let capture = captureHandler {
-            if pressed, player == 0 { capture(name) }
-            return
-        }
         guard let slot = slots[player], let id = slot.bindings[name] else { return }
 
         // The overlay is not a game input, so it fires on press and is never
@@ -558,13 +531,10 @@ final class GameControllerManager: ObservableObject {
         emit(id, pressed, player: player)
     }
 
-    /// The pause menu's second door, alongside whatever single button is
-    /// bound to `RetroPad.overlay`. Fires on the edge into "both held", not
-    /// on every event while they stay down, and rearms only once either
-    /// releases, so a sustained hold cannot reopen a just-closed menu.
-    /// Runs even mid-capture and for otherwise-unbound buttons, since L3/R3
-    /// carry no ordinary binding by default and the two must be tracked
-    /// regardless of what capture or the bindings table are doing.
+    /// The pause menu's second door, alongside the Home button. Fires on
+    /// the edge into "both held", not on every event while they stay down,
+    /// and rearms only once either releases, so a sustained hold cannot
+    /// reopen a just-closed menu.
     private func updateHotkeyState(name: String, pressed: Bool, player: Int) {
         guard let slot = slots[player] else { return }
         if pressed {
@@ -573,10 +543,9 @@ final class GameControllerManager: ObservableObject {
             slot.heldElementNames.remove(name)
             slot.hotkeyArmed = false
         }
-        // buttonB nil means single-button mode: buttonA alone is enough.
         let armedCondition = slot.heldElementNames.contains(MenuHotkey.buttonA)
-            && (MenuHotkey.buttonB.map { slot.heldElementNames.contains($0) } ?? true)
-        guard armedCondition, !slot.hotkeyArmed, captureHandler == nil else { return }
+            && slot.heldElementNames.contains(MenuHotkey.buttonB)
+        guard armedCondition, !slot.hotkeyArmed else { return }
         slot.hotkeyArmed = true
         onMenu?()
     }
@@ -643,14 +612,13 @@ final class GameControllerManager: ObservableObject {
     private func direction(_ id: Int, player: Int) -> GCControllerButtonValueChangedHandler {
         { [weak self] _, _, pressed in
             MainActor.assumeIsolated {
-                guard self?.captureHandler == nil else { return }
                 self?.setDirection(id, source: .dpad, down: pressed, player: player)
             }
         }
     }
 
     private func stick(x: Float, y: Float, player: Int) {
-        guard let slot = slots[player], captureHandler == nil else { return }
+        guard let slot = slots[player] else { return }
         // The left stick reaches a game by two separate routes, and on a
         // console whose real controller has BOTH a d-pad and an analog
         // stick, sending both routes at once presses two different
@@ -700,7 +668,7 @@ final class GameControllerManager: ObservableObject {
     /// ArcadeLayout.secondStick for why those specific numbers and where
     /// they lead downstream in each player.
     private func stick2(x: Float, y: Float, player: Int) {
-        guard let slot = slots[player], captureHandler == nil else { return }
+        guard let slot = slots[player] else { return }
         digitizeAxis(21, magnitude: max(0, -x), slot: slot, player: player)
         digitizeAxis(20, magnitude: max(0, x), slot: slot, player: player)
         digitizeAxis(22, magnitude: max(0, -y), slot: slot, player: player)
@@ -776,7 +744,6 @@ final class GameControllerManager: ObservableObject {
         isConnected = slots.contains { $0 != nil }
         controllerName = slots.first??.name
         connectedNames = slots.map { $0?.name }
-        if slots[0] == nil { availableButtons = [] }
     }
 
     // MARK: Rumble
@@ -885,107 +852,5 @@ final class GameControllerManager: ObservableObject {
         slot.stickDown.removeAll()
         slot.dpadDown.removeAll()
         slot.hapticEngines = [:]
-    }
-
-    // MARK: Remapping
-
-    /// Remapping edits player 1's pad, the one whoever opened Settings is
-    /// holding. Player 2's bindings still resolve from their own vendor
-    /// name, so a different model in slot 2 keeps its correct defaults.
-    private var player1Bindings: [String: Int] {
-        get { slots[0]?.bindings ?? ControllerBindings.defaults }
-        set { slots[0]?.bindings = newValue }
-    }
-
-    /// The element name currently bound to an input, if any.
-    func boundButton(for id: Int) -> String? {
-        player1Bindings.first { $0.value == id }?.key
-    }
-
-    /// The input a physical button currently drives, if any.
-    func bindings(for name: String) -> Int? {
-        player1Bindings[name]
-    }
-
-    /// Points a physical button at an input, clearing whatever else claimed
-    /// either side so one press can never fire two inputs.
-    func bind(button name: String, to id: Int) {
-        player1Bindings = player1Bindings.filter { $0.key != name && $0.value != id }
-        player1Bindings[name] = id
-        ControllerBindings.save(player1Bindings, for: storageKey)
-        reloadBindings()
-    }
-
-    /// Replaces the whole map at once, which is what choosing a preset means.
-    func applyBindings(_ map: [String: Int]) {
-        player1Bindings = map
-        ControllerBindings.save(map, for: storageKey)
-        reloadBindings()
-    }
-
-    /// Whether the current map is exactly this one, so the preset rows can
-    /// show which arrangement is in effect and neither once it is edited.
-    func matchesBindings(_ map: [String: Int]) -> Bool {
-        player1Bindings == map
-    }
-
-    /// Whether the two face buttons currently read by their labels
-    /// rather than by their positions.
-    ///
-    /// Cabinet binds positionally by default: the bottom face button
-    /// drives RetroPad B and the right one drives RetroPad A, which is
-    /// where those inputs physically sat on the consoles being
-    /// emulated. Plenty of people read the letters instead, and on a
-    /// Nintendo-style pad the letters are already the other way round
-    /// from an Xbox one, so the same physical thumb movement means two
-    /// different things depending on which pad is in hand. Swapped
-    /// means A drives A and B drives B.
-    var faceButtonsSwapped: Bool {
-        player1Bindings[GCInputButtonA] == RetroPad.a
-            && player1Bindings[GCInputButtonB] == RetroPad.b
-    }
-
-    /// Exchanges what the two face buttons send, leaving every other
-    /// binding, including any the player set by hand, exactly as it is.
-    func swapFaceButtons() {
-        var map = player1Bindings
-        let a = map[GCInputButtonA]
-        let b = map[GCInputButtonB]
-        map[GCInputButtonA] = b
-        map[GCInputButtonB] = a
-        applyBindings(map)
-    }
-
-    func clearBinding(for id: Int) {
-        player1Bindings = player1Bindings.filter { $0.value != id }
-        ControllerBindings.save(player1Bindings, for: storageKey)
-        reloadBindings()
-    }
-
-    func resetBindings() {
-        ControllerBindings.reset(for: storageKey)
-        player1Bindings = ControllerBindings.defaults
-        reloadBindings()
-    }
-
-    /// A readable name for a GameController element, since the raw constants
-    /// read like "Button Options" and mean nothing to most people.
-    static func friendlyName(_ element: String) -> String {
-        switch element {
-        case GCInputButtonA: return "Bottom face button, A or Cross"
-        case GCInputButtonB: return "Right face button, B or Circle"
-        case GCInputButtonX: return "Left face button, X or Square"
-        case GCInputButtonY: return "Top face button, Y or Triangle"
-        case GCInputLeftShoulder: return "Left shoulder, LB or L1"
-        case GCInputRightShoulder: return "Right shoulder, RB or R1"
-        case GCInputLeftTrigger: return "Left trigger, LT or L2"
-        case GCInputRightTrigger: return "Right trigger, RT or R2"
-        case GCInputButtonMenu: return "Menu or Options"
-        case GCInputButtonOptions: return "View, Create or Share"
-        case GCInputButtonHome: return "Home or Guide"
-        case GCInputLeftThumbstickButton: return "Left stick click"
-        case GCInputRightThumbstickButton: return "Right stick click"
-        default: return element
-        }
     }
 }

@@ -32,12 +32,9 @@ struct SettingsView: View {
                 // longer than that: "OhSnap MCON II" wrapped to a stack of
                 // clipped lines, which rendered as an empty gap the height
                 // of the wrap. Below the title it has the whole row.
+                // No "Change buttons": the map is fixed and positional, the
+                // same as CabinetOS's (Controls/ControllerBindings.swift).
                 ControllerStatusRow()
-                NavigationLink {
-                    ControllerRemapView()
-                } label: {
-                    Label("Change buttons", systemImage: "arrow.triangle.swap")
-                }
                 #if targetEnvironment(macCatalyst)
                 // The Mac's own front door to the phone controller. The
                 // television reaches the same feature from its own
