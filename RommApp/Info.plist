@@ -27,12 +27,6 @@
 		<key>NSAllowsLocalNetworking</key>
 		<true/>
 	</dict>
-	<key>NSBluetoothAlwaysUsageDescription</key>
-	<string>Cabinet Go uses Bluetooth to measure the link to a nearby device for controller features.</string>
-	<key>NSBonjourServices</key>
-	<array>
-		<string>_cabinet-probe._udp</string>
-	</array>
 	<key>NSLocalNetworkUsageDescription</key>
 	<string>Cabinet Go uses your local network to reach your RomM server directly when you are at home.</string>
 	<key>NSMotionUsageDescription</key>

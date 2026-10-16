@@ -31,23 +31,6 @@ struct HomeView: View {
     #endif
     #if os(iOS)
     @State private var directLaunch: DirectLaunch?
-    /// The phone-as-controller offer, truthful again: it appears only
-    /// when a television on this network is actually running an arcade
-    /// game, named. The scout browses only while Home is visible and
-    /// only on a phone that has paired before (the gate lives in the
-    /// scout), so a phone that never pairs never browses and never
-    /// sees the local-network prompt; the first pairing starts from
-    /// Settings.
-    @State private var showingControllerPad = false
-    /// Names for games a television is playing that this phone's own
-    /// shelves do not carry. The offer card used to fall back to the
-    /// system ("Nintendo DS is on your TV") whenever the game was not
-    /// in recent or favourites, which is why arcade looked right (the
-    /// cabinet is usually freshly played, so it IS on a shelf) and
-    /// everything else did not. Fetched once per id and kept for the
-    /// session; the shelves are still checked first and cost nothing.
-    @State private var offerNames: [Int: String] = [:]
-    @StateObject private var linkScout = ControllerLinkScout()
     #endif
     @State private var nativeDirectLaunch: NativeDirectLaunch?
     @State private var preparingResume = false
@@ -240,19 +223,7 @@ struct HomeView: View {
             // included.
             .onAppear {
                 Task { await load() }
-                #if os(iOS)
-                // Idempotent, and self-gating on a stored pairing, so
-                // this also picks the scout up on the first Home visit
-                // after the first-ever pairing lands via Settings.
-                linkScout.start()
-                #endif
             }
-            #if os(iOS)
-            .onDisappear { linkScout.stop() }
-            .fullScreenCover(isPresented: $showingControllerPad) {
-                ControllerPadView()
-            }
-            #endif
             // Live, not just at the next natural reload: load() already
             // leaves recent/favorites untouched on a failed fetch (see
             // its own catch below), so re-running it the instant
@@ -336,13 +307,6 @@ struct HomeView: View {
 
     private func tallLayout(height: CGFloat) -> some View {
         VStack(alignment: .leading, spacing: 28) {
-            #if os(iOS)
-            if let playing = linkScout.playing {
-                controllerOffer(for: playing)
-                    .padding(.horizontal, 20)
-                    .task(id: playing) { await resolveOfferName(playing) }
-            }
-            #endif
             if let hero = resumeHero {
                 heroCard(for: hero, height: portraitHeroHeight(for: height), wide: false)
                     .padding(.horizontal, 20)
@@ -372,82 +336,6 @@ struct HomeView: View {
     /// gets its own top-to-bottom shape instead, full-width banner over
     /// full-width shelves, the same structure Home's own mockups settled
     /// on and the shape Apple's own TV app uses.
-    #if os(iOS)
-    /// The offer, named for what is true ("Centipede is on your TV")
-    /// with a single verb, appearing only while that stays true.
-    /// Resolves a television's game to a name this phone can show,
-    /// once, when its own shelves do not have it. Silent on failure:
-    /// the system name is a true fallback, not an error state.
-    private func resolveOfferName(_ shortname: String) async {
-        guard let dot = shortname.firstIndex(of: "."),
-              let id = Int(shortname[shortname.index(after: dot)...]),
-              offerNames[id] == nil,
-              !(recent + favorites).contains(where: { $0.id == id })
-        else { return }
-        if let rom = try? await session.rom(id: id) {
-            offerNames[id] = rom.displayName
-        }
-    }
-
-    private func controllerOffer(for shortname: String) -> some View {
-        // The library's own name for the game when it has one; the
-        // romset name is an honest fallback, not a mystery string. A
-        // DS television advertises "nds.<rom id>" instead of a romset
-        // (its filenames cannot pass shortname validation), so the id
-        // resolves through the same shelves, with the system as the
-        // fallback rather than the raw wire string.
-        let name: String
-        if let dot = shortname.firstIndex(of: "."),
-           let id = Int(shortname[shortname.index(after: dot)...]) {
-            // "<layout>.<rom id>": the id names the game from this
-            // phone's own shelves. A game the phone has never seen
-            // falls back to the system, which is still true and still
-            // better than a wire string.
-            let system = String(shortname[shortname.startIndex..<dot])
-            name = (recent + favorites).first { $0.id == id }?.displayName
-                ?? offerNames[id]
-                ?? ControlLayout.displayName(forSystem: system)
-        } else {
-            name = (recent + favorites).first {
-                $0.fsNameNoExt.lowercased() == shortname
-            }?.displayName ?? shortname
-        }
-
-        return Button {
-            showingControllerPad = true
-        } label: {
-            HStack(spacing: 14) {
-                Image(systemName: "appletv.fill")
-                    .font(.title2)
-                    .foregroundStyle(.secondary)
-                VStack(alignment: .leading, spacing: 2) {
-                    // One line, always. The game's own name is what
-                    // makes this card worth tapping, but titles run
-                    // long (Teenage Mutant Ninja Turtles, Sonic Rush
-                    // Adventure) and a headline wrapping to three
-                    // lines inside a small row reads as broken. The
-                    // truncation keeps enough to recognise.
-                    Text("\(name) is on your TV")
-                        .font(.subheadline.weight(.semibold))
-                        .foregroundStyle(.primary)
-                        .lineLimit(1)
-                        .truncationMode(.tail)
-                    Text("Use this phone as the controls")
-                        .font(.footnote)
-                        .foregroundStyle(.secondary)
-                }
-                Spacer()
-                Image(systemName: "chevron.right")
-                    .font(.footnote.weight(.semibold))
-                    .foregroundStyle(.tertiary)
-            }
-            .padding(14)
-            .background(.thinMaterial, in: RoundedRectangle(cornerRadius: 16))
-        }
-        .buttonStyle(.plain)
-    }
-    #endif
-
     private func wideLayout(height: CGFloat) -> some View {
         #if os(tvOS)
         // The chip is an overlay, not a sibling row that pushes
@@ -587,17 +475,6 @@ struct HomeView: View {
 
             ScrollView {
                 VStack(alignment: .leading, spacing: 20) {
-                    // Landscape is the orientation a phone that is
-                    // about to be a controller is already in, so the
-                    // offer leads this column the same way it leads
-                    // the portrait one. Its first placement missed
-                    // landscape entirely; found by Marcus on the first
-                    // front-door run.
-                    if let playing = linkScout.playing {
-                        controllerOffer(for: playing)
-                            .padding(.top, 20)
-                            .task(id: playing) { await resolveOfferName(playing) }
-                    }
                     if !recentBesides(resumeHero).isEmpty {
                         rotationRow("Recent", recentBesides(resumeHero), seeAll: .recentlyPlayed)
                     } else if loaded, recent.isEmpty {

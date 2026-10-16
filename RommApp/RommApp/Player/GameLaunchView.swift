@@ -144,12 +144,6 @@ struct GameLaunchView: View {
     @State private var favoriteScale: CGFloat = 1
     #endif
     @State private var vmuCardURL: URL?
-    /// The two-writer rule's eyes: while a television is running a DC
-    /// session for THIS game, the card is that session's to write, so
-    /// the row declines rather than letting two machines edit one card.
-    /// Non-arcade televisions advertise "<layout>.<rom id>", which is
-    /// exactly enough to recognise this game.
-    @StateObject private var vmuScout = ControllerLinkScout()
 
     /// Whether the scroll content is resting at its top, the only moment a
     /// downward drag should be read as "dismiss" rather than "scroll".
@@ -323,7 +317,6 @@ struct GameLaunchView: View {
         }
         .task { await load() }
         .onAppear { refreshCoreSettings() }
-        .onDisappear { vmuScout.stop() }
         .fullScreenCover(isPresented: $playing) {
             PlayerView(
                 rom: rom, launch: launchChoices, resumeFromAutosave: continueRun, stateToLoad: stateToLoad
@@ -1329,11 +1322,6 @@ struct GameLaunchView: View {
         hasCoreSettings = NativeLauncher.hasCoreSettings(romId: rom.id, core: core)
     }
 
-    /// Whether a live TV session for this game holds the card right now.
-    private var vmuDeclined: Bool {
-        vmuScout.playing == "dreamcast.\(rom.id)"
-    }
-
     /// The way into the minigame this game downloaded onto its memory
     /// card. Boots the card itself in the VMU player; progress writes
     /// straight back into the same save the Dreamcast session uses, so
@@ -1356,12 +1344,7 @@ struct GameLaunchView: View {
                         }
                     }
                     .font(.callout)
-                    .disabled(vmuDeclined || vmuPreparing)
-                    Text(vmuDeclined
-                        ? "The TV is playing this game, so its memory card is in use."
-                        : "A minigame on this game's memory card.")
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
+                    .disabled(vmuPreparing)
                 }
             }
         }
@@ -2404,7 +2387,6 @@ struct GameLaunchView: View {
             if let card = VMULauncher.currentCard(romId: rom.id) {
                 vmuMinigame = VMUCard.minigameName(card)
             }
-            if vmuMinigame != nil { vmuScout.start() }
         }
 
         // Deliberately no BIOS by default on arcade. Every arcade game

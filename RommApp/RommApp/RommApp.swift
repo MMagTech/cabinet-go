@@ -9,14 +9,10 @@ struct RommApp: App {
 
     var body: some Scene {
         WindowGroup {
-            // The transport probe for the phone-as-controller idea, taken
-            // this early because it needs no session, no server and no
-            // pairing, only a radio. Debug builds with no such launch
-            // argument evaluate one nil check here and boot normally.
+            // Debug builds with no such launch argument evaluate one
+            // check here and boot normally.
             #if DEBUG
-            if ProcessInfo.processInfo.arguments.contains("-cabinetLink") {
-                ControllerPadView()
-            } else if ProcessInfo.processInfo.arguments.contains("-cabinetVMUSkin") {
+            if ProcessInfo.processInfo.arguments.contains("-cabinetVMUSkin") {
                 // The stamped-skin bench: the VMU player straight at the
                 // root, for eyeballing the shell against the approved
                 // mock in a simulator, where no core can run. The boot
@@ -36,10 +32,6 @@ struct RommApp: App {
                     cardURL: FileManager.default.temporaryDirectory.appendingPathComponent("skin-bench-card.bin")
                 )
                 .environmentObject(session)
-            } else if let aim = AimLab.launchRole, case .send = aim {
-                AimSenderView()
-            } else if let role = NetProbe.launchRole {
-                NetProbeView(role: role)
             } else {
                 appContent
             }

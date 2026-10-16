@@ -24,26 +24,16 @@ struct RootView: View {
     private var normalBody: some View {
         switch session.stage {
         case .needsServer:
-            // iOS asks which door first; a television cannot be its own
-            // controller, so tvOS goes straight to the address field
-            // exactly as it always has.
-            #if os(iOS)
-            WelcomeView()
-            #else
-            ServerSetupView()
-            #endif
+            // Straight to the address: there is one way in now. The
+            // second door, using the phone as a controller with no
+            // server, left with that feature (docs/scope-handheld.md).
+            NavigationStack {
+                ServerSetupView()
+            }
         case .needsPairing:
             PairingView()
         case .ready:
             MainTabView()
-        case .controllerOnly:
-            // Nothing on tvOS ever reaches this stage; the address
-            // screen is the honest fallback if one ever did.
-            #if os(iOS)
-            ControllerOnlyView()
-            #else
-            ServerSetupView()
-            #endif
         }
     }
 }
