@@ -42,6 +42,10 @@ final class Session: ObservableObject {
     /// a slug. `/api/platforms` is fetched for this anyway to build the
     /// library's platform list, so this just keeps a second look up handy.
     @Published private(set) var platformNames: [Int: String] = [:]
+    /// Every platform RomM lists, kept so the queries that span the whole
+    /// library (recent, favourites, collections, search) can ask only for
+    /// the platforms this app plays. See `playablePlatformIds`.
+    private var allPlatforms: [Platform] = []
     /// Ids of every rom in the favorite collection, kept in sync with every
     /// toggle so `isFavorite` never has to make a network call to answer.
     @Published private(set) var favoriteRomIds: Set<Int> = []
@@ -446,6 +450,7 @@ final class Session: ObservableObject {
         Task { [weak self] in
             guard let self, let client else { return }
             let platforms = (try? await client.platforms()) ?? []
+            if !platforms.isEmpty { self.allPlatforms = platforms }
             self.platformNames = Dictionary(
                 uniqueKeysWithValues: platforms.compactMap { platform in
                     platform.displayName.map { (platform.id, $0) }
@@ -524,12 +529,35 @@ final class Session: ObservableObject {
 
     func platforms() async throws -> [Platform] {
         guard let client else { throw RommError.transport("No server selected.") }
-        return try await client.platforms()
+        let platforms = try await client.platforms()
+        allPlatforms = platforms
+        return platforms
+    }
+
+    /// The ids of the platforms this app plays, for every query that spans
+    /// the whole library. The library shows only what plays
+    /// (docs/scope-handheld.md), and asking RomM for just these platforms
+    /// keeps a game this phone cannot start out of recent, favourites,
+    /// collections, search, Home, the widget and Spotlight in one place,
+    /// with RomM's own counts and paging still true. Fetches the platform
+    /// list and the folder mapping first if they have not arrived yet;
+    /// throws if the platform list cannot be had, since an unfiltered
+    /// answer would be the wrong one.
+    private func playablePlatformIds() async throws -> [Int] {
+        if allPlatforms.isEmpty {
+            _ = try await platforms()
+        }
+        await loadPlatformConfigIfNeeded()
+        return allPlatforms
+            .filter { PlatformSupport.isSupported($0, platformsVersions: platformsVersions) }
+            .map(\.id)
     }
 
     func recentlyPlayed(limit: Int = 8, offset: Int = 0) async throws -> RomPage {
         guard let client else { throw RommError.transport("No server selected.") }
-        return try await client.recentlyPlayed(limit: limit, offset: offset)
+        let ids = try await playablePlatformIds()
+        guard !ids.isEmpty else { return RomPage(items: [], total: 0, limit: limit, offset: offset) }
+        return try await client.recentlyPlayed(limit: limit, offset: offset, platformIds: ids)
     }
 
     func reportPlaying(romId: Int) async {
@@ -672,8 +700,16 @@ final class Session: ObservableObject {
         matchedOnly: Bool = false
     ) async throws -> RomPage {
         guard let client else { throw RommError.transport("No server selected.") }
+        // One platform asked for by id needs no filter: it is only ever a
+        // playable one, reached from the library. Everything else spans
+        // the library and asks for the playable platforms only.
+        var ids: [Int] = []
+        if platformId == nil {
+            ids = try await playablePlatformIds()
+            guard !ids.isEmpty else { return RomPage(items: [], total: 0, limit: limit, offset: offset) }
+        }
         return try await client.roms(
-            platformId: platformId, collectionId: collectionId,
+            platformId: platformId, platformIds: ids, collectionId: collectionId,
             searchTerm: searchTerm, limit: limit, offset: offset,
             orderBy: orderBy, orderDir: orderDir, matchedOnly: matchedOnly
         )
@@ -689,9 +725,23 @@ final class Session: ObservableObject {
     /// Every collection this account owns, favorite one included, for the
     /// library's Collections tab. Not cached like `favoriteRomIds`: this is
     /// browsed on demand, not read on every launch screen.
+    ///
+    /// Counted the way the library shows them, playable games only: each
+    /// collection's count is RomM's own total for it with the playable
+    /// platform filter applied, and a collection holding none of them is
+    /// left out, since opening it would show an empty list.
     func collections() async throws -> [Collection] {
         guard let client else { throw RommError.transport("No server selected.") }
-        return try await client.collections()
+        let all = try await client.collections()
+        var counted: [Collection] = []
+        for collection in all {
+            let playable = try await roms(collectionId: collection.id, limit: 1).total
+            guard playable > 0 else { continue }
+            counted.append(Collection(
+                id: collection.id, name: collection.name, isFavorite: collection.isFavorite,
+                romIds: collection.romIds, romCount: playable))
+        }
+        return counted
     }
 
     // MARK: Favorites
@@ -702,7 +752,9 @@ final class Session: ObservableObject {
 
     func favoriteRoms(limit: Int = 10) async throws -> [Rom] {
         guard let client else { throw RommError.transport("No server selected.") }
-        return try await client.favoriteRoms(limit: limit)
+        let ids = try await playablePlatformIds()
+        guard !ids.isEmpty else { return [] }
+        return try await client.favoriteRoms(limit: limit, platformIds: ids)
     }
 
     /// Adds or removes a rom from the favorite collection, creating that

@@ -523,7 +523,10 @@ enum NativePlatform: String, CaseIterable {
             return .threeDO
         case "virtualboy":
             return .virtualBoy
-        case "nds":
+        // RomM lists the later DS models as platforms of their own, and
+        // until the library showed only what plays they quietly fell to the
+        // webview. Every one runs DS games, so every one is the DS core.
+        case "nds", "nintendo-dsi", "nintendo-ds-lite", "nintendo-dsi-xl":
             return .nds
         case "psp":
             return .psp

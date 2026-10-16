@@ -874,7 +874,7 @@ struct HomeView: View {
         #else
         let canonicalSlug = rom.canonicalPlatformSlug(platformsVersions: session.platformsVersions)
         let cores = CoreCatalog.cores(for: canonicalSlug)
-        guard PlatformSupport.isSupported(canonicalSlug: canonicalSlug, isArcade: rom.isArcade), !cores.isEmpty else {
+        guard PlatformSupport.isSupported(canonicalSlug: canonicalSlug, isArcade: rom.isArcade) else {
             resuming = rom
             return
         }
@@ -890,6 +890,13 @@ struct HomeView: View {
         let backend = LaunchChoices.defaultBackend(rom: rom, canonicalSlug: canonicalSlug)
         if backend == .native, let nativeCore = NativeCore.core(for: rom, canonicalSlug: canonicalSlug) {
             await beginNativeResume(rom, core: nativeCore)
+            return
+        }
+        // A webview resume needs a webview core; native ones never did,
+        // which is why this check sits after the native path. Game &
+        // Watch has no webview core and still resumes in one tap.
+        guard !cores.isEmpty else {
+            resuming = rom
             return
         }
 

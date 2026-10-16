@@ -95,13 +95,16 @@ struct LaunchChoices {
     /// general preference for the familiar player.
     @MainActor
     static func defaultBackend(rom: Rom, canonicalSlug: String) -> PlayerBackend {
-        #if targetEnvironment(macCatalyst)
-        // The Mac has one player: native cores. The webview backend is
-        // dropped from this target (2026-08-30, revisitable), so no
-        // stored choice, crash count or webview-core mapping can route
-        // a Mac launch there. This also hides the launch screen's
-        // Web/Native picker, whose visibility asks whether this
-        // function already answers .native.
+        #if os(iOS)
+        // One player: native cores (docs/scope-handheld.md). Every
+        // platform the phone still offers has one, and an EmulatorJS
+        // state never loads in a native core, so the webview would only
+        // strand saves CabinetOS cannot read. No stored choice, crash
+        // count or webview-core mapping can route a launch there, and the
+        // launch screen's Web/Native picker, whose visibility asks
+        // whether this function already answers .native, stays hidden.
+        // The branch below is the old tvOS rule, left for the removal
+        // layers along with the webview itself.
         return .native
         #else
         // Static, not evidence based, unlike everything below: there is

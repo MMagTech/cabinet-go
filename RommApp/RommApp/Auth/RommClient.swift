@@ -470,9 +470,18 @@ actor RommClient {
     /// no scope beyond being logged in, and decodes only the one field this
     /// app uses out of a much larger response, so a future RomM adding
     /// fields here cannot break this.
+    ///
+    /// Keys come back lowercased, whatever the server sent. RomM 5.3.0
+    /// started folding every key itself (`_validated_platform_map` in
+    /// `config_manager.py`) while `fs_slug` kept its original case, so a
+    /// "Game Boy" folder stopped matching its "game boy" entry and 30 of
+    /// 38 platforms read as unsupported. Folding here makes 5.1 and 5.2
+    /// servers, which send the admin's own spelling, look the same as
+    /// 5.3 and later; every lookup folds the folder name to match.
     func platformsVersions() async throws -> [String: String] {
         let req = request(path: "/api/config")
-        return try await send(req, decoding: PlatformsVersionsResponse.self).platformsVersions
+        let raw = try await send(req, decoding: PlatformsVersionsResponse.self).platformsVersions
+        return Dictionary(raw.map { ($0.key.lowercased(), $0.value) }, uniquingKeysWith: { first, _ in first })
     }
 
     private struct PlatformsVersionsResponse: Decodable {
@@ -507,7 +516,7 @@ actor RommClient {
     /// The games with play history, most recent first. Same query RomM's own
     /// home screen makes (frontend getRecentPlayedRoms), so this app's Home
     /// agrees with the web UI about what you were last playing.
-    func recentlyPlayed(limit: Int = 8, offset: Int = 0) async throws -> RomPage {
+    func recentlyPlayed(limit: Int = 8, offset: Int = 0, platformIds: [Int] = []) async throws -> RomPage {
         var components = URLComponents(
             url: baseURL.appendingPathComponent("/api/roms"),
             resolvingAgainstBaseURL: false
@@ -518,7 +527,7 @@ actor RommClient {
             URLQueryItem(name: "last_played", value: "true"),
             URLQueryItem(name: "limit", value: String(limit)),
             URLQueryItem(name: "offset", value: String(offset)),
-        ]
+        ] + Self.platformItems(platformIds)
         guard let url = components?.url else {
             throw RommError.transport("Could not build the request address.")
         }
@@ -539,6 +548,7 @@ actor RommClient {
     /// recently, confirmed supported by RomM's own /api/roms parameters.
     func roms(
         platformId: Int? = nil,
+        platformIds: [Int] = [],
         collectionId: Int? = nil,
         searchTerm: String? = nil,
         limit: Int = 60,
@@ -565,6 +575,7 @@ actor RommClient {
         if let platformId {
             query.append(URLQueryItem(name: "platform_ids", value: String(platformId)))
         }
+        query += Self.platformItems(platformIds)
         if let collectionId {
             query.append(URLQueryItem(name: "collection_id", value: String(collectionId)))
         }
@@ -650,14 +661,20 @@ actor RommClient {
 
     /// Roms in the favorite collection, same shape and paging as the
     /// library's own roms() call, for the Home screen's favorites rail.
-    func favoriteRoms(limit: Int = 10) async throws -> [Rom] {
+    /// `platform_ids` repeated once per id, which is how RomM's list
+    /// query parameter reads several. Empty means no filter.
+    private static func platformItems(_ ids: [Int]) -> [URLQueryItem] {
+        ids.map { URLQueryItem(name: "platform_ids", value: String($0)) }
+    }
+
+    func favoriteRoms(limit: Int = 10, platformIds: [Int] = []) async throws -> [Rom] {
         var components = URLComponents(
             url: baseURL.appendingPathComponent("/api/roms"), resolvingAgainstBaseURL: false
         )
         components?.queryItems = [
             URLQueryItem(name: "favorite", value: "true"),
             URLQueryItem(name: "limit", value: String(limit)),
-        ]
+        ] + Self.platformItems(platformIds)
         guard let url = components?.url else {
             throw RommError.transport("Could not build the request address.")
         }

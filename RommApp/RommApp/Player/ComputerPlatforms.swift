@@ -49,7 +49,36 @@ enum PlatformSupport {
     /// sections and the rom-level checks cannot drift apart.
     static let arcadeSlugs: Set<String> = ["arcade", "neogeoaes", "neogeomvs", "neo-geo-cd"]
 
+    /// The systems the iPhone app plays: the ones made to be held
+    /// (docs/scope-handheld.md). The test for adding one is whether it was
+    /// played in your hands; CabinetOS is the console for everything else.
+    /// Dreamcast is not here: only its VMU minigames play, through
+    /// `canPlay`'s exception below.
+    static let handheldPlatforms: Set<NativePlatform> = [
+        .gb, .gbc, .gba, .nds, .psp, .gameGear, .ngpc, .gameAndWatch,
+    ]
+
+    /// `isSupported` for a platform as RomM lists it, resolved the same way
+    /// a rom's platform is.
+    static func isSupported(_ platform: Platform, platformsVersions: [String: String]) -> Bool {
+        isSupported(
+            canonicalSlug: Rom.canonicalSlug(forFolder: platform.fsSlug, platformsVersions: platformsVersions),
+            isArcade: arcadeSlugs.contains(platform.slug))
+    }
+
     static func isSupported(canonicalSlug: String, isArcade: Bool = false) -> Bool {
+        #if os(iOS) && !targetEnvironment(macCatalyst)
+        // Native cores only, and only the handhelds. The webview player,
+        // arcade, the home consoles and the keyboard machines are not
+        // offered on the phone; their games live on in RomM and play on
+        // CabinetOS. The branches below are the tvOS and Mac rules,
+        // left for the removal layers.
+        guard !isArcade,
+              let platform = NativePlatform.platform(bySlug: canonicalSlug, isArcade: false) else {
+            return false
+        }
+        return handheldPlatforms.contains(platform)
+        #else
         // Arcade is supported by its native cores no matter what the
         // folder is called. The check below used to assume every arcade
         // folder resolves through PLATFORMS_VERSIONS to a cores.json key,
@@ -102,6 +131,7 @@ enum PlatformSupport {
         if canonicalSlug == "dc" { return false }
         if !CoreCatalog.cores(for: canonicalSlug).isEmpty { return true }
         return NativeCore.core(bySlug: canonicalSlug, isArcade: false) != nil
+        #endif
         #endif
     }
 

@@ -103,9 +103,17 @@ struct Rom: Codable, Identifiable, Hashable {
     /// to the folder name itself, lowercased, when nothing is mapped. Every
     /// lookup this app makes against its bundled core and control data
     /// belongs on this value, never on `platformSlug`, which is IGDB's
-    /// metadata slug and answers a different question.
+    /// metadata slug and answers a different question. The mapping's keys
+    /// are lowercased on arrival (`RommClient.platformsVersions`), so the
+    /// folder name is folded the same way before the lookup.
     func canonicalPlatformSlug(platformsVersions: [String: String]) -> String {
-        (platformsVersions[platformFsSlug] ?? platformFsSlug).lowercased()
+        Self.canonicalSlug(forFolder: platformFsSlug, platformsVersions: platformsVersions)
+    }
+
+    /// The same resolution for a bare folder name, for callers holding a
+    /// `Platform` rather than a rom.
+    static func canonicalSlug(forFolder folder: String, platformsVersions: [String: String]) -> String {
+        (platformsVersions[folder.lowercased()] ?? folder).lowercased()
     }
 
     /// What to put in front of someone for this rom's platform. Never used

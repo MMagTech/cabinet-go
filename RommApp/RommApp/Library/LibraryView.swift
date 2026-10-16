@@ -180,20 +180,15 @@ struct LibraryScreen: View {
                 } else if let platformsError, platforms.isEmpty {
                     Text(platformsError.message).foregroundStyle(.red)
                     Button("Try again") { Task { await loadPlatforms() } }
+                } else if supportedPlatforms.isEmpty {
+                    Text("No handheld games in this library.")
+                        .foregroundStyle(.secondary)
                 } else {
-                    if !supportedPlatforms.isEmpty {
-                        Section("Supported") {
-                            ForEach(supportedPlatforms) { platform in
-                                platformRow(platform)
-                            }
-                        }
-                    }
-                    if !unsupportedPlatforms.isEmpty {
-                        Section("Unsupported") {
-                            ForEach(unsupportedPlatforms) { platform in
-                                platformRow(platform)
-                            }
-                        }
+                    // Only what this app plays (docs/scope-handheld.md):
+                    // an Unsupported section no longer exists, so neither
+                    // does a Supported heading over everything else.
+                    ForEach(supportedPlatforms) { platform in
+                        platformRow(platform)
                     }
                 }
             }
@@ -232,32 +227,21 @@ struct LibraryScreen: View {
                         Button("Try again") { Task { await loadPlatforms() } }
                     }
                     .padding(.top, 60)
+                } else if supportedPlatforms.isEmpty {
+                    Text("No handheld games in this library.")
+                        .foregroundStyle(.secondary)
+                        .padding(.top, 60)
                 } else {
                     // Two columns of artwork tiles, the same visual
                     // language as the tvOS platform tile at phone scale.
                     // This was the one screen in the app with no artwork
-                    // at all.
+                    // at all. Only what this app plays, so no headings.
                     LazyVGrid(
                         columns: Self.tileColumns,
                         spacing: 10
                     ) {
-                        if !supportedPlatforms.isEmpty {
-                            Section {
-                                ForEach(supportedPlatforms) { platform in
-                                    platformTile(platform)
-                                }
-                            } header: {
-                                gridHeader("Supported")
-                            }
-                        }
-                        if !unsupportedPlatforms.isEmpty {
-                            Section {
-                                ForEach(unsupportedPlatforms) { platform in
-                                    platformTile(platform)
-                                }
-                            } header: {
-                                gridHeader("Unsupported")
-                            }
+                        ForEach(supportedPlatforms) { platform in
+                            platformTile(platform)
                         }
                     }
                     .padding(.horizontal, 16)
@@ -270,22 +254,6 @@ struct LibraryScreen: View {
             .refreshable { await loadPlatforms() }
             #endif
         }
-    }
-
-    /// Styled to match an inset grouped list's section header, which is
-    /// what this screen used before the grid and what the Collections
-    /// list beside it still uses.
-    private func gridHeader(_ text: String) -> some View {
-        HStack {
-            Text(text)
-                .font(.footnote)
-                .textCase(.uppercase)
-                .foregroundStyle(.secondary)
-            Spacer()
-        }
-        .padding(.leading, 4)
-        .padding(.top, 12)
-        .padding(.bottom, 2)
     }
 
     private func platformRow(_ platform: Platform) -> some View {
@@ -395,15 +363,9 @@ struct LibraryScreen: View {
     /// map, `Resources/cores.json`, actually lists a core for it. Dreamcast
     /// and Flash fail this the same way a keyboard machine does, just for a
     /// different reason, no core exists at all rather than no touch input.
-    private func isSupported(_ platform: Platform) -> Bool {
-        let canonicalSlug = (session.platformsVersions[platform.fsSlug] ?? platform.fsSlug).lowercased()
-        return PlatformSupport.isSupported(
-            canonicalSlug: canonicalSlug,
-            isArcade: PlatformSupport.arcadeSlugs.contains(platform.slug))
+    private var supportedPlatforms: [Platform] {
+        platforms.filter { PlatformSupport.isSupported($0, platformsVersions: session.platformsVersions) }
     }
-
-    private var supportedPlatforms: [Platform] { platforms.filter(isSupported) }
-    private var unsupportedPlatforms: [Platform] { platforms.filter { !isSupported($0) } }
 
     private func loadPlatforms() async {
         loadingPlatforms = true
