@@ -425,7 +425,7 @@ final class MemoryCardSync {
         do {
             try await session.uploadSave(
                 romId: rom.id, emulator: core.emulatorTag,
-                fileName: "\(rom.fsNameNoExt) (Cabinet \(core.storageKey)).srm", saveData: data
+                fileName: "\(SaveRowNames.stem(fsName: rom.fsName)) (Cabinet \(core.storageKey)).srm", saveData: data
             )
             let stamp = ((try? await session.saves(romId: rom.id)) ?? [])
                 .filter { $0.emulator == core.emulatorTag }
@@ -444,7 +444,7 @@ final class MemoryCardSync {
         // too.
         let fileName = platform == .psp ? PSPSaveZip.rowName(title: rom.name ?? rom.fsName) : nil
         await Self.uploadCard(
-            data, romId: rom.id, fileNameStem: rom.fsNameNoExt,
+            data, romId: rom.id, fileNameStem: SaveRowNames.stem(fsName: rom.fsName),
             emulatorTag: core.emulatorTag, region: region, session: session,
             fileName: fileName
         )

@@ -97,7 +97,7 @@ enum VMULauncher {
             // so a dead network cannot hold the boot.
             Task {
                 await MemoryCardSync.uploadCard(
-                    local, romId: rom.id, fileNameStem: rom.fsNameNoExt,
+                    local, romId: rom.id, fileNameStem: SaveRowNames.stem(fsName: rom.fsName),
                     emulatorTag: tag, session: session
                 )
             }
@@ -139,7 +139,7 @@ enum VMULauncher {
             romVersion: session.serverVersion
         )
         await MemoryCardSync.uploadCard(
-            data, romId: rom.id, fileNameStem: rom.fsNameNoExt,
+            data, romId: rom.id, fileNameStem: SaveRowNames.stem(fsName: rom.fsName),
             emulatorTag: NativeCore.flycast.emulatorTag, session: session
         )
     }

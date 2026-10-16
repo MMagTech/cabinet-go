@@ -9,8 +9,8 @@ import Foundation
 /// SAVEDATA: the first path component is the save folder itself,
 /// `ULUS10002LUMINES/PARAM.SFO`, which is what any PSP save download looks
 /// like and what opens in any unzip tool. The row is named after the game,
-/// `<title>.zip`, with the title cleaned the way CabinetOS's
-/// `sanitisedStem` cleans it, so both apps write the same row. RomM 5.4
+/// `<title>.zip`, with the title cleaned the way CabinetOS cleans it
+/// (SaveRowNames.sanitisedStem), so both apps write the same row. RomM 5.4
 /// matches an overwrite on emulator tag and file name together, and a
 /// different name on each side would leave two rows forever.
 ///
@@ -22,24 +22,7 @@ import Foundation
 enum PSPSaveZip {
     /// The server row's file name for a game's PSP save.
     static func rowName(title: String) -> String {
-        sanitisedStem(title) + ".zip"
-    }
-
-    /// CabinetOS's `sanitisedStem` (frontend/src/main.cpp), byte for byte:
-    /// ASCII letters, digits and `- _().,'` and space are kept, any byte
-    /// above ASCII is kept so UTF-8 titles survive, everything else becomes
-    /// an underscore, trailing spaces and dots are dropped, and an empty
-    /// result is "game".
-    static func sanitisedStem(_ title: String) -> String {
-        var out: [UInt8] = []
-        for byte in Array(title.utf8) {
-            let isAlnum = (byte >= 0x30 && byte <= 0x39) || (byte >= 0x41 && byte <= 0x5A)
-                || (byte >= 0x61 && byte <= 0x7A)
-            let kept: Set<UInt8> = [0x2D, 0x20, 0x5F, 0x28, 0x29, 0x2E, 0x2C, 0x27]
-            out.append(byte >= 0x80 || isAlnum || kept.contains(byte) ? byte : 0x5F)
-        }
-        while let last = out.last, last == 0x20 || last == 0x2E { out.removeLast() }
-        return out.isEmpty ? "game" : String(decoding: out, as: UTF8.self)
+        SaveRowNames.sanitisedStem(title) + ".zip"
     }
 
     /// Every file under `saveData`, zipped with paths relative to it.
