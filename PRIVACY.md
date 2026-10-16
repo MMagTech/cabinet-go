@@ -28,4 +28,4 @@ platform finishes downloading. Nothing about them is sent to anyone.
 **Children.** Cabinet ships no game content of its own and has no accounts
 of its own; the age rating reflects that.
 
-Questions: open an issue at https://github.com/MMagTech/cabinet/issues.
+Questions: open an issue at https://github.com/MMagTech/cabinet-go/issues.
