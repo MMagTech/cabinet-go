@@ -25,9 +25,9 @@ struct DebugView: View {
     /// nothing here for anyone to act on. The number is still worth
     /// carrying in a bug report.
     @State private var artworkBytes: Int64 = 0
-    // TODO: this repo is not final. Update once the real one is settled,
-    // this one is just where development has lived so far.
-    private static let repo = "MMagTech/cabinet"
+    // MMagTech/cabinet was archived on 2026-10-15 and accepts no issues;
+    // the app's history continues here.
+    private static let repo = "MMagTech/cabinet-go"
 
     var body: some View {
         List {
