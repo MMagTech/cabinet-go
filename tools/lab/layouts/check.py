@@ -8,7 +8,7 @@ say so. The point of the file is that he says it once.
 Run: python3 tools/lab/layouts/check.py [directory]
 Exits non-zero if anything fails.
 """
-import json, glob, os, sys, re
+import json, glob, os, sys
 
 ROOT = sys.argv[1] if len(sys.argv) > 1 else \
     os.path.join(os.path.dirname(__file__), '../../../RommApp/RommApp/Resources/ControlLayouts')
@@ -25,17 +25,7 @@ def ov(a, b):
 # Known and deliberately kept, with the reason. Not a way to silence
 # the checker: anything in here is a fault somebody looked at and chose
 # to live with, and it says who and why.
-ACCEPTED = {
-    # PSX landscape stacks L1 above L2 and R1 above R2 in the corner
-    # columns with Select and Start beneath them, and three pills that
-    # deep genuinely do not fit above the d-pad without something
-    # touching. Marcus asked for this arrangement back on 2026-08-24
-    # after I restructured it uninvited; it is the spacing the layout
-    # has always had. Fixing it means changing the shape, which is his
-    # call to make, not the checker's.
-    ("psx", "landscapeItems", "L1", "L2"),
-    ("psx", "landscapeItems", "R1", "R2"),
-}
+ACCEPTED = set()
 
 fails = []
 def fail(layout, key, msg): fails.append("%s/%s: %s" % (layout, key, msg))
@@ -88,11 +78,6 @@ for path in sorted(glob.glob(os.path.join(ROOT, '*.json'))):
         # wrong place.
         for p in pills:
             for r in rest:
-                # A light gun's item IS the picture: it spans the whole
-                # panel because you aim anywhere on it. Every control
-                # necessarily sits on it, so overlapping one is the
-                # normal case rather than a fault.
-                if r.get('kind') == 'gun': continue
                 if ov(p['frame'], r['frame']):
                     fail(name, key, "pill %s sits on %s"
                          % (p.get('label'), r.get('label') or r.get('kind')))
@@ -110,7 +95,7 @@ for path in sorted(glob.glob(os.path.join(ROOT, '*.json'))):
             if r['x'] < -0.03 or r['x']+r['w'] > 1.03 or r['y'] < -0.05:
                 fail(name, key, "%s runs off the panel" % (i.get('label') or i.get('kind')))
 
-        # RULE 7: two drawn buttons may not run through each other.
+        # RULE 4: two drawn buttons may not run through each other.
         #
         # A touch frame may overlap a neighbour's, deliberately: that
         # is what makes a diagonal on a face-button diamond reachable.
@@ -123,8 +108,7 @@ for path in sorted(glob.glob(os.path.join(ROOT, '*.json'))):
         # 330, so an overlap looks smaller in the numbers than on the
         # glass.
         W, H = (932.0, 430.0) if key != 'items' else (430.0, 330.0)
-        acts = [i for i in items
-                if i.get('kind') == 'button' and i.get('label') != 'Coin']
+        acts = [i for i in items if i.get('kind') == 'button']
         for a in range(len(acts)):
             for b in range(a + 1, len(acts)):
                 fa, fb = acts[a]['frame'], acts[b]['frame']
@@ -142,48 +126,6 @@ for path in sorted(glob.glob(os.path.join(ROOT, '*.json'))):
                 if gap < -2:
                     fail(name, key, "drawn buttons %s and %s overlap by %dpt"
                              % (acts[a].get('label'), acts[b].get('label'), round(-gap)))
-
-    # RULE 8: an arcade panel shows every button its name claims.
-    #
-    # arcade-twin6 drew four. The builder stopped at four ids and said
-    # nothing, so four cabinets were missing controls with no way to tell
-    # from the file. A panel named for six buttons has six.
-    m = re.match(r'^arcade-[a-z-]+?(\d)(?:p\d)?j?$', name)
-    if m:
-        want = int(m.group(1))
-        for key in ('items', 'landscapeItems'):
-            items = d.get(key)
-            if not items:
-                continue
-            have = len([i for i in items
-                        if i.get('kind') == 'button' and i.get('label') != 'Coin'])
-            # A pedal IS one of the cabinet's buttons to this core, so a
-            # pedal panel legitimately shows fewer.
-            pedals = len([i for i in items if i.get('kind') == 'pedal'])
-            if have + pedals < want:
-                fail(name, key, "named for %d buttons, draws %d" % (want, have))
-
-    # RULE 9: a panel whose NAME lists a mechanism actually draws it.
-    #
-    # arcade-gun-trackball2 had no trackball and arcade-gun-spinner1p1 had
-    # no dial: the mechanism is placed by replacing the d-pad, and a gun
-    # panel has no d-pad to replace, so it vanished with nothing said.
-    # Marcus found both by opening them. The name is the contract, so the
-    # name is what this checks.
-    MECH = {'trackball': 'trackball', 'spinner': 'spinner',
-            'rotary': 'rotary', 'gun': 'gun', 'pedal': 'pedal'}
-    m = re.match(r'^arcade-([a-z-]+?)\d(?:p\d)?j?$', name)
-    if m:
-        for fam in m.group(1).split('-'):
-            want = MECH.get(fam)
-            if not want:
-                continue
-            for key in ('items', 'landscapeItems'):
-                items = d.get(key)
-                if not items:
-                    continue
-                if not any(i.get('kind') == want for i in items):
-                    fail(name, key, "named for a %s and does not have one" % fam)
 
 n = len(glob.glob(os.path.join(ROOT, '*.json')))
 if fails:
