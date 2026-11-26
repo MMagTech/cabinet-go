@@ -79,3 +79,4 @@ repository.
 | FFmpeg | Video and audio decoding inside PPSSPP, the prebuilt static build PPSSPP's own tree carries for iOS ([hrydgard/ppsspp-ffmpeg](https://github.com/hrydgard/ppsspp-ffmpeg) `b87f7c6d522d`), configured without its GPL parts | LGPL v2.1 or later |
 | Lua | Script interpreter: Lua 5.4.7 inside PPSSPP ([hrydgard/ppsspp-lua](https://github.com/hrydgard/ppsspp-lua) `7648485f14e8`), and Lua 5.3.0 inside gw-libretro, which runs the Game & Watch simulations | MIT |
 | bzip2 | Decompression inside gw-libretro | BSD-style |
+| Libraries inside PPSSPP | Built into PPSSPP at `c989c2553e10`: SPIRV-Cross, glslang, libpng, rcheevos, miniupnpc, Snappy, libzip, Basis Universal, xxHash, CityHash, FFmpeg's ATRAC3 decoders, jpeg-compressor, xBRZ, gason, the KIRK engine, SFMT, a public domain SHA-1, sol2, Vulkan Memory Allocator, and libchdr's dr_flac | Each its own; every notice is in `RommApp/RommApp/Resources/Licenses/ppsspp-libraries.txt` |
