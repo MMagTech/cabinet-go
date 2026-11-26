@@ -934,7 +934,7 @@ struct GameLaunchView: View {
         } else if compatibility.shouldSuggestMark(romId: rom.id) {
             LaunchCard(title: "This game keeps closing", systemImage: "exclamationmark.triangle") {
                 VStack(alignment: .leading, spacing: 10) {
-                    Text("It has closed itself \(compatibility.crashes(romId: rom.id)) times on this phone. Some boards do not survive here, and a different emulator above sometimes fixes it.")
+                    Text("It has closed itself \(compatibility.crashes(romId: rom.id)) times on this phone while playing. Some games do not run well here.")
                         .font(.caption)
                         .foregroundStyle(.secondary)
                     Button("Mark as incompatible") {
