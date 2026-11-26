@@ -14,11 +14,10 @@
 # the job.
 #
 # Usage: sh tools/lab/layouts/ship.sh [--no-device]
+# The phone comes from CABINET_PHONE_UDID (see xcrun devicectl list
+# devices), so no device id lives in the repository.
 set -e
 cd "$(dirname "$0")/../../.."
-
-PHONE=4B536CB7-E086-5C97-AA3F-6C38C6395301
-DD=/Users/mmagtech/Library/Developer/Xcode/DerivedData/RommApp-coelcbauvffcdyhahywaajactsyf/Build/Products
 
 echo "== rules =="
 python3 tools/lab/layouts/check.py
@@ -47,9 +46,16 @@ build RommApp      'generic/platform=iOS'
 
 [ "$1" = "--no-device" ] && { echo "(skipping devices)"; exit 0; }
 
+PHONE=${CABINET_PHONE_UDID:?set CABINET_PHONE_UDID to the device id of the phone, from xcrun devicectl list devices}
+# Where the builds above landed, asked of Xcode rather than written down:
+# the DerivedData folder name differs on every machine.
+DD=$(xcodebuild -project RommApp/RommApp.xcodeproj -scheme RommApp -configuration Debug \
+        -destination 'generic/platform=iOS' -showBuildSettings 2>/dev/null \
+    | awk '$1 == "BUILD_DIR" { print $3; exit }')
+
 echo "== installing =="
 for app in "Layout Editor" "Cabinet"; do
-    xcrun devicectl device install app --device $PHONE "$DD/Debug-iphoneos/$app.app" \
+    xcrun devicectl device install app --device "$PHONE" "$DD/Debug-iphoneos/$app.app" \
         >/dev/null 2>&1 && echo "   $app -> phone" || echo "   FAILED $app"
 done
 
@@ -60,7 +66,7 @@ done
 # in the editor.
 echo "== the editor's working copies (reported only, never written) =="
 WORK=$(mktemp -d)
-xcrun devicectl device copy from --device $PHONE --domain-type appDataContainer \
+xcrun devicectl device copy from --device "$PHONE" --domain-type appDataContainer \
     --domain-identifier com.mmagtech.CabinetLayoutEditor \
     --source "Documents/Working" --destination "$WORK" >/dev/null 2>&1
 python3 tools/lab/layouts/check.py "$WORK" || \

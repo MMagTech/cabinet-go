@@ -12,22 +12,24 @@
 # finding them needs no parsing and no app-side cooperation.
 #
 # Usage: sh tools/lab/layouts/pull-ready.sh [--dry-run]
+# The phone comes from CABINET_PHONE_UDID (see xcrun devicectl list
+# devices), so no device id lives in the repository.
 set -e
 cd "$(dirname "$0")/../../.."
 
-PHONE=4B536CB7-E086-5C97-AA3F-6C38C6395301
+PHONE=${CABINET_PHONE_UDID:?set CABINET_PHONE_UDID to the device id of the phone, from xcrun devicectl list devices}
 ID=com.mmagtech.CabinetLayoutEditor
 DEST=RommApp/RommApp/Resources/ControlLayouts
 TMP=$(mktemp -d)
 
 echo "== looking for green marks =="
-xcrun devicectl device info files --device $PHONE --domain-type appDataContainer \
+xcrun devicectl device info files --device "$PHONE" --domain-type appDataContainer \
     --domain-identifier $ID 2>/dev/null \
   | grep -oE "Working/[A-Za-z0-9_-]+\.ready" | sed 's|Working/||;s|\.ready||' | sort -u > "$TMP/ready"
 echo "   $(wc -l < "$TMP/ready" | tr -d ' ') marked ready"
 
 for n in $(cat "$TMP/ready"); do
-    xcrun devicectl device copy from --device $PHONE --domain-type appDataContainer \
+    xcrun devicectl device copy from --device "$PHONE" --domain-type appDataContainer \
         --domain-identifier $ID --source "Documents/Working/$n.json" \
         --destination "$TMP/$n.json" >/dev/null 2>&1 || { echo "   FAILED to fetch $n"; continue; }
     if [ "$1" = "--dry-run" ]; then
