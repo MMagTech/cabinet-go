@@ -200,8 +200,8 @@ final class NativePlayerRenderer: NSObject, ObservableObject, MTKViewDelegate {
     func setButton(_ id: Int, down: Bool, port: Int) {
         guard heldButtons.indices.contains(port) else { return }
         // 0...13 is the standard joypad; 20...23 is the twin-stick second
-        // joystick's four directions (see ArcadeLayout.secondStick and
-        // GameControllerManager.stick2), which LibretroFrontend answers
+        // joystick's four directions (see GameControllerManager.stick2),
+        // which LibretroFrontend answers
         // through RETRO_DEVICE_ANALOG rather than the joypad bitmask, but
         // carries in the same mask this renderer builds either way.
         // RetroPad.overlay (-1) isn't a game input at all.

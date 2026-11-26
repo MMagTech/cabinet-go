@@ -274,8 +274,7 @@ for path in sorted(glob.glob(os.path.join(ROOT, '*.json'))):
             have = len([i for i in items
                         if i.get('kind') == 'button' and i.get('label') != 'Coin'])
             # A pedal IS one of the cabinet's buttons to this core, so a
-            # pedal panel legitimately shows fewer. See ArcadeLayout's
-            # actionIds.
+            # pedal panel legitimately shows fewer.
             pedals = len([i for i in items if i.get('kind') == 'pedal'])
             if have + pedals < want:
                 fail(name, key, "named for %d buttons, draws %d" % (want, have))

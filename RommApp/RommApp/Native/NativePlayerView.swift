@@ -60,18 +60,6 @@ struct NativePlayerView: View {
     /// once the environment session exists.
     @State private var cardSync: MemoryCardSync?
 
-    /// The cabinet's controls, read against the generation of MAME data
-    /// that matches the core about to run them. On MAME 2003-Plus that
-    /// means the driver's own listxml fills what the modern map never
-    /// knew and trims buttons the driver cannot see; every other core,
-    /// FBNeo included, resolves through the modern map exactly as before.
-    private var profile: ArcadeProfile {
-        ArcadeProfileStore.shared.resolve(
-            romId: rom.id, shortname: rom.fsNameNoExt,
-            using: core == .mame2003Plus ? .mame2003Plus : .modern
-        )
-    }
-
     private var canonicalSlug: String {
         rom.canonicalPlatformSlug(platformsVersions: session.platformsVersions)
     }
@@ -86,25 +74,8 @@ struct NativePlayerView: View {
         NativePlatform.platform(for: rom, canonicalSlug: canonicalSlug) ?? .arcade
     }
 
-    /// Arcade resolves per game
-    /// through the MAME profile map, everything else through the bundled
-    /// per-platform file. This used to be arcade-only unconditionally,
-    /// which was correct while FBNeo was the only native core, and wrong
-    /// the moment Saturn joined it: every Saturn game got FBNeo's fallback
-    /// arcade pad, Coin button included, since nothing here ever branched.
-    /// What the game's own driver says it wants in your hands, passed to
-    /// the arcade layout builder only when the running core's mouse
-    /// channel is wired (MAME 2003-Plus today). Nil keeps every other
-    /// core's layouts byte-identical.
-    private var analogControls: AnalogControls? {
-        guard core == .mame2003Plus else { return nil }
-        return AnalogControls.controls(forShortname: rom.fsNameNoExt)
-    }
-
+    /// The bundled per-platform touch layout.
     private var controlLayout: ControlLayout {
-        if rom.isArcade {
-            return ArcadeLayout.build(for: profile, analog: analogControls)
-        }
         // The six-button Genesis pad follows the Controller core setting,
         // the same lever that already tells the core which pad port 0
         // presents: with the setting on, the touch overlay finally grows
@@ -121,7 +92,10 @@ struct NativePlayerView: View {
            let sixButton = ControlLayout.named("pce6") {
             return sixButton
         }
-        return ControlLayout.forPlatform(slug: canonicalSlug) ?? ArcadeLayout.build(for: .fallback)
+        // A missing layout file already trips forPlatform's assertion in
+        // a debug build; a release build draws no pad rather than crash.
+        return ControlLayout.forPlatform(slug: canonicalSlug)
+            ?? ControlLayout(system: "default", items: [], landscapeItems: nil, companionItems: nil, headroom: nil)
     }
 
     private func layoutItems(landscape: Bool) -> [ControlLayout.Item] {
@@ -146,12 +120,8 @@ struct NativePlayerView: View {
         platform == .gameAndWatch ? GWHotspots.spec(for: rom.fsName) : nil
     }
 
-    /// Only arcade's vertical
-    /// boards trade control height for canvas, everything else gets the
-    /// flat height.
-    private var controlStripHeight: CGFloat {
-        rom.isArcade && profile.vertical ? 280 : 330
-    }
+    /// The height of the portrait control strip below the picture.
+    private var controlStripHeight: CGFloat { 330 }
 
     private func handleRelative(_ dx: Int, _ dy: Int) {
         LibretroFrontend.shared.addMouseDeltaX(dx, y: dy, port: 0)

@@ -134,8 +134,7 @@ struct ControlLayout: Decodable {
     ///
     /// Keyed by canonical slug (`Rom.canonicalPlatformSlug`), the same
     /// contract every other platform keyed lookup in this app follows.
-    /// Arcade resolves through `ArcadeProfileStore`
-    /// instead and never reaches this switch. A slug with no fixed digital
+    /// A slug with no fixed digital
     /// pad this app can honestly draw (a mouse or light gun game, a light
     /// gun peripheral, a keypad heavy machine like the 5200 or ColecoVision)
     /// falls through to `default` rather than being blocked: unlike a

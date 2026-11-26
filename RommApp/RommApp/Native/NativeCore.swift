@@ -172,17 +172,6 @@ enum NativeCore {
         }
     }
 
-    /// The webview hint slug for this core, where one exists. CoreHints
-    /// speaks the webview catalogue's names; the two arcade cores exist
-    /// in both worlds under these names.
-    var hintSlug: String? {
-        switch self {
-        case .fbneo: return "fbneo"
-        case .mame2003Plus: return "mame2003_plus"
-        default: return nil
-        }
-    }
-
     /// The native core that can run this rom, if any. `canonicalSlug` must
     /// be `rom.canonicalPlatformSlug(platformsVersions:)`, never
     /// `rom.platformSlug`: see `NativePlatform.platform(for:canonicalSlug:)`
@@ -197,7 +186,7 @@ enum NativeCore {
         // NativePlatform.platform() lookups: bookkeeping for already
         // kept files must keep resolving while availability is off.
         guard !platform.isExperimental || ExperimentalCores.enabled else { return nil }
-        return NativeCoreChoice.resolved(for: rom, platform: platform)
+        return platform.core
     }
 
     /// The native core for an already-resolved slug, for callers with no
@@ -242,10 +231,11 @@ enum NativePlatform: String, CaseIterable {
     case psp
     case gameAndWatch
 
-    /// Every core that can run this platform, default first. Arcade is
-    /// the only platform with a real set; everywhere else this is the
-    /// one-member wrapper around `core`, so no other platform's behavior
-    /// can change by construction.
+    /// Every core that has run this platform, default first. Arcade is
+    /// the only platform with two, and its save folders on the phone are
+    /// kept apart per core (`NativeLauncher.coreSaveDirectory`), so this
+    /// stays for finding those files; everywhere else it is the
+    /// one-member wrapper around `core`.
     var cores: [NativeCore] {
         switch self {
         case .arcade: return [.fbneo, .mame2003Plus]

@@ -26,9 +26,6 @@ struct GameLaunchView: View {
     /// Whether this game has an emulator config worth offering to
     /// throw away; see resetSettingsCard.
     @State private var hasCoreSettings = false
-    /// The native emulator, on the platforms where more than one exists
-    /// (arcade: FinalBurn Neo or MAME 2003-Plus).
-    @State private var selectedNativeCore: NativeCore?
     @State private var playingNative = false
     #if targetEnvironment(macCatalyst)
     // PS2 is Mac only and does not go through the native player, so it
@@ -80,11 +77,6 @@ struct GameLaunchView: View {
     /// A keyboard machine, not a gamepad one. See ComputerPlatforms: this
     /// app does not offer touch play for these, on purpose, not yet.
     @State private var isComputerPlatform = false
-    /// Arcade only: what the cabinet data says this game's controls are,
-    /// and the person's current choice, which starts as the data's answer.
-    @State private var arcadeBase: ArcadeProfile?
-    @State private var arcadeButtons = 6
-    @State private var arcadeWays = "8"
     @State private var togglingFavorite = false
     @State private var favoriteError: String?
     @ObservedObject private var keptStore = KeptGameStore.shared
@@ -179,7 +171,6 @@ struct GameLaunchView: View {
                             vmuCard
                             compatibilityCard
                             resetSettingsCard
-                            if arcadeBase != nil { arcadeControlsCard }
                             if !states.isEmpty || !saves.isEmpty { resumeCard }
                         }
                         .frame(maxWidth: .infinity, alignment: .top)
@@ -297,16 +288,6 @@ struct GameLaunchView: View {
         .sheet(item: $viewingScreenshot) { target in
             ScreenshotViewer(path: target.path, title: target.title)
         }
-        // Only a change made after the screen has settled is the person's;
-        // the one during load is this view choosing a default. Remembered
-        // as soon as a deliberate pick happens, not deferred to Play:
-        // leaving the screen any other way, Close among them, must not
-        // silently drop it.
-        .onChange(of: selectedNativeCore) { _, _ in
-            if rom.isArcade { refreshArcadeBase() }
-            guard let platform = NativePlatform.platform(for: rom, canonicalSlug: canonicalSlug) else { return }
-            NativeCoreChoice.remember(selectedNativeCore, rom: rom, platform: platform)
-        }
         // The Mac's window carries its content full size under a
         // transparent title bar, so a presentation that stops below
         // the bar leaves a strip of the shell showing through above
@@ -323,7 +304,7 @@ struct GameLaunchView: View {
 
     /// A star, not a card: this is a status toggle someone glances at and
     /// taps in passing, not a decision that needs its own explanation on
-    /// the screen the way the arcade or firmware choices do.
+    /// the screen.
     /// Which address this screen's downloads will actually use, shown only
     /// to someone who has set a second one and therefore has a choice to
     /// know about. Everyone else sees nothing at all.
@@ -815,7 +796,6 @@ struct GameLaunchView: View {
                 // and its BIOS land in the Files app's Games folder.
                 if showsKeepCard { keepCard }
                 vmuCard
-                if arcadeBase != nil { arcadeControlsCard }
                 resetSettingsCard
                 if !gatedExperimental, !states.isEmpty || !saves.isEmpty { resumeCard }
             }
@@ -842,91 +822,9 @@ struct GameLaunchView: View {
                 // and its BIOS land in the Files app's Games folder.
                 if showsKeepCard { keepCard }
                 vmuCard
-                if arcadeBase != nil { arcadeControlsCard }
                 resetSettingsCard
                 if !gatedExperimental, !states.isEmpty || !saves.isEmpty { resumeCard }
             }
-        }
-    }
-
-    /// The manual override from the scope doc's resolution chain, living on
-    /// the launch screen since the detail screen was cut. Shows what the
-    /// cabinet data resolved to, owns up when the game was not in the map
-    /// at all, and lets the person overrule both. Choices persist per rom
-    /// and matching the data's own answer clears the override entirely.
-    private var arcadeControlsCard: some View {
-        LaunchCard(title: "Arcade controls", systemImage: "dpad") {
-            VStack(alignment: .leading, spacing: 8) {
-                HStack(spacing: 0) {
-                    Picker("Buttons", selection: $arcadeButtons) {
-                        Text("Stick only").tag(0)
-                        ForEach(1...6, id: \.self) { count in
-                            Text(count == 1 ? "1 button" : "\(count) buttons").tag(count)
-                        }
-                    }
-                    .pickerStyle(.menu)
-                    .labelsHidden()
-                    Picker("Stick", selection: $arcadeWays) {
-                        Text("Eight way").tag("8")
-                        Text("Four way").tag("4")
-                        Text("Two way").tag("2")
-                    }
-                    .pickerStyle(.menu)
-                    .labelsHidden()
-                    Spacer()
-                }
-                Text(arcadeCaption)
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-            }
-        }
-        .onChange(of: arcadeButtons) { _, _ in storeArcadeChoice() }
-        .onChange(of: arcadeWays) { _, _ in storeArcadeChoice() }
-    }
-
-    private var arcadeCaption: String {
-        guard let base = arcadeBase else { return "" }
-        let isOverride = arcadeButtons != base.buttons || arcadeWays != base.ways
-        if isOverride {
-            return "Your choice. The cabinet data says \(describe(buttons: base.buttons, ways: base.ways))."
-        }
-        if base.unmapped {
-            return "This game is not in the cabinet map, so this is the generic guess. Correct it here if it plays wrong."
-        }
-        return "From the game's cabinet data."
-    }
-
-    private func describe(buttons: Int, ways: String) -> String {
-        let b = buttons == 0 ? "stick only" : (buttons == 1 ? "1 button" : "\(buttons) buttons")
-        return "\(b), \(ways) way"
-    }
-
-    /// The cabinet data this screen is describing, read against whatever
-    /// is about to run the game. MAME 2003-Plus answers from its own
-    /// driver generation, so a game the modern map never knew stops
-    /// being "the generic guess" here and the pickers open on what the
-    /// player is actually going to get; every other player and core
-    /// resolves through the modern map, unchanged. Re-read on a core or
-    /// player switch, because the same game genuinely has two answers.
-    private func refreshArcadeBase() {
-        let usesMAME = selectedNativeCore == .mame2003Plus
-        let base = ArcadeProfileStore.shared.resolve(
-            shortname: rom.fsNameNoExt, using: usesMAME ? .mame2003Plus : .modern
-        )
-        arcadeBase = base
-        // A stored override is the player's own answer and outranks both
-        // books, so a switch never overwrites it.
-        let choice = ArcadeOverride.stored(for: rom.id)
-        arcadeButtons = choice?.buttons ?? base.buttons
-        arcadeWays = choice?.ways ?? base.ways
-    }
-
-    private func storeArcadeChoice() {
-        guard let base = arcadeBase else { return }
-        if arcadeButtons == base.buttons, arcadeWays == base.ways {
-            ArcadeOverride.clear(for: rom.id)
-        } else {
-            ArcadeOverride.save(buttons: arcadeButtons, ways: arcadeWays, for: rom.id)
         }
     }
 
@@ -973,8 +871,7 @@ struct GameLaunchView: View {
             // "Emulator settings": that reads global, and Cabinet has
             // a genuinely global one in Settings > Native cores. What
             // this clears is the emulator's own config for this one
-            // game, and neither the Emulator choice nor the Arcade
-            // controls override above it are touched.
+            // game.
             LaunchCard(title: "Troubleshoot", systemImage: "wrench.and.screwdriver") {
                 VStack(alignment: .leading, spacing: 10) {
                     Button("Reset", role: .destructive) {
@@ -1201,7 +1098,6 @@ struct GameLaunchView: View {
                         .frame(maxWidth: 420)
                     macStatesSection
                     HStack(spacing: 14) {
-                        macEmulatorCapsule
                         macDownloadCapsule
                         macTroubleCapsule
                     }
@@ -1317,29 +1213,6 @@ struct GameLaunchView: View {
                     .padding(.vertical, 2)
                 }
             }
-        }
-    }
-
-    /// The TV's emulator row: a click cycles between the real choices
-    /// (arcade's FinalBurn Neo or MAME 2003-Plus), same store as every
-    /// other launcher so they always agree.
-    @ViewBuilder
-    private var macEmulatorCapsule: some View {
-        if let platform = NativePlatform.platform(for: rom, canonicalSlug: canonicalSlug),
-           platform.cores.count > 1 {
-            Button {
-                let cores = platform.cores
-                let current = selectedNativeCore ?? cores[0]
-                let next = cores[((cores.firstIndex(of: current) ?? 0) + 1) % cores.count]
-                selectedNativeCore = next
-            } label: {
-                Label(
-                    (selectedNativeCore ?? platform.core).displayName,
-                    systemImage: "cpu"
-                )
-                .font(.callout)
-            }
-            .buttonStyle(.bordered)
         }
     }
 
@@ -1726,11 +1599,6 @@ struct GameLaunchView: View {
         await session.loadPlatformConfigIfNeeded()
         canonicalSlug = rom.canonicalPlatformSlug(platformsVersions: session.platformsVersions)
         isComputerPlatform = ComputerPlatforms.contains(canonicalSlug)
-        if let platform = NativePlatform.platform(for: rom, canonicalSlug: canonicalSlug),
-           platform.cores.count > 1 {
-            selectedNativeCore = NativeCoreChoice.resolved(for: rom, platform: platform)
-        }
-        if rom.isArcade { refreshArcadeBase() }
 
         // Offline, these three would only ever run out the clock on a
         // timeout: NetworkMonitor already knows the answer without

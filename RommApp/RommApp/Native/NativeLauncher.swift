@@ -151,9 +151,7 @@ enum NativeLauncher {
     private static func finishLaunch(
         platform: NativePlatform, rom: Rom, session: Session, romURL: URL, workDir: URL
     ) async throws -> NativeCore {
-        // The person's pick where the platform offers one; the platform
-        // default everywhere else, byte-identically.
-        let core = NativeCoreChoice.resolved(for: rom, platform: platform)
+        let core = platform.core
         let loadURL = try extractedIfArchived(romURL, core: core, in: workDir)
         // On a platform with one core the directory is exactly what it
         // has always been. Only a multi-core platform namespaces by
@@ -167,12 +165,9 @@ enum NativeLauncher {
             rom: rom, session: session, platform: platform, core: core,
             loadURL: loadURL, saveDir: saveDir
         )
-        // A gun cabinet's aim is absolute, so the core reads the pointer
-        // channel; everything else reads relative mouse deltas.
-        let gunCabinet = (AnalogControls.controls(forShortname: rom.fsNameNoExt)?.lightgun ?? 0) > 0
         return try activate(
             platform: platform, core: core, loadURL: loadURL,
-            workDir: workDir, saveDir: saveDir, gunCabinet: gunCabinet)
+            workDir: workDir, saveDir: saveDir)
     }
 
     /// The persistent per-game directory handed to the core as its save
@@ -562,7 +557,7 @@ enum NativeLauncher {
         }
     }
 
-    private static func activate(platform: NativePlatform, core: NativeCore, loadURL: URL, workDir: URL, saveDir: URL, gunCabinet: Bool = false) throws -> NativeCore {
+    private static func activate(platform: NativePlatform, core: NativeCore, loadURL: URL, workDir: URL, saveDir: URL) throws -> NativeCore {
         #if targetEnvironment(simulator) || CABINET_NO_NATIVE_CORES
         // A simulator build links no cores: they are built for real
         // hardware and rebuilding emulator cores for a simulator proves
@@ -582,19 +577,7 @@ enum NativeLauncher {
         #endif
         #else
         LibretroFrontend.shared.activateCore(core.coreID)
-        var coreOptions = NativeCoreOptionsStore.dictionary(for: platform)
-        if core == .mame2003Plus {
-            // Every option this core exposes, answered in one place.
-            // An unanswered libretro variable does not leave the core
-            // at its own default, it leaves a zeroed C global, which
-            // is silence for a sample rate and off for every toggle
-            // whose useful state is on. Eight bugs were found that way
-            // one at a time before this table existed; see
-            // MAME2003PlusOptions for the values and for the five
-            // places Cabinet deliberately differs.
-            coreOptions.merge(MAME2003PlusOptions.all(gunCabinet: gunCabinet)) { _, mine in mine }
-        }
-        LibretroFrontend.shared.setCoreOptions(coreOptions)
+        LibretroFrontend.shared.setCoreOptions(NativeCoreOptionsStore.dictionary(for: platform))
         let padDevice = NativeCoreOptionsStore.padDevice(for: platform)
         LibretroFrontend.shared.setControllerPortDevice(padDevice, port: 0)
         // Player 2 gets the same device type as player 1: nothing here
@@ -618,29 +601,7 @@ enum NativeLauncher {
         if let failure = LibretroFrontend.shared.loadGame(
             loadURL.path, systemDirectory: systemDir, saveDirectory: saveDir.path
         ) {
-            // Deliberately does NOT claim the core is wrong, because
-            // nothing here knows that: a refusal is equally what a missing
-            // BIOS, an incomplete romset, or a set built for a different
-            // version of the same emulator looks like. It says only what
-            // is known, which core refused, and offers the other as a
-            // possibility rather than a diagnosis.
-            //
-            // Says the new thing and nothing else. It does not repeat
-            // that the game failed to start, since the iOS alert is
-            // already titled that and the tvOS text sits under a game
-            // that plainly did not launch. It does not explain where the
-            // picker is either: anyone running this app has a self-hosted
-            // server and arcade romsets sorted into folders, and does not
-            // need a tour of a screen they are looking at.
-            var message = failure
-            if platform.cores.count > 1 {
-                let others = platform.cores
-                    .filter { $0 != core }
-                    .map(\.displayName)
-                    .joined(separator: " or ")
-                message = "\(core.displayName) refused it. Try \(others)."
-            }
-            throw NSError(domain: "NativeLauncher", code: 1, userInfo: [NSLocalizedDescriptionKey: message])
+            throw NSError(domain: "NativeLauncher", code: 1, userInfo: [NSLocalizedDescriptionKey: failure])
         }
         return core
         #endif
