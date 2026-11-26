@@ -29,10 +29,24 @@ below and the third party C sources in `RommApp/RommApp/Native/Archive`.
 
 ## Emulator cores
 
-Each of these is a prebuilt static library in `RommApp/RommApp/Native/<name>/`.
-None of them were modified. They were built from upstream with
-`tools/build-core.sh`, which is in this repository, so anyone can reproduce them
-from the commits below.
+Each of these is a prebuilt static library in `RommApp/RommApp/Native/<name>/`,
+built from upstream at the commit below by `tools/build-core.sh`, or by
+`tools/build-ppsspp.sh` for PPSSPP. Both scripts are in this repository, so
+anyone can reproduce the libraries from these commits.
+
+Three cores carry a small change, each made to the upstream source by those
+scripts before it is built, and each explained beside it in the script:
+
+- melonDS: one more flush of the game's save memory when a game is unloaded,
+  so an in-game save made in the last two seconds before quitting is kept.
+- VeMUlator: a file's extension is found from the last dot in its path rather
+  than the first, so a dot in a folder name no longer loads a blank card.
+- PPSSPP: the shader cache is saved when the graphics context is lost, not
+  only when the renderer is destroyed, so it is saved at all.
+
+`tools/build-core.sh` also restores a header guard in any copy of zlib a core
+bundles, which a current Apple SDK needs to compile it. Nothing else in any core
+is changed.
 
 | Core | Systems | Licence | Upstream | Commit |
 |---|---|---|---|---|
@@ -46,9 +60,10 @@ from the commits below.
 | gw-libretro | Game & Watch | zlib | [libretro/gw-libretro](https://github.com/libretro/gw-libretro) | `91d599b951e7` |
 | VeMUlator | Dreamcast VMU minigames | GPL v3 | [libretro/vemulator-libretro](https://github.com/libretro/vemulator-libretro) | `27a062f6ae53` |
 
-The GPL v2 cores are statically linked, which makes the distributed app a
+The GPL cores are statically linked, which makes the distributed app a
 combined work under those terms. The corresponding source is the upstream commit
-named above, unmodified, built with `tools/build-core.sh` from this repository.
+named above with the changes listed above, made by the build scripts in this
+repository.
 
 ## Supporting libraries
 
