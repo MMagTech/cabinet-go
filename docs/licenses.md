@@ -36,7 +36,6 @@ from the commits below.
 
 | Core | Systems | Licence | Upstream | Commit |
 |---|---|---|---|---|
-| mupen64plus-libretro-nx (bundles GLideN64) | Nintendo 64 | GPL v2 | [libretro/mupen64plus-libretro-nx](https://github.com/libretro/mupen64plus-libretro-nx) | `f275caf4b2bf` |
 | Gambatte | Game Boy, Game Boy Color | GPL v2 | [libretro/gambatte-libretro](https://github.com/libretro/gambatte-libretro) | `96174369b3c3` |
 | mGBA | Game Boy Advance | MPL 2.0 | [libretro/mgba](https://github.com/libretro/mgba) | `e31759b24e7a` |
 | Genesis Plus GX | Game Gear | Free for non-commercial use | [libretro/Genesis-Plus-GX](https://github.com/libretro/Genesis-Plus-GX) | `84fcf2ec8e6b` |
@@ -62,4 +61,6 @@ named above, unmodified, built with `tools/build-core.sh` from this repository.
 | LZMA SDK | Archive decompression | Public domain |
 | Tremor | CD audio decoding | BSD |
 | inih | Config parsing, built into mGBA | BSD |
-| FFmpeg | Video and audio decoding inside PPSSPP, the prebuilt static build PPSSPP's own tree carries for iOS | LGPL v2.1 or later |
+| FFmpeg | Video and audio decoding inside PPSSPP, the prebuilt static build PPSSPP's own tree carries for iOS ([hrydgard/ppsspp-ffmpeg](https://github.com/hrydgard/ppsspp-ffmpeg) `b87f7c6d522d`), configured without its GPL parts | LGPL v2.1 or later |
+| Lua | Script interpreter: Lua 5.4.7 inside PPSSPP ([hrydgard/ppsspp-lua](https://github.com/hrydgard/ppsspp-lua) `7648485f14e8`), and Lua 5.3.0 inside gw-libretro, which runs the Game & Watch simulations | MIT |
+| bzip2 | Decompression inside gw-libretro | BSD-style |
