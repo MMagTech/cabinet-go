@@ -350,8 +350,8 @@ struct RomListView: View {
                 // array. Read from the store now rather than the array
                 // the link was built with, so a game removed from this
                 // screen's own menu leaves it at once instead of after
-                // the next trip through the offline list (Marcus,
-                // 2026-09-03, in airplane mode). The passed array is
+                // the next trip through the offline list (2026-09-03,
+                // in airplane mode). The passed array is
                 // only the fallback for a platform the store no longer
                 // groups, which is an empty screen either way.
                 let live = keptStore.offlinePlatforms().first { $0.platform.id == platform.id }?.roms

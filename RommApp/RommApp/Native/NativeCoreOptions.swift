@@ -760,8 +760,8 @@ enum NativeCoreOptionsStore {
             // per-platform default measured on device.
             // The Mac stays at the console's own 640x480 for now. The
             // 2026-09-01 move to 1920x1440 measured a lower mean and
-            // p99 and shipped, and the next morning Marcus reported
-            // Dreamcast launching "all weird". The frame trace shows
+            // p99 and shipped, and the next morning Dreamcast was seen
+            // launching badly. The frame trace shows
             // why: at 1920x1440 one retro_run in every 300 takes about
             // 60ms, a stall every five seconds for the whole session,
             // and at 640x480 with the same clock it never happens. One
@@ -773,7 +773,7 @@ enum NativeCoreOptionsStore {
             // The CD console's internal backup RAM defaults to "per
             // bios", one shared .brm per region across every Sega CD
             // game, real hardware's own behavior. Forced per game
-            // instead (decided with Marcus 2026-08-16): Cabinet's save
+            // instead (decided 2026-08-16): Cabinet's save
             // sync is per game on RomM's per-rom save model, a shared
             // file would have to live under some arbitrary game, and the
             // tiny 8KB BRAM can no longer fill up across the library.
@@ -1167,7 +1167,7 @@ enum NativeCoreOptionsStore {
         // eight carry real drawn pixels, 146 to 154 distinct colours per
         // row. Cropping them is a judgement about what a CRT would have
         // hidden, not a correction of something plainly wrong, so it is
-        // Marcus's call and not this pass's.
+        // a deliberate call for later and not this pass's.
         case .psx:
             // Gaussian is what the PlayStation's SPU actually did: the
             // hardware interpolates sample playback with a fixed 4-point

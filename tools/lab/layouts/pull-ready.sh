@@ -1,8 +1,9 @@
 #!/bin/sh
-# Brings the layouts Marcus has marked GREEN in the editor into the
-# repository. This is the ONLY direction layouts are supposed to travel.
+# Brings the layouts marked GREEN in the editor into the repository.
+# This is the ONLY direction layouts are supposed to travel.
 #
-# The editor is the source of truth for controls. He edits on the phone,
+# The editor is the source of truth for controls. Layouts are edited on
+# the phone,
 # marks a layout ready when it is good, and this collects the ready ones.
 # Pushing the repo's copies back onto the device is not part of the
 # workflow and overwrites work in progress; do not do it.

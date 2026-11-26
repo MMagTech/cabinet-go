@@ -21,10 +21,9 @@ struct LayoutEditorView: View {
     /// a layout forked a private snapshot of it, and that snapshot then
     /// shadowed every newer bundled version forever. Fifty-two arcade
     /// screens were shadowed that way by one browsing session, and each
-    /// looked stale with nothing anywhere saying why. Marcus, 2026-08-25:
-    /// "something isn't right with the app that I keep getting confused."
-    /// He was right. Now a working copy is written only when the layout
-    /// actually changed.
+    /// looked stale with nothing anywhere saying why, which made the
+    /// editor itself confusing to use (2026-08-25). Now a working copy is
+    /// written only when the layout actually changed.
     @State private var opened: String = ""
     /// A working copy from an earlier session is hiding a newer bundled
     /// layout underneath this screen. Offer the way out, visibly, instead
@@ -496,7 +495,7 @@ struct LayoutEditorView: View {
 
     /// Makes a selection symmetric about its own centre.
     ///
-    /// Built for a real defect Marcus felt before anyone measured it:
+    /// Built for a real defect felt by eye before anyone measured it:
     /// every landscape face-button diamond in the library is off, the
     /// left button sitting 0.005 closer to centre than the right and
     /// the top and bottom pair nudged 0.0025 across. The same error in

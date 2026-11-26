@@ -10,8 +10,8 @@ import SwiftUI
 /// can only be polled; a `@Published` one can be watched, so Home and the
 /// library can update live off airplane mode instead of only noticing on
 /// their next manual load, which is what an actor-backed version left them
-/// unable to do (Marcus, 2026-08-07: "I have to exit it and then reenter to
-/// see offline view").
+/// unable to do (2026-08-07: the offline view only appeared after leaving
+/// a screen and coming back).
 ///
 /// Originally built for the boot watchdog alone: waiting on an actual
 /// request to fail is too slow for a decision that has to happen the
@@ -38,7 +38,7 @@ final class NetworkMonitor: ObservableObject {
     /// same reason to have it exists whether or not signal is actually
     /// weak, roaming, a capped hotspot, or simply not wanting a big
     /// download to fire while there is one. Persisted, so it survives a
-    /// relaunch the way a real mode should. Marcus, 2026-08-07.
+    /// relaunch the way a real mode should (2026-08-07).
     @Published var manualOfflineMode: Bool {
         didSet { UserDefaults.standard.set(manualOfflineMode, forKey: Self.manualOfflineKey) }
     }
@@ -54,8 +54,8 @@ final class NetworkMonitor: ObservableObject {
     /// view: the plain truth when signal is actually gone, the
     /// deliberate choice when it is not. Every screen that shows one of
     /// these reads it from here, so they can never disagree with each
-    /// other or with reality, the exact bug caught on device (Marcus,
-    /// 2026-08-07): "No connection" showing over a full signal bar
+    /// other or with reality, the exact bug caught on device
+    /// (2026-08-07): "No connection" showing over a full signal bar
     /// because Offline Mode, not a dead signal, was what was actually
     /// running.
     var offlineReason: (label: String, systemImage: String) {

@@ -168,7 +168,7 @@ private struct DownloadProgressRing: View {
                 let fraction = min(max(progress.fraction, 0), 1)
                 // Softened to sit as lightly on the cover as the star
                 // does: a full-strength tint ring read heavier than the
-                // favorite badge beside it (Marcus, 2026-09-02).
+                // favorite badge beside it (2026-09-02).
                 ZStack {
                     Circle()
                         .stroke(.tint.opacity(0.2), lineWidth: 2)
@@ -243,7 +243,7 @@ private struct GameContextMenu: ViewModifier {
                     // Podcasts and Music draw Remove Download and the
                     // way the platform's Remove All Downloads already
                     // reads; the two sat side by side in different
-                    // colours (Marcus, 2026-09-03).
+                    // colours (2026-09-03).
                     Button(role: .destructive) {
                         keptStore.remove(romId: romId)
                     } label: {

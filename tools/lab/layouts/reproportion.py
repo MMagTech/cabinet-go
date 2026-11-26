@@ -9,7 +9,7 @@ widths are the invariant both orientations share.
 
 Portrait is the reference because it is the layout authored for a
 thumb rather than for sitting around a picture, and because it is the
-one Marcus judges the others against by eye.
+one the others are judged against by eye.
 
 Positions move; sizes never do. Only the cluster is touched.
 """

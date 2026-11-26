@@ -9,8 +9,8 @@ beside a stick pushed it right. A button came in five sizes. The
 arrangement changed from an arc to a grid at five buttons. The movement
 control had three widths and two left edges.
 
-The numbers are the MASTER's: Marcus edited arcade-stick6 in the
-editor on 2026-08-25, marked it green, and these tables are read from
+The numbers are the MASTER's: arcade-stick6 was edited by hand in the
+editor on 2026-08-25 and marked green, and these tables are read from
 that file. This script exists to spread the master, not to design.
 
 The rule is LANES. A control's lane never moves. When something else
@@ -64,8 +64,8 @@ L = {
     'col0':   0.725, 'colstep': 0.09, 'rowbase': 0.545, 'rowstep2': 0.23,
     'stagger': 0.04, 'clusterrow': 0.19,
     # A pedal is held down for a whole race by the right thumb, so
-    # buttons on the right cannot be reached. Marcus found that playing
-    # Super Off Road. The lane mirrors rather than narrowing, and this is
+    # buttons on the right cannot be reached, as playing Super Off Road
+    # showed. The lane mirrors rather than narrowing, and this is
     # the one place the system bends for a fact about hands.
     'pedalcol0': 0.26,
 }
@@ -73,20 +73,21 @@ L = {
 
 # The companion panel, the phone as the controller with no picture on it.
 # Read from the master's companionItems the same way P and L are. Column
-# x's are stated as a list because his columns are not a uniform step.
+# x's are stated as a list because the hand-placed columns are not a
+# uniform step.
 C = {
     'menu':  ((0.03, 0.085, 0.095, 0.09), (0.015, 0.07, 0.125, 0.12)),
     # The racing master, arcade-spinner6p1, moved two things on the
     # companion: the mechanism drops to sit flush with the button rows,
     # and the pedal centres vertically on the right edge. Family
     # overrides rather than new global numbers, because the stick master
-    # keeps its own mech height and both masters are his.
+    # keeps its own mech height and both masters were placed by hand.
     'mech_pedal': ((0.07, 0.3265, 0.19, 0.42), (0.05, 0.3065, 0.23, 0.46)),
     'pedalbox':   ((0.87, 0.3772, 0.10, 0.30), (0.845, 0.3472, 0.15, 0.36)),
     'start': ((0.87, 0.085, 0.10, 0.09),  (0.855, 0.07, 0.13, 0.12)),
     'coin':  ((0.20, 0.06, 0.06, 0.14),   (0.18, 0.04, 0.10, 0.18)),
     'mech':  ((0.07, 0.335, 0.19, 0.42),  (0.05, 0.315, 0.23, 0.46)),
-    # The editor stores what his fingers actually left, so these carry
+    # The editor stores what the fingers actually left, so these carry
     # its full precision rather than tidied numbers: tidying them made
     # the master fail to round-trip by two ten-thousandths.
     'btn':    (0.0747, 0.1725),
@@ -97,7 +98,7 @@ C = {
 }
 
 
-# The gun master, arcade-gun2, read from Marcus's file like the rest.
+# The gun master, arcade-gun2, read from its hand-edited file like the rest.
 # A gun panel has no strip and no lanes: the whole screen is the aiming
 # surface, the service row holds the top edge, and the buttons hold the
 # bottom band in portrait and the right edge in landscape, where a thumb
@@ -107,7 +108,7 @@ G = {
     'p_start': ((0.46, 0.02, 0.21, 0.075),   (0.44, 0.01, 0.25, 0.10)),
     'p_menu':  ((0.78, 0.02, 0.18, 0.075),   (0.76, 0.01, 0.22, 0.10)),
     'p_btn':    (0.219, 0.0992, 0.02, 0.015),     # w h padx pady
-    'p_two':    (0.1905, 0.5905),   # his hand-placed pair beats the formula
+    'p_two':    (0.1905, 0.5905),   # the hand-placed pair beats the formula
     'p_row':    0.8479, 'p_rowstep': 0.117,
     'l_coin':  ((0.0475, 0.175, 0.065, 0.15), (0.0225, 0.135, 0.10, 0.24)),
     'l_start': ((0.87, 0.015, 0.10, 0.09),    (0.84, -0.025, 0.15, 0.16)),
@@ -125,9 +126,8 @@ G = {
 
 
 def shape_positions(n, anchor, stepx, stag, rowstep):
-    """Third pass on Marcus's button shapes, and this time from a
-    picture: MAME4iOS's cluster, which he sent 2026-08-25 saying "I want
-    it like their buttons." The look is a real cabinet's: buttons nearly
+    """Third pass on the button shapes, and this time from a picture:
+    MAME4iOS's cluster, sent as the reference on 2026-08-25. The look is a real cabinet's: buttons nearly
     touching, each column stepped UP going right the way arcade panels
     arc their rows, and a second row sitting tight above, offset half a
     button so it nests into the stagger.
@@ -359,7 +359,7 @@ def relayout_twin(d):
     """The twin master spreads by direct copy: positions are read from
     arcade-twin6.json itself rather than restated as tables, sticks and
     service by name, buttons as a prefix of the master's six. The master
-    file is Marcus's verbatim, so this cannot drift from it."""
+    file is the hand-edited one verbatim, so this cannot drift from it."""
     master = layoutfmt.load(os.path.join(ROOT, 'arcade-twin6.json'))
     for key in ('items', 'landscapeItems', 'companionItems'):
         items = d.get(key)
@@ -460,8 +460,8 @@ def relayout(d, name):
         else:
             place_buttons(items, S, 2 if pedals else 3, S['col0'])
 
-# The masters are Marcus's files verbatim, byte for byte as pulled from
-# the editor, hand-unevenness included: his gun companion's two buttons
+# The masters are the hand-edited files verbatim, byte for byte as pulled
+# from the editor, hand-unevenness included: the gun companion's two buttons
 # are deliberately not the same height, and the first version of this
 # loop 'corrected' them. Sources, not targets. The spread never touches
 # them.

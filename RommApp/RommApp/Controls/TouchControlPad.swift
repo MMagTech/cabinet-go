@@ -387,7 +387,7 @@ final class ControlPadView: UIView {
         // it inherited the frame's aspect AND the screen's: snes is
         // authored 0.19 by 0.42, which is square on a screen with no
         // safe-area insets and 16% taller once the drawing area is
-        // inset to 773x407, which is what Marcus saw and measured.
+        // inset to 773x407, which is what was seen and measured.
         // Fitting a square inside the frame makes a d-pad the same
         // shape on every phone, whatever the layout says and whatever
         // the insets do.
@@ -471,9 +471,9 @@ final class ControlPadView: UIView {
     /// actually see, a tight contact shadow at its base, a lit face,
     /// and a soft edge along the top.
     ///
-    /// The first attempt lit the face and cast a soft shadow and
-    /// Marcus's verdict was that the controls still had no height. He
-    /// was right, and the reason is that a dark canvas cannot receive
+    /// The first attempt lit the face and cast a soft shadow, and the
+    /// controls still had no height. The reason is that a dark canvas
+    /// cannot receive
     /// a dark shadow: black on near-black is invisible, so the whole
     /// depth cue was doing nothing. Height on a dark ground has to be
     /// DRAWN rather than shaded, which is what the side wall below is,
@@ -500,7 +500,7 @@ final class ControlPadView: UIView {
         // one, so a game shows through underneath), and the first
         // version inherited that alpha for the wall: 14% of a dark
         // colour on a dark panel is nothing at all, which is exactly
-        // why Marcus saw no height. A panel has no game behind it, so
+        // why the first attempt showed no height. A panel has no game behind it, so
         // its walls can be opaque, and an opaque edge is the only part
         // of this that a dark ground can actually show.
         var hue: CGFloat = 0, sat: CGFloat = 0, bri: CGFloat = 0, alpha: CGFloat = 0
@@ -549,7 +549,7 @@ final class ControlPadView: UIView {
         ctx.restoreGState()
 
         // Light from above, fixed. A light that moved with the phone
-        // was tried and looked wrong to Marcus; a real handheld thing
+        // was tried and looked wrong; a real handheld thing
         // is lit by the room, and the room does not swing.
         ctx.saveGState()
         ctx.addPath(path.cgPath)
@@ -636,8 +636,8 @@ final class ControlPadView: UIView {
         }
         // No outline on a moulded control. A hard bright line around
         // an opaque object is what makes it read as cut out and stuck
-        // on rather than formed, which is what Marcus saw once the
-        // height started working. The wall, the shading and the rim
+        // on rather than formed, which is what showed once the height
+        // started working. The wall, the shading and the rim
         // already say where the edge is. The stroke stays for the
         // translucent controls, where it is the only thing separating
         // them from the game behind.

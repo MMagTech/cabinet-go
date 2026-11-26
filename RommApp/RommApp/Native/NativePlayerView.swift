@@ -219,7 +219,7 @@ struct NativePlayerView: View {
                         // pad view's own alpha, so a moulded control
                         // fades as a whole and keeps its depth on the
                         // way down. Landscape deliberately stays flat,
-                        // Marcus's call: there the controls flank a
+                        // A deliberate call: there the controls flank a
                         // centred picture, and a wide game or a rotated
                         // arcade board shrinks those gutters until they
                         // really are sitting on it.
@@ -265,7 +265,7 @@ struct NativePlayerView: View {
             // and locks mid-game.
             UIApplication.shared.isIdleTimerDisabled = true
             // A Game & Watch plays in its artwork's own orientation,
-            // Marcus's call: the tap surface needs the picture large,
+            // a deliberate call: the tap surface needs the picture large,
             // and a wide unit held tall is neither. The lock releases
             // with the player.
             if let spec = gwSpec {

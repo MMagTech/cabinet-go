@@ -9,9 +9,9 @@ import UIKit
 /// get launched from. Platforms and Collections lost their slots for being
 /// one tap from the Library tab anyway.
 ///
-/// Deliberately static labels, "Resume" not "Resume Shinobi": Marcus's
-/// call, and it makes the whole set registrable once at launch with no
-/// update-on-every-play bookkeeping.
+/// Deliberately static labels, "Resume" not "Resume Shinobi": it makes
+/// the whole set registrable once at launch with no update-on-every-play
+/// bookkeeping.
 enum QuickAction: String {
     case resume, search, favorites, recents
 

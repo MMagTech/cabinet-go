@@ -30,7 +30,7 @@ import sys
 import tempfile
 
 BUNDLE_ID = "com.mmagtech.CabinetLayoutEditor"
-DEFAULT_DEVICE_UDID = "4B536CB7-E086-5C97-AA3F-6C38C6395301"  # Marcus's iPhone, macos-environment-facts memory
+DEFAULT_DEVICE_UDID = "4B536CB7-E086-5C97-AA3F-6C38C6395301"  # the maintainer's iPhone
 REPO_LAYOUTS_DIR = os.path.join(
     os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
     "RommApp", "Resources", "ControlLayouts",

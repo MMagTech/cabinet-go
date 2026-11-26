@@ -157,7 +157,7 @@ enum WidgetWriter {
     ) async -> String? {
         // The large cover, not the small: the small one is sized for a
         // grid thumbnail and the widget's hero drew it blown up and soft
-        // (Marcus, 2026-09-03). Scaled down to a ceiling the widget can
+        // (2026-09-03). Scaled down to a ceiling the widget can
         // afford in memory, and written as JPEG so three of them stay
         // small in the shared container.
         guard let path = rom.pathCoverLarge ?? rom.pathCoverSmall else { return nil }

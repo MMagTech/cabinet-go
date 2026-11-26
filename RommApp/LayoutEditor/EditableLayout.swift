@@ -320,12 +320,11 @@ enum WorkingCopy {
     /// it merely displayed, so one browsing session left ~50 snapshots
     /// shadowing every newer bundled layout. The per-screen banner heals
     /// them one visit at a time, which was the wrong cure for a backlog:
-    /// Marcus kept opening screens and seeing stale work, on the day the
-    /// whole arcade set changed underneath them. "Say it with me: editor
-    /// first."
+    /// screen after screen opened on stale work, on the day the whole
+    /// arcade set changed underneath them.
     ///
-    /// Green working copies are untouched, always: green is his mark and
-    /// outranks everything here. Copies whose layout no longer ships at
+    /// Green working copies are untouched, always: green marks a layout
+    /// as finished by hand and outranks everything here. Copies whose layout no longer ships at
     /// all (twin5 and friends, deleted upstream) are ghosts and go
     /// unconditionally. The rest of the sweep runs ONCE, keyed in
     /// defaults, because as a standing rule it would eat genuine

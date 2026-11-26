@@ -1,9 +1,9 @@
 #!/usr/bin/env python3
-"""Checks every control layout against the rules Marcus has actually
-stated, so a violation is caught here instead of in his hands.
+"""Checks every control layout against the rules actually stated for
+them, so a violation is caught here instead of in someone's hands.
 
-Each rule below exists because a real layout broke it and he had to
-say so. The point of the file is that he says it once.
+Each rule below exists because a real layout broke it and it had to be
+said. The point of the file is that it is said once.
 
 Run: python3 tools/lab/layouts/check.py [directory]
 Exits non-zero if anything fails.
@@ -101,9 +101,9 @@ for path in sorted(glob.glob(os.path.join(ROOT, '*.json'))):
         # is what makes a diagonal on a face-button diamond reachable.
         # The DRAWN shape is different. Two circles passing through
         # one another is a mistake every time, and it is what
-        # arcade-twin6 was doing at 43% when Marcus opened it in the
-        # editor on 2026-08-25 and asked, fairly, why the checks had
-        # not caught it. Measured in points, because a normalised
+        # arcade-twin6 was doing at 43% when it was opened in the
+        # editor on 2026-08-25, with the fair question of why the checks
+        # had not caught it. Measured in points, because a normalised
         # square is not a square: x scales against 430 and y against
         # 330, so an overlap looks smaller in the numbers than on the
         # glass.

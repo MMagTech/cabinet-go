@@ -258,8 +258,8 @@ final class DownloadAll: ObservableObject {
 }
 
 /// The queue in the Dynamic Island and on the Lock Screen, the phone's
-/// native place for progress while the app is not in front (Marcus,
-/// 2026-09-03). One activity for the one queue the app runs at a time.
+/// native place for progress while the app is not in front
+/// (2026-09-03). One activity for the one queue the app runs at a time.
 /// Updates go out at most once a second: Apple budgets how often an
 /// activity may change, and a queue lands several games a second on a
 /// fast network, so the counter ticks rather than flickers. Ended with
@@ -350,7 +350,7 @@ struct PlatformDownloadMenuItems: View {
             if offersDownloadAll {
                 // Greyed out once every game on the platform is kept,
                 // rather than answering with an alert that says so
-                // (Marcus, 2026-09-03). The server's count is the
+                // (2026-09-03). The server's count is the
                 // cheap test; the alert stays as the fallback for a
                 // platform whose remaining games cannot be kept.
                 Button {
@@ -387,7 +387,7 @@ struct DownloadAllPrompt: ViewModifier {
                 message += NetworkMonitor.shared.isExpensive ? " Waits for Wi-Fi." : " Wi-Fi only."
                 // Two lines: the action, then the system on its own
                 // line, so a long platform name does not wrap the
-                // question mid-phrase (Marcus, 2026-09-02).
+                // question mid-phrase (2026-09-02).
                 return Alert(
                     title: Text("Download All\n\(name)?"),
                     message: Text(message),
@@ -467,7 +467,7 @@ struct DownloadAllStatusContent: View {
                     VStack(alignment: .leading, spacing: 2) {
                         // On cellular the phone's queue is parked, and a
                         // card that says Downloading over a bar that does
-                        // not move reads as broken (Marcus, 2026-09-03).
+                        // not move reads as broken (2026-09-03).
                         Text(DownloadAll.waitingForWiFi ? "Waiting for Wi-Fi" : "Downloading \(prompt.runningLabel ?? "")")
                             .font(.callout)
                             .lineLimit(1)

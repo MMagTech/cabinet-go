@@ -70,7 +70,7 @@ struct KeptGame: Codable, Identifiable {
 /// The whole tree is excluded from iOS backup. RomM is the source of
 /// truth and every kept file is re-downloadable from it, so backing them
 /// up would bloat iCloud backups to protect data that is not at risk.
-/// Confirmed with Marcus 2026-08-07, no user-facing setting.
+/// Decided 2026-08-07, with no user-facing setting.
 @MainActor
 final class KeptGameStore: ObservableObject {
     static let shared = KeptGameStore()
@@ -181,8 +181,7 @@ final class KeptGameStore: ObservableObject {
     /// Coalesced: the system reports every chunk of every transfer in
     /// flight, and publishing `downloading` on each one re-rendered the
     /// whole covers grid dozens of times a second, which is what made
-    /// the phone feel stuck while a platform came down (Marcus,
-    /// 2026-09-03). Reports collect for a fifth of a second and land as
+    /// the phone feel stuck while a platform came down (2026-09-03). Reports collect for a fifth of a second and land as
     /// one publish; a ring cannot tell the difference.
     func reportTransfer(romId: Int, received: Int64, total: Int64) {
         guard kept(romId: romId) == nil else { return }
@@ -252,8 +251,8 @@ final class KeptGameStore: ObservableObject {
     private var tasks: [Int: Task<Void, Never>] = [:]
     private let root: URL
     /// The person-facing mirror in the Files app, laid out as RomM's
-    /// system-folder-first library structure, the one Marcus's server
-    /// uses (RomM supports two; assuming the other one blind was caught
+    /// system-folder-first library structure, the one the reference
+    /// server uses (RomM supports two; assuming the other one blind was caught
     /// and corrected): <platform folder>/roms/<server filename> and
     /// <platform folder>/bios/<firmware filename>, platform folders
     /// appearing directly under the app's root in Files. This app is a
@@ -314,9 +313,8 @@ final class KeptGameStore: ObservableObject {
     /// Kept, native-capable games grouped by platform: the one shape
     /// Offline Mode uses for browsing everywhere it appears, Home and
     /// the library both, so the two can never draw a different picture
-    /// of the same underlying data (Marcus, 2026-08-07: Home's offline
-    /// view "should essentially just be what the current library looks
-    /// like"). Kept games this phone cannot play are excluded: listing
+    /// of the same underlying data (2026-08-07: Home's offline view is
+    /// just what the library looks like). Kept games this phone cannot play are excluded: listing
     /// them would set up a tap that fails regardless of what is stored. A `Platform` built straight from the kept rom's
     /// own embedded fields, not fetched: the count is how many are
     /// kept, not the server's full catalog size, which would mean
@@ -731,7 +729,7 @@ final class KeptGameStore: ObservableObject {
     }
 
     /// <platform folder>/roms or <platform folder>/bios, the
-    /// system-folder-first structure Marcus's server uses. No collision
+    /// system-folder-first structure the reference server uses. No collision
     /// handling because the server's directories already guarantee
     /// uniqueness within a platform; a manifest from before the slug
     /// field existed lands under "unknown".
@@ -763,8 +761,8 @@ final class KeptGameStore: ObservableObject {
     /// walk the whole mirror again was quadratic. At four hundred kept
     /// games that was a hundred and sixty thousand attribute reads on
     /// the main thread at every launch and every return to the app,
-    /// long enough for the watchdog to kill the app at launch (Marcus,
-    /// 2026-09-03, a black screen then a crash).
+    /// long enough for the watchdog to kill the app at launch
+    /// (2026-09-03, a black screen then a crash).
     private nonisolated func ensureLinks(for game: KeptGame, justKept: Bool = false, folder: [UInt64: URL]? = nil) {
         guard let storeFiles = try? FileManager.default.contentsOfDirectory(
             at: directory(for: game.romId), includingPropertiesForKeys: nil
@@ -783,7 +781,7 @@ final class KeptGameStore: ObservableObject {
             // likely a manifest that stopped decoding after a past
             // structural change and left its Files copy behind with
             // nothing tracking it any more. Removed, not skipped: found
-            // on device (Marcus, 2026-08-08) silently declining to link
+            // on device (2026-08-08) silently declining to link
             // here left a legitimately re-kept game permanently invisible
             // in Files, since nothing else ever revisits an occupied
             // path once this loop moves past it.
@@ -861,7 +859,7 @@ final class KeptGameStore: ObservableObject {
                 // A game kept moments ago cannot have been deleted in
                 // Files yet, no matter how this check is answered: a
                 // person cannot act faster than the download that just
-                // finished. Found on device (Marcus, 2026-08-07): opening
+                // finished. Found on device (2026-08-07): opening
                 // a game right after keeping it could read this check
                 // before it was ready to answer, and un-kept a game that
                 // had never been touched in Files at all. The grace
@@ -1043,7 +1041,7 @@ final class KeptGameStore: ObservableObject {
     /// described a real, completed download is preserved either as a
     /// direct decode, a migrated legacy one, or, failing both, left
     /// entirely alone on disk rather than destroyed. The failure that
-    /// taught this (Marcus, 2026-08-07): a structural change to this
+    /// taught this (2026-08-07): a structural change to this
     /// exact struct wiped real kept games outright, their files
     /// surviving only by accident through an already-made Files link,
     /// which then caused a second, separate bug of its own.

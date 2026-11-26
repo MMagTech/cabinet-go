@@ -347,7 +347,7 @@ final class Session: ObservableObject {
         Task { [weak self] in
             guard let self, let client else { return }
             // A failure never overwrites a value that already worked.
-            // Found on device (Marcus, 2026-08-07): this fetch runs once,
+            // Found on device (2026-08-07): this fetch runs once,
             // at launch, and its old fallback was an empty mapping on any
             // failure, network blip included. Empty means every platform
             // falls back to its raw folder name, and for any platform

@@ -173,7 +173,7 @@ std::atomic<float> gAnalogLeftY[kMaxPorts];
 // The pointer channel alone is sized past the pad ports: gw-libretro
 // declares its pointer on PORT 2, above the two seats every pad control
 // uses, and the old kMaxPorts guard silently swallowed every tap sent
-// there. Marcus, first Banana boot: "buttons don't seem to register."
+// there, found on the first Game & Watch boot as taps that did nothing.
 // The pad-facing arrays stay at kMaxPorts on purpose; only pointing
 // widens, so seats, masks and sticks are untouched.
 constexpr size_t kPointerPorts = 3;

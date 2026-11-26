@@ -50,8 +50,8 @@ struct MainTabView: View {
             // browse: its only honest content there is exactly what Home
             // already shows, `OfflineLibraryView`, the one shared view
             // both screens draw from. A second tab pointing at the same
-            // screen is just a second way to reach the first (Marcus,
-            // 2026-08-07: "if both tabs are the same why two").
+            // screen is just a second way to reach the first
+            // (2026-08-07).
             if !networkMonitor.isOffline {
                 Tab("Library", systemImage: "square.grid.2x2", value: AppTab.library) {
                     NavigationStack { LibraryScreen() }

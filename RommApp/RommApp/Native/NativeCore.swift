@@ -496,8 +496,8 @@ enum NativePlatform: String, CaseIterable {
         case "psp":
             return .psp
         // A custom platform on RomM keeps whatever slug its folder had:
-        // Marcus's is literally "Game & Watch", lowercased to
-        // "game & watch" by canonicalPlatformSlug. Accept the tidy
+        // the reference server's is literally "Game & Watch", lowercased
+        // to "game & watch" by canonicalPlatformSlug. Accept the tidy
         // metadata slug and the folder spellings alike.
         case "game-and-watch", "game & watch", "game and watch", "gameandwatch":
             return .gameAndWatch

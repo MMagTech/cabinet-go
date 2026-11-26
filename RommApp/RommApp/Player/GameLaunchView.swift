@@ -318,11 +318,10 @@ struct GameLaunchView: View {
     /// are all in the Files app's Games folder, so there is nothing left
     /// for an export menu to offer that the folder does not already
     /// hold. This menu survives only where Keep cannot exist,
-    /// unsupported platforms, keyboard machines, multi-file games,
-    /// because there it is the only way to the file. Its earlier
-    /// BIOS-only remnant on playable games was the last hedge of the
-    /// three-eras accretion this redesign removed, and Marcus caught it
-    /// within the hour.
+    /// unsupported platforms and multi-file games, because there it is
+    /// the only way to the file. Its earlier BIOS-only remnant on
+    /// playable games was the last hedge of the three-eras accretion this
+    /// redesign removed, and it was caught within the hour.
     @ViewBuilder
     private var exportButton: some View {
         if !loading, !showsKeepCard {
@@ -833,8 +832,7 @@ struct GameLaunchView: View {
             // No toggle at all once a game is kept and there is no
             // connection: the one action here is destructive, and
             // offline it is permanent until signal returns, exactly the
-            // fat-finger risk on a cramped tray table with no way back
-            // Marcus flagged. There is no offline use for the freed
+            // fat-finger risk on a cramped tray table with no way back. There is no offline use for the freed
             // space either, keeping something else still needs a
             // connection, so nothing real is lost by waiting. Files
             // stays the deliberate path for removing a kept game,

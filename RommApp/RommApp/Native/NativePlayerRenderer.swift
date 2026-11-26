@@ -404,7 +404,7 @@ final class NativePlayerRenderer: NSObject, ObservableObject, MTKViewDelegate {
             // the governor lets the emulation run ahead of the wall clock
             // by up to the cushion, and the lead IS input latency, since
             // the frame on screen trails the emulated present by exactly
-            // that much. Reported by Marcus 2026-08-18 as bad input lag on
+            // that much. Reported 2026-08-18 as bad input lag on
             // Dreamcast only, which fits: the governor is Flycast-only,
             // and N64 felt fine. 0.02 keeps a full emulated frame of
             // slack (~17ms) against audio crackle; if crackle returns in

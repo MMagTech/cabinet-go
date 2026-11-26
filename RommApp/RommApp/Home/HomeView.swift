@@ -55,9 +55,8 @@ struct HomeView: View {
                 // choosing Offline Mode is a deliberate act, and it has
                 // to visibly do something the instant it is flipped, not
                 // wait for recent/favorites to happen to be empty
-                // already or for a fresh launch to clear them (Marcus,
-                // 2026-08-07: had to force-quit and reopen to see it
-                // take effect).
+                // already or for a fresh launch to clear them (2026-08-07:
+                // it took a force-quit and reopen to take effect).
                 if networkMonitor.manualOfflineMode || (offline && recent.isEmpty && favorites.isEmpty) {
                     // Nothing cached to show above a banner, same as
                     // before, but there may be something better: any
@@ -66,8 +65,8 @@ struct HomeView: View {
                     // answer offline whenever one exists. The exact same
                     // view the library shows, not a second one built to
                     // look like it: one offline view, shown wherever the
-                    // app needs one (Marcus, 2026-08-07, "why would the
-                    // two need to exist").
+                    // app needs one (2026-08-07: two copies had no reason
+                    // to exist).
                     OfflineLibraryView(onRetry: load)
                 } else if !loaded, recent.isEmpty, favorites.isEmpty {
                     // Something, anything, while the first load runs. This
@@ -173,8 +172,7 @@ struct HomeView: View {
             // connectivity changes can only correct the offline flag and
             // reveal the kept-games list sooner, never discard content
             // already on screen. Closes the gap where going offline
-            // needed a manual re-navigation to notice (Marcus,
-            // 2026-08-07).
+            // needed a manual re-navigation to notice (2026-08-07).
             .onChange(of: networkMonitor.isConnected) { _, _ in Task { await load() } }
             .onChange(of: networkMonitor.manualOfflineMode) { _, _ in Task { await load() } }
             .fullScreenCover(item: $resuming) { rom in

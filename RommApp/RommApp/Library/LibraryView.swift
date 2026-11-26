@@ -128,10 +128,10 @@ struct LibraryScreen: View {
         // deliberate toggle, or a real signal loss, has to visibly
         // change what this screen shows the moment it happens, not wait
         // for the live list to be empty already. The same view Home
-        // shows, not a second one built to look like it (Marcus,
-        // 2026-08-07): browsing the full server catalog was always out
-        // of scope for offline, but kept games were never meant to be
-        // invisible here just because the rest of the catalog is.
+        // shows, not a second one built to look like it (2026-08-07):
+        // browsing the full server catalog was always out of scope for
+        // offline, but kept games were never meant to be invisible here
+        // just because the rest of the catalog is.
         if networkMonitor.isOffline {
             OfflineLibraryView(onRetry: loadPlatforms)
         } else if viewMode == .list {
@@ -236,7 +236,7 @@ struct LibraryScreen: View {
             }
         }
         // The same download items the tile carries, so the list mode
-        // is not a way to lose them (Marcus, 2026-09-03).
+        // is not a way to lose them (2026-09-03).
         .contextMenu {
             PlatformDownloadMenuItems(platform: platform, label: platformLabel(for: platform))
         }

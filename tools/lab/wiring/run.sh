@@ -84,8 +84,8 @@ fi
 # A layout that ships in the app but is missing from the editor cannot be
 # tuned, and nothing says so: you open the editor, the system is simply
 # not in the list, and it looks like the editor is broken rather than
-# like a missing line in the project file. Marcus asked whether the new
-# Virtual Boy layout was in the editor, which is how this gap was found;
+# like a missing line in the project file. Asking whether the new
+# Virtual Boy layout was in the editor is how this gap was found;
 # the per-core station had already reported that core clean.
 #
 # Both facts are in the project file, so this is a text comparison, and
