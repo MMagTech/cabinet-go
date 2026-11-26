@@ -57,7 +57,7 @@ struct NativePlayerView: View {
         // A missing layout file already trips forPlatform's assertion in
         // a debug build; a release build draws no pad rather than crash.
         return ControlLayout.forPlatform(slug: canonicalSlug)
-            ?? ControlLayout(system: "default", items: [], landscapeItems: nil, companionItems: nil, headroom: nil)
+            ?? ControlLayout(system: "default", items: [], landscapeItems: nil, headroom: nil)
     }
 
     private func layoutItems(landscape: Bool) -> [ControlLayout.Item] {

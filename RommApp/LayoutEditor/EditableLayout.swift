@@ -24,9 +24,6 @@ struct EditableLayout {
     /// to portrait items in that case, which works but looks wrong, so the
     /// editor says so rather than quietly editing the portrait set twice.
     var landscapeItems: [EditableItem]?
-    /// The controller-only arrangement: landscape with no picture, for
-    /// a phone driving a television. See ControlLayout.companionItems.
-    var companionItems: [EditableItem]?
 
     func items(landscape: Bool) -> [EditableItem] {
         guard landscape, let wide = landscapeItems, !wide.isEmpty else { return items }
@@ -154,8 +151,7 @@ extension EditableLayout {
             ergonomics: root["_ergonomics"] as? String,
             headroom: root["_headroom"] as? Double,
             items: decodeItems(root["items"]) ?? [],
-            landscapeItems: decodeItems(root["landscapeItems"]),
-            companionItems: decodeItems(root["companionItems"])
+            landscapeItems: decodeItems(root["landscapeItems"])
         )
     }
 
@@ -212,9 +208,6 @@ extension EditableLayout {
         out += " \"items\": \(Self.emit(items, indent: 1))"
         if let landscapeItems {
             out += ",\n \"landscapeItems\": \(Self.emit(landscapeItems, indent: 1))"
-        }
-        if let companionItems {
-            out += ",\n \"companionItems\": \(Self.emit(companionItems, indent: 1))"
         }
         out += "\n}\n"
         return out

@@ -22,16 +22,6 @@ def ov(a, b):
     return not (a['x']+a['w'] <= b['x'] or b['x']+b['w'] <= a['x'] or
                 a['y']+a['h'] <= b['y'] or b['y']+b['h'] <= a['y'])
 
-def spread(items):
-    """Cluster spread in units of the items' OWN size. Aspect free: x and
-    y normalise against different lengths, so raw units cannot be
-    compared between orientations."""
-    w = sum(i['frame']['w'] for i in items)/len(items)
-    h = sum(i['frame']['h'] for i in items)/len(items)
-    cx = [i['frame']['x']+i['frame']['w']/2 for i in items]
-    cy = [i['frame']['y']+i['frame']['h']/2 for i in items]
-    return ((max(cx)-min(cx))/max(w, 1e-4), (max(cy)-min(cy))/max(h, 1e-4))
-
 # Known and deliberately kept, with the reason. Not a way to silence
 # the checker: anything in here is a fault somebody looked at and chose
 # to live with, and it says who and why.
@@ -47,60 +37,14 @@ ACCEPTED = {
     ("psx", "landscapeItems", "R1", "R2"),
 }
 
-# Layouts Marcus has placed by hand, which the general rules must not
-# walk over. The rules exist to catch drift, not to overrule a decision
-# somebody actually made.
-HAND_PLACED = {
-    # PSX landscape was restored to its original arrangement on
-    # 2026-08-24 at his request, after I had restructured it uninvited.
-    # Menu sits left of centre there, and it stays there.
-    ("psx", "landscapeItems", "Menu"),
-    # Dreamcast's companion panel is the one place the centre is not
-    # free: the phone pins player one's VMU window there, a fixed
-    # 120x84 overlay at top centre that no layout can move
-    # (ControllerPadView, and VMUGuide draws it in the editor). Menu
-    # sits off centre to clear it. Marcus, 2026-08-30: "the menu is
-    # fine on Dreamcast where I placed it because of the vmu, it's the
-    # one exception."
-    ("dreamcast", "companionItems", "Menu"),
-}
-
 fails = []
 def fail(layout, key, msg): fails.append("%s/%s: %s" % (layout, key, msg))
-
-SHOULDER = {'L', 'R', 'L1', 'L2', 'R1', 'R2'}
-
-def menu_rule(name, key, pills):
-    """Menu takes the LEFT CORNER, unless a shoulder already owns it.
-
-    It is the one control that is not part of the game, so it should
-    sit in the same place on every machine. L and R have a stronger
-    claim to a corner than Menu does, so on a layout with shoulders,
-    and only there, Menu takes the centre instead.
-
-    Two earlier versions of this rule, "always centred" and "always
-    left", each produced something Marcus had to correct, because
-    neither is the rule: the corner is. A lone Menu with nothing to
-    balance against is left alone.
-    """
-    menu = [p for p in pills if p.get('label') == 'Menu']
-    if not menu or len(pills) < 2: return
-    if (name, key, 'Menu') in HAND_PLACED: return
-    labels = {p['label'] for p in pills}
-    for m in menu:
-        if SHOULDER & labels:
-            c = m['frame']['x'] + m['frame']['w']/2
-            if abs(c - 0.5) > 0.05:
-                fail(name, key, "shoulders own the corners, so Menu belongs centred, not at %.3f" % c)
-        elif m['frame']['x'] > 0.15:
-            fail(name, key, "Menu belongs in the left corner, not at %.3f" % m['frame']['x'])
 
 for path in sorted(glob.glob(os.path.join(ROOT, '*.json'))):
     name = os.path.basename(path)[:-5]
     d = json.load(open(path, encoding='utf-8'))
-    portrait_btns = [i for i in (d.get('items') or []) if i.get('kind') == 'button']
 
-    for key in ('items', 'landscapeItems', 'companionItems'):
+    for key in ('items', 'landscapeItems'):
         items = d.get(key)
         if not items: continue
         pills = [i for i in items if i.get('kind') == 'pill']
@@ -165,66 +109,6 @@ for path in sorted(glob.glob(os.path.join(ROOT, '*.json'))):
             r = rect(i)
             if r['x'] < -0.03 or r['x']+r['w'] > 1.03 or r['y'] < -0.05:
                 fail(name, key, "%s runs off the panel" % (i.get('label') or i.get('kind')))
-
-        if key == 'companionItems':
-            # RULE 4: on the companion panel the service pills are ONE
-            # row across the top, Menu centred.
-            menu_rule(name, key, pills)
-            if len(pills) > 1:
-                # Tidy rows, not necessarily ONE row. This started as
-                # "everything on a single line", which was right until
-                # PSX, where seven service pills across the top read as
-                # a wall. Marcus asked for Select, Start and Menu to
-                # step down "so there isn't a straight row across the
-                # top". A step is a deliberate shape; what is still
-                # wrong is scatter, half a dozen pills each at their own
-                # slightly different height, which looks like nobody
-                # placed them. So: a few rows, and anything sharing a
-                # row shares it exactly.
-                ys = sorted({round(p['frame']['y'], 3) for p in pills})
-                # Up to four rows: PSX's controller-only panel mirrors
-                # its portrait layout, which is four deep. More than
-                # that is scatter rather than shape.
-                if len(ys) > 4:
-                    fail(name, key, "service pills are scattered over %d heights: %s"
-                         % (len(ys), ys))
-                for a in range(len(ys)-1):
-                    if ys[a+1] - ys[a] < 0.03:
-                        fail(name, key, "pill rows at %.3f and %.3f are neither aligned nor apart"
-                             % (ys[a], ys[a+1]))
-
-            # RULE 5: shoulders keep the side they have on the
-            # television. SHOULDERS, not every pill: on a layout with
-            # no shoulders, Menu takes the left corner and everything
-            # else packs to the right, so Select legitimately changes
-            # sides. This rule is about L staying left and R staying
-            # right, which is anatomy, not arrangement.
-            src = {i['label']: i for i in (d.get('landscapeItems') or d.get('items') or [])
-                   if i.get('kind') == 'pill'}
-            for p in pills:
-                s = src.get(p.get('label'))
-                if not s or p.get('label') not in SHOULDER: continue
-                was = s['frame']['x'] + s['frame']['w']/2 < 0.5
-                now = p['frame']['x'] + p['frame']['w']/2 < 0.5
-                if was != now:
-                    fail(name, key, "%s changed sides" % p.get('label'))
-
-            # RULE 6: the action cluster is spaced like portrait's, which
-            # is the one authored for a thumb. Only too-far is a failure.
-            #
-            # Arcade is exempt as of 2026-08-25: arcade companion sets are
-            # spread mechanically from arcade-stick6, whose companion
-            # Marcus laid out by hand and marked green, and his chosen
-            # companion spacing deliberately differs from his portrait
-            # spacing. The master is the standard there; this rule kept
-            # flagging the standard itself, 41 times.
-            btns = [i for i in items if i.get('kind') == 'button']
-            if not name.startswith('arcade-') and len(btns) > 1 and len(portrait_btns) > 1:
-                want, have = spread(portrait_btns), spread(btns)
-                for axis, i in (('x', 0), ('y', 1)):
-                    if want[i] > 0.01 and have[i] > 0.01 and have[i]/want[i] > 1.20:
-                        fail(name, key, "buttons %.0f%% too far apart in %s"
-                             % ((have[i]/want[i]-1)*100, axis))
 
         # RULE 7: two drawn buttons may not run through each other.
         #
