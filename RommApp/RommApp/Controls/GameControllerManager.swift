@@ -586,7 +586,7 @@ final class GameControllerManager: ObservableObject {
     }
 
 #if DEBUG
-    /// Test seam for tools/controls-test: drives the exact internal paths
+    /// Test seam for tools/lab/controls: drives the exact internal paths
     /// a physical pad does, so the direction state machines run on the
     /// Mac without hardware. A slot is created on demand because no
     /// GCController ever connects in the harness. Debug builds only.

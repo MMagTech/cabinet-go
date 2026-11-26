@@ -1,9 +1,10 @@
 // The controls lab: runs GameControllerManager's real direction state
-// machines headless in the iOS simulator, driving them through the
-// DEBUG test seam exactly the way a physical pad's handlers do. Built
-// after 2026-08-20, when an experimental per-frame poll cleared
-// stick-held directions and killed the left stick on arcade: the class
-// of bug this file exists to catch before a device ever sees it.
+// machines and ControllerBindings' fixed map headless in the iOS
+// simulator, driving them through the DEBUG test seam exactly the way a
+// physical pad's handlers do. Built after 2026-08-20, when an
+// experimental per-frame poll cleared stick-held directions and killed
+// the left stick: the class of bug this file exists to catch before a
+// device ever sees it.
 //
 // Build and run: tools/lab/controls/run.sh (simctl spawn on a booted
 // simulator; no UI, exit code 0 on green).
@@ -27,43 +28,43 @@ func runTests() -> Int {
 
     // 1. The regression class: on a digitizing platform, no other
     // source's release may drop a stick-held direction.
-    mgr.activePlatform = "arcade"
+    mgr.activePlatform = "gba"
     reset()
     mgr._testInjectStick(x: 1.0, y: 0)
     check(events.contains { $0 == (0, RetroPad.right, true) },
-          "arcade: stick right presses the direction")
+          "gba: stick right presses the direction")
     reset()
     mgr._testInjectDpad(RetroPad.right, down: false)
     check(events.isEmpty,
-          "arcade: phantom d-pad release cannot drop a stick-held direction")
+          "gba: phantom d-pad release cannot drop a stick-held direction")
     mgr._testInjectDpad(RetroPad.right, down: true)
     check(events.isEmpty,
-          "arcade: d-pad press on an already-held direction emits nothing")
+          "gba: d-pad press on an already-held direction emits nothing")
     mgr._testInjectDpad(RetroPad.right, down: false)
     check(events.isEmpty,
-          "arcade: d-pad release while the stick still holds emits nothing")
+          "gba: d-pad release while the stick still holds emits nothing")
     mgr._testInjectStick(x: 0, y: 0)
     check(events.contains { $0 == (0, RetroPad.right, false) },
-          "arcade: stick release finally releases the direction")
+          "gba: stick release finally releases the direction")
 
     // 2. Union the other way round: the stick may not drop a d-pad hold.
     reset()
     mgr._testInjectDpad(RetroPad.left, down: true)
     check(events.contains { $0 == (0, RetroPad.left, true) },
-          "arcade: d-pad press reaches the game")
+          "gba: d-pad press reaches the game")
     reset()
     mgr._testInjectStick(x: -1.0, y: 0)
     check(events.isEmpty,
-          "arcade: stick engaging an already-held direction emits nothing")
+          "gba: stick engaging an already-held direction emits nothing")
     mgr._testInjectStick(x: 0, y: 0)
     check(events.isEmpty,
-          "arcade: stick release while the d-pad still holds emits nothing")
+          "gba: stick release while the d-pad still holds emits nothing")
     mgr._testInjectDpad(RetroPad.left, down: false)
     check(events.contains { $0 == (0, RetroPad.left, false) },
-          "arcade: d-pad release finally releases the direction")
+          "gba: d-pad release finally releases the direction")
 
-    // 3. Hysteresis survives the refactor: engage above 0.5, hold
-    // through 0.45, release below 0.4.
+    // 3. Hysteresis: engage above 0.5, hold through 0.45, release below
+    // 0.4.
     reset()
     mgr._testInjectStick(x: 0.45, y: 0)
     check(events.isEmpty, "hysteresis: 0.45 does not engage")
@@ -75,36 +76,44 @@ func runTests() -> Int {
     mgr._testInjectStick(x: 0.3, y: 0)
     check(events.contains { $0 == (0, RetroPad.right, false) }, "hysteresis: 0.3 releases")
 
-    // 4. Analog platforms do not digitize, and the analog value flows.
-    mgr.activePlatform = "dreamcast"
+    // 4. The stick's analog value always flows, with y turned to
+    // libretro's down-positive convention.
+    reset()
+    mgr._testInjectStick(x: 0.2, y: 0.7)
+    check(stickEvents.contains { $0.player == 0 && $0.x == 0.2 && $0.y == -0.7 },
+          "gba: analog value reaches sendStick, y flipped")
+    mgr._testInjectStick(x: 0, y: 0)
+
+    // 5. PSP reads the nub as analog and does not digitize it, so one
+    // thumb never works the nub and the d-pad at once.
+    mgr.activePlatform = "psp"
     reset()
     mgr._testInjectStick(x: 1.0, y: 0)
     check(!events.contains { $0.id == RetroPad.right },
-          "dreamcast: stick presses no d-pad direction")
+          "psp: stick presses no d-pad direction")
     check(stickEvents.contains { $0.player == 0 && $0.x == 1.0 },
-          "dreamcast: analog value reaches sendStick")
+          "psp: analog value reaches sendStick")
     mgr._testInjectStick(x: 0, y: 0)
+    reset()
+    mgr._testInjectDpad(RetroPad.up, down: true)
+    check(events.contains { $0 == (0, RetroPad.up, true) },
+          "psp: the d-pad still presses directions")
+    mgr._testInjectDpad(RetroPad.up, down: false)
 
-    // 5. Mode transition mid-hold releases the stick's claims.
-    mgr.activePlatform = "arcade"
+    // 6. A mode change mid-hold releases the stick's claims.
+    mgr.activePlatform = "gba"
     reset()
     mgr._testInjectStick(x: 1.0, y: 0)
-    check(events.contains { $0 == (0, RetroPad.right, true) }, "transition: held on arcade")
+    check(events.contains { $0 == (0, RetroPad.right, true) }, "transition: held on gba")
     reset()
-    mgr.activePlatform = "n64"
+    mgr.activePlatform = "psp"
     check(events.contains { $0 == (0, RetroPad.right, false) },
-          "transition: switching to an analog platform releases the held direction")
+          "transition: switching to psp releases the held direction")
+    mgr._testInjectStick(x: 0, y: 0)
     mgr.activePlatform = nil
 
-    // 6. Second stick ids are their own space.
-    mgr.activePlatform = "arcade"
-    reset()
-    mgr._testInjectStick2(x: 1.0, y: 0)
-    check(events.contains { $0 == (0, 20, true) }, "stick2: right presses id 20")
-    mgr._testInjectStick2(x: 0, y: 0)
-    check(events.contains { $0 == (0, 20, false) }, "stick2: release")
-
     // 7. Players are independent.
+    mgr.activePlatform = "gba"
     reset()
     mgr._testInjectStick(x: 1.0, y: 0, player: 1)
     check(events.contains { $0 == (1, RetroPad.right, true) }, "p2: stick right presses")
@@ -113,80 +122,51 @@ func runTests() -> Int {
     mgr._testInjectStick(x: 0, y: 0, player: 1)
     check(events.contains { $0 == (1, RetroPad.right, false) }, "p2: release")
 
-    // 8. Platform profile isolation: only n64 and dreamcast differ, and
-    // only in the declared ways.
-    let d = ControllerBindings.defaults
-    for p in ["arcade", "snes", "nes", "gb", "gba", "genesis", "saturn", "psx",
-              "pce", "ngp", "atari7800", "32x", "unknownfuture"] {
+    // 8. One fixed map, by position: the bottom face button is the
+    // RetroPad's B whatever it is labelled, as on CabinetOS.
+    let map = ControllerBindings.handheld
+    check(map[GCInputButtonA] == RetroPad.b && map[GCInputButtonB] == RetroPad.a
+          && map[GCInputButtonX] == RetroPad.y && map[GCInputButtonY] == RetroPad.x,
+          "map: faces by position (bottom B, right A, left Y, top X)")
+    check(map[GCInputLeftShoulder] == RetroPad.l && map[GCInputRightShoulder] == RetroPad.r,
+          "map: bumpers are L and R")
+    check(map[GCInputLeftTrigger] == RetroPad.l2 && map[GCInputRightTrigger] == RetroPad.r2,
+          "map: triggers are L2 and R2")
+    check(map[GCInputButtonMenu] == RetroPad.start && map[GCInputButtonOptions] == RetroPad.select,
+          "map: Menu is Start, Options is Select")
+    check(map[GCInputButtonHome] == RetroPad.overlay, "map: Home opens the pause menu")
+    check(map[MenuHotkey.buttonA] == nil && map[MenuHotkey.buttonB] == nil,
+          "map: the stick clicks carry no game input, only the menu hotkey")
+
+    // 9. Every platform gets the same map; only PSP stops digitizing.
+    for p in ["gb", "gbc", "gba", "gameGear", "ngpc", "nds", "gameAndWatch", "unknownfuture"] {
         let prof = ControllerBindings.profile(for: p)
-        check(prof.base == d && prof.digitizesLeftStick,
-              "profile[\(p)]: identical to defaults, digitizing on")
+        check(prof.base == map && prof.digitizesLeftStick,
+              "profile[\(p)]: the fixed map, digitizing on")
     }
-    check(ControllerBindings.profile(for: nil).base == d
+    check(ControllerBindings.profile(for: nil).base == map
           && ControllerBindings.profile(for: nil).digitizesLeftStick,
-          "profile[nil shell/webview]: defaults, digitizing on")
-    let dc = ControllerBindings.profile(for: "dreamcast")
-    check(dc.base == d && !dc.digitizesLeftStick,
-          "profile[dreamcast]: defaults base, digitizing off")
-    let n = ControllerBindings.profile(for: "n64")
-    check(!n.digitizesLeftStick, "profile[n64]: digitizing off")
-    check(n.base[GCInputButtonA] == RetroPad.b && n.base[GCInputButtonX] == RetroPad.y
-          && n.base[GCInputButtonB] == RetroPad.a && n.base[GCInputButtonY] == RetroPad.x,
-          "profile[n64]: faces follow the established Xbox layout (A, B-on-X, C on B/Y)")
-    check(n.base[GCInputLeftTrigger] == RetroPad.l2
-          && n.base[GCInputLeftShoulder] == RetroPad.select
-          && n.base[GCInputRightShoulder] == RetroPad.r2
-          && n.base[GCInputRightTrigger] == RetroPad.r2,
-          "profile[n64]: Z on LT, N64 L/R on the bumpers via the alt-map ids")
-    let n64Touched = [GCInputButtonA, GCInputButtonB, GCInputButtonX, GCInputButtonY,
-                      GCInputLeftTrigger, GCInputLeftShoulder,
-                      GCInputRightShoulder, GCInputRightTrigger]
-    check(n.base.filter { !n64Touched.contains($0.key) }
-          == d.filter { !n64Touched.contains($0.key) },
-          "profile[n64]: everything outside the row's own edits matches defaults")
+          "profile[nil, the shell]: the fixed map, digitizing on")
+    let psp = ControllerBindings.profile(for: "psp")
+    check(psp.base == map && !psp.digitizesLeftStick,
+          "profile[psp]: the fixed map, digitizing off")
 
-    // 9. Saved remaps are edits against defaults, applied over the
-    // platform base (review finding 2026-08-20: wholesale replacement
-    // silently reverted the N64 map for anyone who ever remapped).
-    let testPad = "harness-test-pad"
-    var edited = ControllerBindings.defaults
-    edited[GCInputLeftShoulder] = RetroPad.start       // a deliberate oddball,
-                                                       // distinct from BOTH the
-                                                       // default (l2) and the
-                                                       // n64 row (select), so
-                                                       // precedence is proven
-    edited.removeValue(forKey: GCInputButtonOptions)   // cleared a binding
-    ControllerBindings.save(edited, for: testPad)
-    let onDefaults = ControllerBindings.effective(for: testPad)
-    check(onDefaults[GCInputLeftShoulder] == RetroPad.start
-          && onDefaults[GCInputButtonOptions] == nil,
-          "remap: edit and clear both stick on default-base platforms")
-    check(onDefaults == edited,
-          "remap: default-base result reproduces old wholesale behaviour")
-    let onN64 = ControllerBindings.effective(for: testPad, platform: "n64")
-    check(onN64[GCInputButtonX] == RetroPad.y,
-          "remap: untouched faces still get the standard N64 layout")
-    check(onN64[GCInputLeftShoulder] == RetroPad.start
-          && onN64[GCInputButtonOptions] == nil,
-          "remap: the player's edit and clear outrank the N64 row")
-    var faceEdit = ControllerBindings.defaults
-    faceEdit[GCInputButtonB] = RetroPad.l2              // deliberate face change
-    ControllerBindings.save(faceEdit, for: testPad)
-    check(ControllerBindings.effective(for: testPad, platform: "n64")[GCInputButtonB]
-          == RetroPad.l2,
-          "remap: a deliberate face-button edit outranks the N64 base")
-    ControllerBindings.reset(for: testPad)
+    // 10. No pad model gets a map of its own: nothing is remappable.
+    check(ControllerBindings.effective(for: "Xbox Wireless Controller") == map
+          && ControllerBindings.effective(for: "DualSense Wireless Controller", platform: "psp") == map
+          && ControllerBindings.effective(for: "unknown", platform: "nds") == map,
+          "effective: every pad and platform resolves to the fixed map")
 
-    // 10. A platform change releases anything held, so no press can
-    // straddle a rebind and orphan its release under a different map.
-    mgr.activePlatform = "arcade"
+    // 11. A platform change releases anything held, so no press can
+    // straddle a game change and orphan its release.
+    mgr.activePlatform = "gba"
     reset()
     mgr._testInjectDpad(RetroPad.up, down: true)
-    check(events.contains { $0 == (0, RetroPad.up, true) }, "rebind: held before switch")
+    check(events.contains { $0 == (0, RetroPad.up, true) }, "switch: held before the change")
     reset()
-    mgr.activePlatform = "n64"
+    mgr.activePlatform = "nds"
     check(events.contains { $0 == (0, RetroPad.up, false) },
-          "rebind: platform change releases held inputs")
+          "switch: platform change releases held inputs")
     mgr.activePlatform = nil
 
     print(failures == 0 ? "ALL GREEN" : "\(failures) FAILURES")
