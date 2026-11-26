@@ -1,128 +1,35 @@
 # Roadmap
 
-Where Cabinet is headed. This is not a changelog, see
-[Releases](https://github.com/MMagTech/cabinet/releases) for what has
-already shipped. Nothing here is a promise or a deadline, this is a
-weekend project worked on as time allows, but it is the real direction,
-not a wishlist that gets ignored.
+Where Cabinet Go is headed. Nothing here is a promise or a deadline, this
+is a project worked on as time allows, but it is the real direction, not a
+wishlist that gets ignored. The plan behind it, and why the app plays the
+systems it does, is [docs/scope-handheld.md](docs/scope-handheld.md).
 
 If something here interests you, or you want to pick one up, open an
 issue or a discussion first so the approach can be talked through before
 any code gets written.
 
+## Next
+
+- **Dreamcast VMU minigames back in the library.** The VMU player is built,
+  but with the library showing only handheld systems there is no way to
+  reach a Dreamcast game's launch screen and its VMU row. The plan is a
+  Dreamcast entry listing only the games whose memory card holds a
+  minigame, labelled as the VMU.
+- **A clean first launch for phones that played the old systems.** Saves a
+  phone still owes RomM for a system that left get sent first; only then
+  are that system's kept games and local files removed.
+- **Saves through RomM's save channels**, moving in step with CabinetOS so
+  saves keep crossing between the two.
+
 ## Being explored
 
-Not committed, not scoped, real conversations that happened and are
-worth having in the open.
-
-- **More systems, running natively.** Cabinet compiles twenty-three
-  emulators into the app, and each new one is a core to build plus a
-  control layout to draw. Everything originally listed here is done:
-  Atari 2600, Vectrex, 3DO, Virtual Boy, Nintendo DS and Game & Watch,
-  plus PSP, which this file previously listed as impossible.
-
-  What is left, and the honest state of each:
-
-  | System | Core | Notes |
-  |---|---|---|
-  | ColecoVision | Gearcoleco | Ready to go, but needs its BIOS on your server first |
-  | Intellivision | FreeIntv | Its disc controller and keypad are the hard part |
-  | Magnavox Odyssey<sup>2</sup> | O2EM | Keyboard-adjacent controls |
-  | Philips CD-i | SAME_CDI | Experimental upstream, lowest priority |
-
-  Beyond those the runway is genuinely short, and shorter than it looks,
-  because PSP was on the wrong side of this list until it shipped.
-  PlayStation 2, GameCube, Wii, 3DS, Switch and Vita all need runtime
-  code generation Apple does not permit, or hardware beyond what an
-  interpreter can carry. PSP turned out not to: PPSSPP's own interpreter
-  is fast enough without it, which is upstream's claim and now Cabinet's
-  measurement too. That is worth remembering before writing anything
-  else off.
-
-- **Download a whole platform on the Mac.** A phone keeps a handful of
-  games; a desk machine has the disk for all of them. The idea is a
-  single action on a platform, "Download All", that keeps every game
-  the Mac can play from that system, the way Music downloads an album
-  rather than a song at a time. It would say the count and the total
-  size before it starts, queue the files one after another rather than
-  all at once, and stay cancellable. It would take every game Cabinet
-  can keep, playable here or not: an unsupported platform's files are
-  still worth having for another emulator, which is already how a
-  single download works. Built for the Mac the same day it was noted,
-  2026-09-02, and for the phone the day after: there the files come
-  down through the system's own background downloader, over Wi-Fi
-  only, so a platform started at the table finishes with the phone
-  locked in a pocket, and a queue the system quit the app in the middle
-  of carries on at the next launch. Both waiting on a release.
-- **Play Together, two screens.** Two or more devices each running the
-  same game, with only the button presses crossing the house Wi-Fi,
-  so each person plays on their own screen: two phones with no
-  television, two rooms, a friend on a hotspot. A maybe, deliberately.
-  Two people on one screen already works, a TV or a Mac running the
-  game with phones as the controllers, and that covers most game
-  nights; this adds the two-screen case at the cost of the largest
-  piece of work on this list and a mechanism that stays delicate after
-  it ships, since a dropped packet pauses everyone and only the cores
-  that compute identically on two machines can take part. The design
-  is settled if the need arrives: seats rather than two players, the
-  existing pairing wire as the transport, lockstep with a short input
-  delay, and a "syncing players" beat when two machines fall out of
-  step. Decided 2026-09-04 not to build ahead of a real need.
-- **Picture tiers per machine.** The picture settings that hold sixty
-  frames on the fastest Mac here were tuned there, and a slower machine
-  drops frames on the same settings. The idea is three named bundles of
-  settings, Performance, Balanced and Quality, and a way for each machine
-  to land on its own: measured once in the lab for machines in the room,
-  and for any other machine a half minute of watching its own frame
-  times the first time a heavy core runs, stepping down or up and
-  remembering the answer for that chip. A chip nobody has met yet, next
-  year's, would simply stay at Quality unless it had to step down.
-  Explored 2026-09-03 and deliberately not built: it would sit in the
-  launch path every core shares, and there is no machine here that is
-  either too slow at the defaults or wasting headroom to test it
-  against. It gets built when one exists.
+- **Lynx and WonderSwan.** Both pass the handheld test. Each needs a native
+  core, and under the rule that CabinetOS is the reference for every shared
+  system, they would land on CabinetOS first.
 - **A native touch control restyle.** The current on-screen controls are
-  functional but read a little flat next to the rest of the app. A
-  restyle direction has been discussed, not built.
-- **Light appearance on the screens that carry ambient art.** Cabinet TV
-  and Cabinet for Mac both draw a single backdrop behind everything, the
-  cover of whatever you played last, blurred past recognition and
-  darkened so text and glass always have a floor. That canvas stays dark
-  no matter what the system appearance is set to, so switching macOS or
-  tvOS to Light turns the chrome dark against a dark background and the
-  text becomes hard to read. The Mac already avoids this by pinning
-  itself to dark; the Apple TV does not, and follows the system today,
-  which is where the problem is visible. There are two honest ways out
-  and they lead to different apps. One is to commit to dark on both, the
-  position the Apple TV app and Music's Now Playing already take, and
-  accept that Cabinet ignores a system preference on purpose. The other
-  is to give the backdrop a real light treatment, a bright washed
-  version of the art rather than a darkened one, so both platforms can
-  honour the setting. The first is a line of code and a decision, the
-  second is a design piece that has to look right on a television and on
-  a desk. Undecided. iPhone is not affected either way: its ambient
-  backdrop is deliberately confined to the game launch screen, and the
-  rest of its shell is ordinary iOS chrome that already follows the
-  system.
-- **A real loading screen on tvOS for large downloads.** Right now the
-  Play button's own label just turns into a percentage while a native
-  game downloads, on a short game that can flash by in under a second.
-  The idea is a proper full-screen moment for genuinely large
-  downloads, small ones would keep today's quick inline behavior. Not
-  settled whether to build it at all, let alone how.
-- **Multi-disc games.** Waiting on a real one. It would need `.m3u`-style
-  disc swapping in the player, which the libretro cores already
-  understand, and any disc system could meet it, PlayStation and Saturn
-  most often. As of 2026-09-03 the library it is built against has no
-  multi-disc game on any platform, so there is nothing to build it
-  against or test it with. It gets built when one arrives, not before.
-- **Settings syncing across your devices via iCloud.** No confirmed real
-  need yet, just an idea that comes up alongside the pairing work above.
-- **Light guns on the console systems.** The gun works on the arcade
-  cabinets, and the aim it uses lives entirely in the phone and knows
-  nothing about which core is running, so the console systems inherit it
-  for free. What is missing is games to point it at. Research on which
-  cores take a gun and on which port is already done.
+  functional but read a little flat next to the rest of the app. A restyle
+  direction has been discussed, not built.
 
 ## Known rough edges
 
@@ -130,22 +37,14 @@ Things that work but waste effort, with a known fix rather than an open
 question.
 
 - **The BIOS gets downloaded more often than it needs to be.** A
-  platform's firmware comes down once per game on Apple TV, and on
-  iPhone once per launch for any game you have not kept. Kept games
-  already do the right thing: firmware is shelved in one folder per
-  platform and nothing is downloaded at launch. The fix is to point the
-  other two paths at that same shelf, so the pattern already exists in
-  the code. Nothing is broken, and a BIOS is small next to a CD game,
-  but across a full arcade library it adds up to a few hundred megabytes
-  of redundant downloads and duplicated cache. A second, smaller part of
-  the same fix is only downloading firmware the platform's core actually
-  uses, rather than everything the server lists for it.
+  platform's firmware comes down once per launch for any game you have not
+  kept. Kept games already do the right thing: firmware is shelved in one
+  folder per platform and nothing is downloaded at launch. The fix is to
+  point the other path at that same shelf, so the pattern already exists
+  in the code. A second, smaller part of the same fix is only downloading
+  firmware the platform's core actually uses, rather than everything the
+  server lists for it.
 
 A few ideas got explored just as seriously and reached a real answer
 instead of an open question. Those live in
-[docs/settled.md](docs/settled.md) rather than here: a native macOS build,
-uploading a ROM from Cabinet, Atari Jaguar as a native core, and skipping
-setup on a new device via iCloud.
-
-What Cabinet doesn't do today, rather than what it might do next, is in the
-[README](README.md#what-doesnt-work-yet) instead of here.
+[docs/settled.md](docs/settled.md) rather than here.

@@ -54,7 +54,6 @@ reached 405 to 422 million iterations per second against 433 to 508 for the
 same loop in native Swift, a ratio of 0.83 to 0.95 across four runs, with
 checksums matching. Interpreted execution would be roughly an order of
 magnitude below native, so WASM is being jitted and this decision holds.
-Reproduce with `spikes/JITProbe`.
 
 ---
 

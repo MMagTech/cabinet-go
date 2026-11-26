@@ -26,7 +26,6 @@ Areas of particular interest:
 - Handling of device authorization tokens and Keychain storage
 - Anything that could expose a server URL, token, or credentials in logs,
   crash reports, or URL parameters
-- Webview configuration that could allow untrusted content to reach native code
 
 ## Supported versions
 

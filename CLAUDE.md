@@ -1,12 +1,14 @@
 # Working notes for Claude
 
-This file describes Cabinet: its architecture, its conventions, its history,
+This file describes Cabinet Go: its architecture, its conventions, its history,
 and the technical findings that cost real time to learn. Anything a
 contributor who has never met the author could not act on, or that would be
 just as true on a different project, does not belong here.
 
-Read `docs/scope-v0.1.md` before doing anything substantial. It carries the full
-design and the reasoning behind it, and most decisions in it are already settled.
+Read `docs/scope-handheld.md` before doing anything substantial. It is the
+current plan: Cabinet Go is the handheld half of CabinetOS, and it records
+which systems the app plays and why. `docs/scope-v0.1.md` carries the
+original design and the reasoning behind the decisions that still stand.
 
 ## Writing conventions
 
@@ -17,62 +19,25 @@ design and the reasoning behind it, and most decisions in it are already settled
 
 ## Git conventions
 
-- Work on `dev`. Both platforms live there, iOS and tvOS. `main` is the release
-  branch and carries the full history. The old separate `tvos` branch is
-  retired, merged into `main` on 2026-08-12. Do not recreate it.
+- Work on `dev`. `main` is the release branch and carries the full history.
 - `main` normally only moves when a release is cut. The one exception is a
   commit that touches no app code at all, README, ROADMAP, `docs/`, since
   `main` is what a visitor to the repo actually lands on and those files
   reflect the project regardless of what has or hasn't shipped yet. A
   docs-only commit can go straight to both branches. Anything that touches
   code, even a one-line fix, waits for a real release cut.
-- Releases are per platform, tagged independently on `main`: `ios-v1.x.x`,
-  `tvos-v1.x.x` and `mac-v1.x.x`, titled "Cabinet for iOS 1.x.x", "Cabinet
-  for tvOS 1.x.x" and "Cabinet for Mac 1.x.x". The three platforms do not
-  have to release together or share version numbers. Tags before 1.0.0
-  carried an `-alpha` suffix, and the two oldest iOS tags (`v0.1.0-alpha`
-  and `v0.2.0-alpha`) predate even that convention; all keep their names.
+- Releases are tagged on `main` as `ios-v<version>`. The tags of the old
+  Cabinet apps (`tvos-v...`, `mac-v...`, and the two oldest iOS tags,
+  `v0.1.0-alpha` and `v0.2.0-alpha`) keep their names.
 - To cut a release, in order: first set the target's `MARKETING_VERSION` in
   the project to match the tag being cut, and bump `CURRENT_PROJECT_VERSION`
   if the build will also go to TestFlight (Apple requires a unique build
   number per upload). Verify the project version matches the tag before
   tagging; the iOS 0.2.0-alpha release shipped reporting "0.1" because this
-  step was skipped. Then archive the scheme (`RommApp` for iOS, `RommAppTV`
-  for tvOS) with `xcodebuild archive` and `CODE_SIGNING_ALLOWED=NO`, copy
-  the built `.app` into a `Payload/` folder and zip it as an unsigned
-  `.ipa`, then `gh release create` with the tag and `gh release upload` the
-  IPA. Last, update the three release links at the top of `README.md` to
-  the tags just cut. They have the version typed into them, so they point
-  at the previous release until edited by hand. Doing it as part of the
-  cut is the only thing that keeps them honest; GitHub's `/releases/latest`
-  cannot replace them, since it resolves to the newest release across all
-  platforms and would send a Mac visitor to an iOS build.
-- The Mac release is a signed, notarized disk image, since macOS refuses
-  an unsigned app outright. Archive the `RommAppMac` scheme for
-  `generic/platform=macOS,variant=Mac Catalyst` (the target is Apple
-  silicon only; every core library is arm64). Do not use
-  `xcodebuild -exportArchive` for the Developer ID step: with an API key
-  it fails with "Cloud signing permission error", and with a manually
-  created profile it still reports "No profiles were found" for reasons
-  it never explains (2026-09-04, an hour lost). Sign the archived app
-  directly instead: copy `Products/Applications/Cabinet Mac.app` out of
-  the archive, put the Developer ID profile at
-  `Contents/embedded.provisionprofile`, `codesign --force --options
-  runtime --timestamp --sign "Developer ID Application: …"` each
-  framework under `Contents/Frameworks`, then the app itself with an
-  entitlements plist carrying `com.apple.application-identifier`,
-  `com.apple.developer.team-identifier`, `com.apple.security.cs.allow-jit`
-  and `keychain-access-groups` (no `get-task-allow`). Then
-  `xcrun notarytool submit --wait` with the API key, `xcrun stapler
-  staple`, `hdiutil create` into `Cabinet-mac-<version>.dmg`, notarize
-  and staple the image too, and `spctl --assess --type execute` should
-  say "Notarized Developer ID". The profile is created through the App
-  Store Connect API (`POST /v1/profiles`, type `MAC_CATALYST_APP_DIRECT`,
-  the `DEVELOPER_ID_APPLICATION_G2` certificate) and installed under
-  `~/Library/MobileDevice/Provisioning Profiles/<uuid>.provisionprofile`.
-  A release bundle identifier has to exist in the portal before any of
-  this, with its App Group attached by hand on developer.apple.com, since
-  the API can enable App Groups but cannot assign one.
+  step was skipped. Then archive the `RommApp` scheme with
+  `xcodebuild archive` and `CODE_SIGNING_ALLOWED=NO`, copy the built `.app`
+  into a `Payload/` folder and zip it as an unsigned `.ipa`, then
+  `gh release create` with the tag and `gh release upload` the IPA.
 - The old squash-merge-only rule is retired. Decided 2026-08-09, at launch: the
   history is public and complete on purpose, including the messy parts. Do not
   squash it away or propose hiding branches.
@@ -89,17 +54,17 @@ design and the reasoning behind it, and most decisions in it are already settled
 
 ## Project shape
 
-Native SwiftUI shell, with two ways to run a game: twenty-three libretro cores
-compiled into the app, and a `WKWebView` player running RomM's EmulatorJS page
-for everything else.
+Native SwiftUI shell running the handheld systems through eight libretro
+cores compiled into the app: Gambatte, mGBA, melonDS, PPSSPP, Genesis Plus
+GX, Beetle NeoPop, gw-libretro, and VeMUlator for the Dreamcast VMU
+minigames.
 
-The JIT boundary decides which is which. WKWebView's WebContent process carries
-the dynamic code signing entitlement so WASM cores get a real JIT, while cores
-compiled into the app process are interpreter only. Systems whose cores need a
-dynamic recompiler to hit full speed, N64 and anything heavier, stay on the
-webview. Systems an interpreter can carry run natively, which buys real
-fullscreen, native input and offline play. That split is settled; do not
-propose moving a dynarec-dependent system into the app process.
+The JIT boundary is why. Cores compiled into the app process are interpreter
+only, since Apple allows no JIT there. Every handheld system an interpreter
+can carry runs natively, which buys real fullscreen, native input and
+offline play; systems that need a dynamic recompiler belong to CabinetOS.
+That split is settled; do not propose moving a dynarec-dependent system into
+the app process.
 
 Home is resume first, not a library grid. One tap back into the last game.
 
@@ -107,52 +72,22 @@ iOS's one ambient, content-derived background lives on the game launch
 screen, the game's own cover blurred behind it, the same contained way
 Music treats Now Playing. Do not spread that into iOS's app-shell chrome,
 lists, tab bar, settings; that reads as skinning rather than the
-platform's own idiom, and tvOS already owns the always-ambient shell
-version of this idea. Decided deliberately, not a gap to fill in later.
+platform's own idiom. Decided deliberately, not a gap to fill in later.
 
-## Platform boundaries
+## Persisted data
 
-- tvOS code lives in `RommApp/RommAppTV/`. iOS and shared code live in
-  `RommApp/RommApp/`. During tvOS work, do not edit iOS or shared files
-  without calling it out explicitly first. The reverse applies to iOS work.
-- When tvOS needs logic that lives in an iOS-only file, extract it to a
-  shared file both targets compile. Never copy-paste it into the tvOS target.
-  That direction, iOS holding the shared logic tvOS reaches into, is about
-  implementation history, iOS existed as a full app first. It is not a
-  design rule; see below for that.
-- iOS and tvOS do not have feature parity. Do not assume a feature exists on
-  one platform because it exists on the other. Check the file's own doc
-  comments first.
-- iOS and tvOS should not drift into looking or feeling like separate
-  products. Feature parity is not required and screens routinely diverge
-  for real platform reasons, tvOS has no touch controls, iOS has no
-  controller-driven focus navigation. The two apps' visual and experiential
-  identity, materials, color, ambient treatment, the sense of being one app
-  on two platforms, is meant to stay recognizable over time. A UI or UX
-  idea on either platform can inspire a version of it on the other, in that
-  platform's own idiom; this is not a requirement to mirror every change,
-  just an awareness to keep the two from quietly drifting apart. When a
-  change on either platform genuinely risks that, raise it explicitly.
-  The choice may need to be actually defended, not just explained and
-  accepted at face value, rather than deciding quietly either way.
-- Any change to a persisted local data format needs a non-destructive
-  migration path decided at the same time, not discovered as data loss later.
-- A native core that works on iOS is assumed to belong on tvOS too, by
-  default. tvOS not getting one needs a real reason, a spike test or an
-  actual finding, not silence. This is a fixed direction on purpose,
-  unlike the UI/UX rule above; cores start on iOS and tvOS inherits.
-  Details, and where to record an exception or platform-specific tuning,
-  live in `docs/building.md`.
+Any change to a persisted local data format needs a non-destructive
+migration path decided at the same time, not discovered as data loss later.
 
 ## Blast radius: say it out loud before touching shared code
 
-Fourteen cores and two platforms run through a handful of shared files.
-`LibretroFrontend`, `NativePlayerRenderer`, `NativePlayerAudio`,
-`GameControllerManager` and the control layouts are the main ones. A fix
-aimed at one core lands on all of them unless it is deliberately scoped.
+Eight cores run through a handful of shared files. `LibretroFrontend`,
+`NativePlayerRenderer`, `NativePlayerAudio`, `GameControllerManager` and the
+control layouts are the main ones. A fix aimed at one core lands on all of
+them unless it is deliberately scoped.
 
-- **State the two lists before building.** Which cores and platforms
-  actually execute the lines being changed, and which ones the change is
+- **State the two lists before building.** Which cores actually execute
+  the lines being changed, and which ones the change is
   meant to help. If those lists differ, say so explicitly, in those
   words, and get agreement before writing code. Do not decide alone that
   the difference is harmless.
@@ -166,10 +101,11 @@ aimed at one core lands on all of them unless it is deliberately scoped.
 - **Test the blast radius, not the target.** Before calling it done, run
   a game on at least one core per affected class, not only the core that
   motivated the work. For the render path that means one core per pixel
-  format plus both hardware-rendered cores.
+  format plus the hardware-rendered core, PPSSPP.
 
 Two regressions on 2026-08-16 are why this section exists, both from
-Dreamcast fixes placed in shared code, and both found on real hardware
+Dreamcast fixes placed in shared code back when the app still carried the
+console cores, and both found on real hardware
 after the work was called done: an audio governor built for
 Flycast's free-running emulation thread went into the shared draw loop
 and slowed N64 down, and a teardown condition widened for Flycast went
@@ -183,26 +119,16 @@ looked harmless. Neither was.
   cookie sharing, not a pasted token.
 - Save states are slot based because that is what RomM's asset model stores.
 - Control layouts are data, not code. One file per system or profile, trait keyed.
-- Arcade control profiles resolve through a chain, not a lookup. See the doc.
 - Touch input copies DeltaCore's approach: extended hit frames, overlapping d-pad
   rects, continuous d-pad reporting. Read their approach, do not copy their code.
   Delta is AGPLv3 and this project is MIT.
-- Physical controllers are captured natively with `GameController`, not the
-  webview's Gamepad API.
-- FBNeo must never be answered on the left analog axis. Its own input code
-  has a fake-analog fallback that reads that axis even for digital joystick
-  games and ORs it into the digital directions, and the physical-controller
-  path's y sign is opposite libretro's convention there, so feeding it makes
-  a Bluetooth pad register up and down in the same frame (issue #3, fixed
-  2026-08-15 in `LibretroFrontend.mm`'s `inputState`). Arcade sticks are
-  fully covered by the digital bits. Do not "clean up" that gate, and do not
-  add a new path that writes the analog-left values while FBNeo is running.
+- Physical controllers are captured natively with `GameController`.
 - Any change touching controller input (GameControllerManager, inputState,
   the send/sendStick wiring) must be verified on a real device with a real
-  Bluetooth pad on a twin-stick arcade game (Smash TV) before it is called
-  done. A commit once claimed exactly this verification while introducing
-  exactly this bug; the touch overlay and the menus exercising fine proves
-  nothing about the pad path.
+  Bluetooth pad on a PSP game that uses the analog nub, the only analog
+  stick left, before it is called done. A commit once claimed exactly
+  this verification while introducing exactly this bug; the touch overlay
+  and the menus exercising fine proves nothing about the pad path.
 
 ## Things marked verify
 
@@ -226,7 +152,6 @@ did not change something Cabinet depends on.
 - Generate the API client from `openapi.json`. That is exactly why the existing
   third party iOS client breaks across RomM versions. Hand written calls, not
   generated.
-- Commit `tools/*.xml` or `tools/profiles.json`. Derived data, regenerate it.
 
 ## Kept games and the Files mirror
 
@@ -243,75 +168,24 @@ thread, and hands the main actor only its decisions; Remove All walks
 once for the platform. Keep it that way, and time any new launch work
 against a library of hundreds, not the simulator's handful.
 
-## Mac Catalyst conventions
-
-Read Apple's documentation for the exact class or modifier before
-changing Catalyst UI, and say what it says. Catalyst behaviour is rarely
-guessable from the running app: the window's title bar, its toolbar and
-its safe area are owned by AppKit and rebuilt by Catalyst on every
-window shape change, so probing shows what happens without ever
-revealing the property that governs it. Two examples that cost a night
-between them: the title bar strip over a full screen game is solved by
-`UITitlebar.autoHidesToolbarInFullScreen`, and removing the title bar
-belongs in the scene delegate rather than a view's `onAppear`.
+## SwiftUI and Metal
 
 A CAMetalLayer that is a UIView's backing layer is not opaque, and
 `UIView.isOpaque` does not make it so: that property is a `draw(_:)`
 hint and never reaches the layer, whose own default is false. A
 non-opaque layer is composited with the drawable's alpha channel, so
 an emulator that writes the game's framebuffer alpha into its
-drawable (PCSX2's merge pass does) shows a pixel-perfect frame as a
-black screen. Set `layer.isOpaque = true` on any Metal surface a core
-presents into. Found 2026-09-01 by reading the presented drawable
-back; AppKit's layer in upstream PCSX2 reads opaque already.
-
-Game controllers on the Mac are polled once per frame, not driven by
-callbacks. Apple's Game Controller guide says a game with its own loop
-should poll with `capture()`; the callbacks run on the main queue,
-which is the queue the frame loop already occupies, and a Bluetooth
-pad stopped responding mid-action with the game running on. iOS and
-tvOS keep the callbacks. Also documented: on macOS 11.3 and later pad
-input is not forwarded to an app that is not frontmost.
-
-Never poll the window's title bar. `MacWindow` once re-applied its
-chromeless title bar on a half-second timer, and merely reading the
-title bar's properties on each tick re-presented any open context
-menu on top of itself: a second, larger menu settling over the first,
-which with a one-item menu looked like a glass panel around it. A
-timer that fired and did nothing was clean; one that only read was
-not. The chrome is now re-applied on the shell window's own shape
-events (resize, full screen in and out, screen change) with a short
-burst after each, never on key-window changes, since a menu is a
-window that becomes key as it opens. Found 2026-09-02 frame by frame
-with region screen captures; window-id captures leave the menu's own
-window out and hid it for an evening.
-
-Apple's documentation pages are JavaScript rendered and fetch as an
-empty shell. The content is served as JSON at
-`https://developer.apple.com/tutorials/data/documentation/<path>.json`;
-`primaryContentSections` carries the prose and code, `topicSections`
-lists every property on a class.
+drawable shows a pixel-perfect frame as a black screen. Set
+`layer.isOpaque = true` on any Metal surface a core presents into.
+Found 2026-09-01 by reading the presented drawable back.
 
 Never publish state that re-renders the view currently presenting
 something. It tears the presentation down: a shared flag flipped from a
 launch screen's `onAppear`, observed by the shell, made that screen open
 and immediately close.
 
-## tvOS conventions
-
-This applies to tvOS work only; none of it changes anything about iOS.
-
-- Never give a focusable `Button` on tvOS `.buttonStyle(.plain)` or
-  `.buttonStyle(.card)`, even for a row that looks unstyled without one.
-  Both paint a real system focus effect (`.plain` included, not just `.card`)
-  that overrides or sits on top of any custom `.background` the row already
-  has, and neither reserves headroom for its own focus-scale growth, so a
-  focused row can grow into its neighbour. Use one of this project's own
-  `ButtonStyle`s from `TVCoverFocus.swift` (`CoverFocusStyle` for cover art,
-  `TextFocusStyle` for a short text link or pill, `RowFocusStyle` for a
-  full-width settings-style row) or a new one built the same way, never a
-  bare system style.
-- Never use `.navigationTitle` on tvOS. It paints over content instead of
-  reserving space above it. Put the title as a plain `Text` inside the
-  screen's own scroll content instead, the pattern every existing tvOS
-  screen already uses.
+Apple's documentation pages are JavaScript rendered and fetch as an
+empty shell. The content is served as JSON at
+`https://developer.apple.com/tutorials/data/documentation/<path>.json`;
+`primaryContentSections` carries the prose and code, `topicSections`
+lists every property on a class.

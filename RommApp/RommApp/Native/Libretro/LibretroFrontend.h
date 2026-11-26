@@ -82,8 +82,8 @@ typedef NS_ENUM(NSInteger, LibretroCoreID) {
 
 // The shared libretro frontend: video, audio, input, and state plumbing
 // that every core needs, driven through a LibretroCoreAPI struct so cores
-// wire in as data. Grown out of the FBNeo spike's one-file bridge exactly
-// when the second core arrived, as docs/scope-native-saturn.md planned.
+// wire in as data. Grown out of the first core's one-file bridge exactly
+// when the second core arrived.
 @interface LibretroFrontend : NSObject
 
 @property (class, readonly) LibretroFrontend *shared;

@@ -573,7 +573,7 @@ enum NativeLauncher {
         #if targetEnvironment(macCatalyst)
         throw LaunchError.unsupportedFormat("This game's core isn't in the Mac build yet.")
         #else
-        throw LaunchError.unsupportedFormat("Games can't run in the Simulator. Use a real Apple TV.")
+        throw LaunchError.unsupportedFormat("Games can't run in the Simulator. Use a real iPhone.")
         #endif
         #else
         guard let coreID = core.coreID else { throw LaunchError.noNativeCore }

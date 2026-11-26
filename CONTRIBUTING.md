@@ -11,11 +11,6 @@ everyone time.
 **Work on `dev`.** Pull requests target `dev`, not `main`. `main` is the
 release branch.
 
-**Respect the platform boundary.** tvOS code is in `RommApp/RommAppTV/`,
-iOS and shared code in `RommApp/RommApp/`. If your tvOS change touches a
-shared or iOS file, say so in the PR description and explain why. Same in
-reverse.
-
 **Keep PRs small and focused.** One fix or feature per PR. Working software
 over speculative design.
 

@@ -121,7 +121,7 @@ device)
     ;;
 stations)
     cat <<'LIST'
-wiring    asserts   core ids, symbol collisions, both platforms built, layouts present
+wiring    asserts   core ids, symbol collisions, layouts present
 controls  asserts   the real controller state machines, headless in the simulator
 bench     measures  any core headless: frame time, audio rate, geometry, hashes
 core      reports   bring-up status for one core, as a checklist

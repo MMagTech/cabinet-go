@@ -1,6 +1,10 @@
 # Cabinet the handheld, scope
 
-Status: decided 2026-10-15, not built. This document is the plan for
+Status: decided 2026-10-15, built in part. Steps 1 and 2 of the order
+of work below are done, the gate in part (the allowlist, the platform
+name fix, the fixed controller map and the PSP save layout), and step 4
+in part (the webview, arcade's data and the console cores themselves;
+their code paths inside the shared files remain). This document is the plan for
 Cabinet 2.0 and the removals around it. Where it disagrees with an older
 scope doc or with CLAUDE.md, this document is the newer decision, and
 those files are rewritten to match in the last phase below.
@@ -281,8 +285,11 @@ connection.
 ## Order of work
 
 Each step builds, gets played on a phone, and is its own commit or
-small set of commits. Nothing is deleted until the gate has shipped and
-been lived with.
+small set of commits. The plan was to delete nothing until the gate had
+shipped and been lived with; on 2026-11-26 the deletions came first
+instead, since no phone can start a leaving system once the allowlist is
+in, and the code that sends their owed saves stays for the data
+migration.
 
 1. Tag the current `dev` as `pre-handheld`.
 2. Take the tvOS and Mac targets out of the project, so later deletions
