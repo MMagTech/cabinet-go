@@ -23,8 +23,8 @@ final class Session: ObservableObject {
     @Published private(set) var serverVersion: String?
     @Published private(set) var scopes: [String] = []
     /// An admin can rename any platform's folder to whatever they like, and
-    /// RomM remembers the mapping from that folder name back to the short
-    /// name EmulatorJS actually knows, admin editable at Settings > Platforms
+    /// RomM remembers the mapping from that folder name back to the
+    /// platform's short name, admin editable at Settings > Platforms
     /// on the server. `/api/config` is where RomM's own page reads this, and
     /// it is the only place this app can learn it too: nothing about a
     /// platform's folder name can be assumed or bundled, it is chosen fresh

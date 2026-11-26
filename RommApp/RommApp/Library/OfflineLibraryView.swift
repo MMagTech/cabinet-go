@@ -10,9 +10,9 @@ import SwiftUI
 ///
 /// Kept, native-capable games grouped by platform, each opening into the
 /// exact grid or list screen live browsing already uses, badges and
-/// context menu included. Webview-only kept games are excluded: their
-/// player still needs the server to start, so listing them would set up
-/// a tap that fails regardless of what is actually stored. Nothing kept
+/// context menu included. Kept games this app cannot play (kept only for
+/// their files) are excluded: listing them would set up a tap that fails
+/// regardless of what is actually stored. Nothing kept
 /// yet falls through to the same `OfflineNotice` every other empty state
 /// in this app already uses, so a launch with nothing downloaded still
 /// gets an honest, familiar answer rather than a browsing screen with

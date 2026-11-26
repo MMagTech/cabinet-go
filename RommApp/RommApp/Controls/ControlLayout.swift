@@ -36,24 +36,19 @@ struct ControlLayout: Decodable {
 
     struct Item: Decodable {
         enum Kind: String, Decodable {
-            /// A continuous analog control. Unlike every other kind here,
-            /// its ids are not RetroPad button ids: EmulatorJS reads a
-            /// stick through `GameManager.simulateInput` at four dedicated
-            /// indices, one per direction, each carrying a magnitude from
-            /// 0 to 0x7fff rather than a boolean down/up. Confirmed against
-            /// EmulatorJS's own on screen stick, `data/src/emulator.js`,
-            /// not assumed from the RetroPad table above.
+            /// `stick` is a continuous analog control, reported as a
+            /// position rather than as button presses (see
+            /// `TouchControlPad.sendStick`).
             case dpad, button, pill, stick
         }
 
         let kind: Kind
         let label: String?
         /// RetroArch device id for single controls (B 0, Select 2, Start 3,
-        /// A 8, L 10, R 11), confirmed against the EmulatorJS 4.2.3 bundle.
+        /// A 8, L 10, R 11), libretro's own joypad ordering.
         let input: Int?
         /// D-pad only: up, down, left, right, in that order.
-        /// Stick only: x-positive, x-negative, y-positive, y-negative, the
-        /// same order and meaning as EmulatorJS's own `inputValues`.
+        /// Stick only: x-positive, x-negative, y-positive, y-negative.
         let inputs: [Int]?
         let frame: Rect
         let extended: Rect

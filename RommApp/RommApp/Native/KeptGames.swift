@@ -17,18 +17,6 @@ struct KeptGame: Codable, Identifiable {
     let rom: Rom
     let totalBytes: Int64
     let keptAt: Date
-    /// What feeding the web player's cache needs, captured at keep time
-    /// because building the cache key and passing its validation both
-    /// depend on values only the server can provide: RomM's player
-    /// always requests `?file_ids={id}` even for a single-file game, and
-    /// EmulatorJS trusts a cached entry only when its stored
-    /// Content-Length string equals a live HEAD response's header
-    /// exactly. Optional: manifests written before this existed lack
-    /// them, and a kept game without them still plays natively and
-    /// exports fine, the web player just downloads organically instead.
-    let fileId: Int?
-    let webFileName: String?
-    let contentLength: String?
     /// The newest save state downloaded for this game, native only:
     /// states are core-build-specific and states belong to RomM's
     /// database, not its filesystem layout, so unlike the ROM and BIOS
@@ -427,7 +415,6 @@ final class KeptGameStore: ObservableObject {
             let old = self.games[index]
             let updated = KeptGame(
                 rom: old.rom, totalBytes: Self.directorySize(dir), keptAt: old.keptAt,
-                fileId: old.fileId, webFileName: old.webFileName, contentLength: old.contentLength,
                 stateId: newest.id, stateUpdatedAt: newest.updatedAt,
                 canonicalPlatformSlug: old.rom.canonicalPlatformSlug(platformsVersions: session.platformsVersions),
                 needsMetadataRefresh: old.needsMetadataRefresh
@@ -589,7 +576,6 @@ final class KeptGameStore: ObservableObject {
             let dir = directory(for: game.romId)
             let updated = KeptGame(
                 rom: game.rom, totalBytes: game.totalBytes, keptAt: game.keptAt,
-                fileId: game.fileId, webFileName: game.webFileName, contentLength: game.contentLength,
                 stateId: game.stateId, stateUpdatedAt: game.stateUpdatedAt,
                 canonicalPlatformSlug: game.rom.canonicalPlatformSlug(platformsVersions: session.platformsVersions),
                 needsMetadataRefresh: game.needsMetadataRefresh
@@ -609,7 +595,6 @@ final class KeptGameStore: ObservableObject {
             let old = games[index]
             let updated = KeptGame(
                 rom: freshRom, totalBytes: old.totalBytes, keptAt: old.keptAt,
-                fileId: old.fileId, webFileName: old.webFileName, contentLength: old.contentLength,
                 stateId: old.stateId, stateUpdatedAt: old.stateUpdatedAt,
                 canonicalPlatformSlug: freshRom.canonicalPlatformSlug(platformsVersions: session.platformsVersions),
                 needsMetadataRefresh: nil
@@ -631,7 +616,6 @@ final class KeptGameStore: ObservableObject {
         let old = games[index]
         let updated = KeptGame(
             rom: old.rom, totalBytes: Self.directorySize(dir), keptAt: old.keptAt,
-            fileId: old.fileId, webFileName: old.webFileName, contentLength: old.contentLength,
             stateId: old.stateId, stateUpdatedAt: old.stateUpdatedAt,
             canonicalPlatformSlug: old.canonicalPlatformSlug,
             needsMetadataRefresh: old.needsMetadataRefresh
@@ -946,19 +930,19 @@ final class KeptGameStore: ObservableObject {
             // link brings it into staging, so a finish that fails part
             // way leaves the landed file for the retry rather than
             // downloading it again.
-            let contentLength = try await BackgroundDownloads.shared.download(
+            try await BackgroundDownloads.shared.download(
                 romRequest, romId: rom.id, wifiOnly: waitsForWiFi
             )
             guard let landed = BackgroundDownloads.shared.landed(romId: rom.id) else {
                 throw NSError(domain: "KeptGames", code: 0, userInfo: [NSLocalizedDescriptionKey: "The download didn't land."])
             }
-            try FileManager.default.linkItem(at: landed.file, to: staging.appendingPathComponent(rom.fsName))
+            try FileManager.default.linkItem(at: landed, to: staging.appendingPathComponent(rom.fsName))
 
             var firmwareURLs: [URL] = []
             let firmwareList = try await session.firmware(platformId: rom.platformId)
             for firmware in firmwareList where !firmware.missingFromFS {
                 let url = staging.appendingPathComponent(firmware.fileName)
-                _ = try await FileDownloader.download(session.firmwareContentRequest(firmware), to: url, onProgress: nil)
+                try await FileDownloader.download(session.firmwareContentRequest(firmware), to: url, onProgress: nil)
                 firmwareURLs.append(url)
             }
             let canonicalSlug = rom.canonicalPlatformSlug(platformsVersions: session.platformsVersions)
@@ -966,11 +950,6 @@ final class KeptGameStore: ObservableObject {
                 NativeLauncher.stageFirmware(from: firmwareURLs, in: staging, platform: platform)
             }
 
-            // Tolerated on failure, unlike everything above: without a
-            // file id the kept game merely cannot pre-fill the web
-            // player's cache, which the web player recovers from by
-            // downloading once, organically.
-            let webFile = try? await session.romFiles(romId: rom.id).first
             // The newest state, so a kept game can resume real progress
             // with zero network rather than only booting fresh. Native
             // only, and entirely tolerant of failure: a game that has
@@ -1004,7 +983,6 @@ final class KeptGameStore: ObservableObject {
 
             let manifest = KeptGame(
                 rom: rom, totalBytes: Self.directorySize(staging), keptAt: Date(),
-                fileId: webFile?.id, webFileName: webFile?.fileName, contentLength: contentLength,
                 stateId: cachedStateId, stateUpdatedAt: cachedStateUpdatedAt,
                 canonicalPlatformSlug: canonicalSlug, needsMetadataRefresh: nil
             )
@@ -1034,9 +1012,6 @@ final class KeptGameStore: ObservableObject {
         let fsName: String
         let totalBytes: Int64
         let keptAt: Date
-        let fileId: Int?
-        let webFileName: String?
-        let contentLength: String?
         let platformFsSlug: String?
     }
 
@@ -1095,7 +1070,6 @@ final class KeptGameStore: ObservableObject {
             if let legacy = try? decoder.decode(LegacyKeptGameV1.self, from: data) {
                 let game = KeptGame(
                     rom: stubRom(from: legacy), totalBytes: legacy.totalBytes, keptAt: legacy.keptAt,
-                    fileId: legacy.fileId, webFileName: legacy.webFileName, contentLength: legacy.contentLength,
                     stateId: nil, stateUpdatedAt: nil,
                     canonicalPlatformSlug: nil, needsMetadataRefresh: true
                 )
@@ -1150,23 +1124,16 @@ private final class FileDownloader: NSObject, URLSessionDownloadDelegate, @unche
     private let onProgress: (@MainActor (Int64, Int64) -> Void)?
     private var continuation: CheckedContinuation<Void, Error>?
     private var moveError: Error?
-    /// The raw Content-Length header from the response, exactly as sent:
-    /// EmulatorJS validates cached entries by strict string comparison
-    /// against a live HEAD response, so recomputing it from byte count
-    /// is not the same thing.
-    private var contentLengthHeader: String?
 
     private init(destination: URL, onProgress: (@MainActor (Int64, Int64) -> Void)?) {
         self.destination = destination
         self.onProgress = onProgress
     }
 
-    /// Returns the response's Content-Length header string, when present.
-    @discardableResult
     static func download(
         _ request: URLRequest, to destination: URL,
         onProgress: (@MainActor (Int64, Int64) -> Void)?
-    ) async throws -> String? {
+    ) async throws {
         let downloader = FileDownloader(destination: destination, onProgress: onProgress)
         let session = URLSession(configuration: .default, delegate: downloader, delegateQueue: nil)
         defer { session.finishTasksAndInvalidate() }
@@ -1178,7 +1145,6 @@ private final class FileDownloader: NSObject, URLSessionDownloadDelegate, @unche
         } onCancel: {
             session.invalidateAndCancel()
         }
-        return downloader.contentLengthHeader
     }
 
     func urlSession(
@@ -1197,7 +1163,6 @@ private final class FileDownloader: NSObject, URLSessionDownloadDelegate, @unche
         // The temp file only exists for the duration of this callback, so
         // the move happens here, synchronously, and any failure is carried
         // to didCompleteWithError which always fires after.
-        contentLengthHeader = (downloadTask.response as? HTTPURLResponse)?.value(forHTTPHeaderField: "Content-Length")
         if let status = (downloadTask.response as? HTTPURLResponse)?.statusCode,
            !(200...299).contains(status) {
             moveError = NSError(

@@ -471,7 +471,7 @@ final class GameControllerManager: ObservableObject {
     /// Routes an input to the game, edges only: the stick handler above
     /// fires per sample, up to 120 a second, and most samples change no
     /// direction. Sending only on change keeps a held stick from
-    /// streaming identical evaluateJavaScript calls into the webview.
+    /// streaming identical updates to the core.
     private func emit(_ id: Int, _ down: Bool, player: Int) {
         guard let slot = slots[player] else { return }
         if down {

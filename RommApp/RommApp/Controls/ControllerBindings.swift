@@ -71,8 +71,8 @@ enum MenuHotkey {
     static let buttonB = GCInputRightThumbstickButton
 }
 
-/// RetroPad ids, confirmed against the EmulatorJS 4.2.3 bundle and the
-/// standard libretro joypad ordering.
+/// RetroPad ids, the standard libretro joypad ordering
+/// (RETRO_DEVICE_ID_JOYPAD_* in libretro.h).
 enum RetroPad {
     static let b = 0, y = 1, select = 2, start = 3
     static let up = 4, down = 5, left = 6, right = 7

@@ -3,7 +3,7 @@ import UIKit
 import QuartzCore
 
 
-/// The native touch controls, drawn as vectors over the webview.
+/// The native touch controls, drawn as vectors over the game.
 ///
 /// The touch model follows DeltaCore's approach (the approach, not the code;
 /// Delta is AGPL and this project is MIT):
@@ -26,9 +26,7 @@ struct TouchControlPad: UIViewRepresentable {
     /// x-positive/x-negative/y-positive/y-negative order, and the current
     /// x/y each from -1 to 1. Defaults to a no-op for layouts with no stick.
     var sendStick: (_ ids: [Int], _ x: Double, _ y: Double) -> Void = { _, _, _ in }
-    /// The layout's system, for theme colours. The webview player sets
-    /// this on its pad directly; this wrapper carries it for hosts that
-    /// use the SwiftUI view, so both players draw the same controls.
+    /// The layout's system, for theme colours.
     var system: String = ""
     /// Draw controls as moulded objects rather than flat shapes: a
     /// shadow beneath, light falling from above, a specular edge.
@@ -39,7 +37,7 @@ struct TouchControlPad: UIViewRepresentable {
     /// beside.
     var material: Bool = false
     /// The visibility slider's value, applied as UIKit alpha on the view
-    /// itself, exactly as the webview player's overlay does (`pad.alpha`).
+    /// itself.
     /// Never apply SwiftUI `.opacity()` to this view instead: on iOS 26 a
     /// partially transparent representable overlaying a Metal view gets
     /// flattened into the composited layer and stops receiving touches,
@@ -116,9 +114,9 @@ final class ControlPadView: UIView {
     }
 
     /// Touches land here only inside a control's extended frame. Everything
-    /// else passes through to the webview underneath, which matters in
-    /// landscape where this view overlays the whole screen: taps on the game
-    /// canvas still wake the overlay and reach EmulatorJS's menu button.
+    /// else passes through to the views underneath, which matters in
+    /// landscape where this view overlays the whole screen: the DS touch
+    /// screen and the Game & Watch artwork take their taps there.
     override func point(inside point: CGPoint, with event: UIEvent?) -> Bool {
         items.contains { $0.extended.resolved(in: bounds.size).contains(point) }
     }
@@ -174,7 +172,7 @@ final class ControlPadView: UIView {
 
     /// A stick's position is its offset from its own frame's center, capped
     /// to the frame's half-extent so it cannot report beyond fully deflected,
-    /// then sent through as a magnitude the way EmulatorJS's own stick does.
+    /// then sent through as a position.
     private func updateStick(_ stick: ControlLayout.Item, at point: CGPoint) {
         guard let ids = stick.inputs, ids.count == 4 else { return }
         let frame = stick.frame.resolved(in: bounds.size)
@@ -187,17 +185,13 @@ final class ControlPadView: UIView {
         // touchesMoved arrives per display refresh, up to 120Hz, and a
         // thumb held "still" jitters by fractions of a point. Below 1.5%
         // of full deflection the game cannot tell the difference, so skip
-        // the JS call and the redraw both, or a held stick streams
-        // identical messages into the webview for as long as it is held.
+        // the send and the redraw both, or a held stick streams identical
+        // updates for as long as it is held.
         let previous = stickPosition
         guard abs(x - previous.x) > 0.015 || abs(y - previous.y) > 0.015 else { return }
         stickPosition = CGPoint(x: x, y: y)
-        // No sign flip: EmulatorJS's own y-positive slot is confirmed to
-        // mean "down", not "up", by N64's C-buttons, whose analog indices
-        // follow the same four slot pattern and are independently confirmed
-        // against source (C-Down sits in the y-positive slot). That matches
-        // screen y, which already grows downward, so the raw touch delta is
-        // exactly the value to send, no conversion needed.
+        // No sign flip: libretro's analog y is down-positive, which matches
+        // screen y, so the raw touch delta is exactly the value to send.
         sendStick(ids, Double(x), Double(y))
         // Only the stick's own frame needs repainting, not every control
         // on the pad: in landscape this view spans the whole screen, and

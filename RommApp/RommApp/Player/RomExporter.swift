@@ -4,13 +4,6 @@ import UIKit
 /// Downloads a ROM (and optionally its BIOS) straight from RomM and hands
 /// the result to the Files app, for platforms this app cannot play itself
 /// and for anyone who wants a copy for another emulator.
-///
-/// Deliberately does not check EmulatorJS's own IndexedDB cache first: that
-/// would mean moving potentially hundreds of megabytes across a
-/// WKScriptMessageHandler bridge, which EmulatorJS itself avoids by
-/// chunking at 50MB internally. A plain re-download from the server is
-/// simpler and, since export is a one-off action per game rather than a
-/// repeated one, the cost of skipping that optimization is small.
 @MainActor
 final class RomExporter: NSObject, ObservableObject {
     enum State: Equatable {

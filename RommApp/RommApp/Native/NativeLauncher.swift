@@ -1,8 +1,8 @@
 import Foundation
 
 /// Downloads a game (and whatever firmware its platform carries) through
-/// the same request-building code the webview player uses, then activates
-/// the rom's native core and hands the files to `LibretroFrontend`. This
+/// Session's own request-building code, then activates the rom's native
+/// core and hands the files to `LibretroFrontend`. This
 /// is the native player's launch path, reached from the normal launch
 /// screen; the Debug-screen smoke tests that predated it (a hardcoded
 /// FBNeo test title list, a free-text Saturn search box) are gone, their

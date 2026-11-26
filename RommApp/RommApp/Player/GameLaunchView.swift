@@ -65,9 +65,6 @@ struct GameLaunchView: View {
     /// everything downstream that needs it, rather than recomputed
     /// piecemeal. See `Rom.canonicalPlatformSlug`.
     @State private var canonicalSlug = ""
-    /// A keyboard machine, not a gamepad one. See ComputerPlatforms: this
-    /// app does not offer touch play for these, on purpose, not yet.
-    @State private var isComputerPlatform = false
     @State private var togglingFavorite = false
     @State private var favoriteError: String?
     @ObservedObject private var keptStore = KeptGameStore.shared
@@ -145,7 +142,6 @@ struct GameLaunchView: View {
                             // already say everything a permanently grey
                             // "Unsupported" restated. Game-level states on
                             // supported systems keep the live button.
-                            if isComputerPlatform { computerPlatformCard }
                             downloadStatusCard
                             vmuCard
                             compatibilityCard
@@ -310,10 +306,9 @@ struct GameLaunchView: View {
     /// decides the library's Supported/Unsupported split. Reused here so
     /// Play cannot stay live for a platform the library already calls
     /// unsupported, the zero-core dead end this download feature replaces.
-    /// Calls through rather than re-deriving `!isComputerPlatform &&
-    /// !cores.isEmpty` locally: that copy silently fell out of sync with
-    /// the real check when it grew native-core awareness, exactly the
-    /// class of bug a single source of truth is supposed to prevent.
+    /// Calls through rather than re-deriving it locally: a local copy once
+    /// silently fell out of sync with the real check, exactly the class of
+    /// bug a single source of truth is supposed to prevent.
     private var isPlatformSupported: Bool {
         PlatformSupport.isSupported(canonicalSlug: canonicalSlug, isArcade: rom.isArcade)
     }
@@ -506,7 +501,7 @@ struct GameLaunchView: View {
                     .frame(maxWidth: .infinity)
                     .padding(.vertical, 15)
             } else {
-                Label(playLabel, systemImage: isComputerPlatform ? "keyboard" : "play.fill")
+                Label(playLabel, systemImage: "play.fill")
                     .font(.headline)
                     .frame(maxWidth: .infinity)
                     .padding(.vertical, 15)
@@ -564,20 +559,6 @@ struct GameLaunchView: View {
     private var playLabel: String {
         if !loading && !isPlatformSupported { return "Unsupported" }
         return selectedState != nil || selectedSave != nil ? "Resume" : "Play"
-    }
-
-    /// Why the button above is not a button right now. A keyboard machine
-    /// has no fixed pad this app can honestly draw, so it does not try,
-    /// rather than offering a control scheme that looks like it works and
-    /// does not. Download support, once the app has any, is the planned
-    /// way to still get this game, through a real emulator on a real
-    /// keyboard instead.
-    private var computerPlatformCard: some View {
-        LaunchCard(title: "Needs a keyboard", systemImage: "keyboard") {
-            Text("This platform is controlled with a keyboard, not a game pad, and this app does not offer that yet. A future version may let you download the ROM to play it in another emulator.")
-                .font(.caption)
-                .foregroundStyle(.secondary)
-        }
     }
 
     @ViewBuilder
@@ -646,7 +627,6 @@ struct GameLaunchView: View {
                 alignment: .leading,
                 spacing: 12
             ) {
-                if isComputerPlatform { computerPlatformCard }
                 downloadStatusCard
                 // Unsupported platforms have always left a way to the
                 // file so it can be played in another emulator, and Keep
@@ -670,7 +650,6 @@ struct GameLaunchView: View {
             .frame(maxWidth: .infinity, alignment: .leading)
         } else {
             VStack(spacing: 14) {
-                if isComputerPlatform { computerPlatformCard }
                 downloadStatusCard
                 // Unsupported platforms have always left a way to the
                 // file so it can be played in another emulator, and Keep
@@ -1162,7 +1141,6 @@ struct GameLaunchView: View {
         // because platformsVersions had finished loading by then.
         await session.loadPlatformConfigIfNeeded()
         canonicalSlug = rom.canonicalPlatformSlug(platformsVersions: session.platformsVersions)
-        isComputerPlatform = ComputerPlatforms.contains(canonicalSlug)
 
         // Offline, these three would only ever run out the clock on a
         // timeout: NetworkMonitor already knows the answer without

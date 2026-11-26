@@ -28,7 +28,7 @@ struct NativePlayerView: View {
     @State private var menuVisible = false
     @State private var menuStatus: String?
     @State private var menuBusy = false
-    /// The same visibility slider the webview player honors.
+    /// The touch controls' visibility slider, from Settings.
     @AppStorage("com.mmagtech.RommApp.controlOpacity") private var controlOpacity = 0.7
     @Environment(\.scenePhase) private var scenePhase
     @State private var startedAt: Date?
@@ -102,10 +102,9 @@ struct NativePlayerView: View {
         renderer.setButton(id, down: down, port: 0)
     }
 
-    /// `ids` is unused here on purpose: it exists for the webview player's
-    /// per-slot EmulatorJS wiring (see ControlLayout.Item's own doc
-    /// comment), but this app has exactly one native stick, Dreamcast's,
-    /// and LibretroFrontend already knows which analog index it is.
+    /// `ids` is unused here on purpose: a touch stick is always the left
+    /// analog stick, and LibretroFrontend already knows which analog index
+    /// that is.
     private func handleStick(_ ids: [Int], x: Double, y: Double) {
         renderer.setStick(x: x, y: y, port: 0)
     }
@@ -237,13 +236,11 @@ struct NativePlayerView: View {
             }
         }
         .background(Color.black.ignoresSafeArea())
-        // Tell the server this game is being played, exactly as the webview
-        // player does: the heartbeat is presence, repeated as a liveness
-        // signal. Without it a natively played game never reached Home's
+        // Tell the server this game is being played: the heartbeat is
+        // presence, repeated as a liveness signal. Without it a natively played game never reached Home's
         // resume list or RomM's own, since nothing else on the native path
-        // ever tells the server a session happened. Unlike the webview
-        // there is no gameStarted gate: by the time this screen exists the
-        // game is loaded and running.
+        // ever tells the server a session happened. There is no gate: by
+        // the time this screen exists the game is loaded and running.
         .task {
             if startedAt == nil { startedAt = Date() }
             await syncEngine().syncIn()
@@ -253,10 +250,8 @@ struct NativePlayerView: View {
             }
         }
         .onAppear {
-            // The manager is started here, not assumed started: before this
-            // call the only screens that started it were the webview player,
-            // Settings and the remap screen, so a fresh launch straight into
-            // a native game left every controller silent.
+            // The manager is started here, not assumed started: a fresh
+            // launch straight into a game once left every controller silent.
             GameControllerManager.shared.start()
             // N64 needs its own base bindings; see ControllerBindings.n64.
             GameControllerManager.shared.activePlatform = platform.rawValue
@@ -265,15 +260,14 @@ struct NativePlayerView: View {
             // showsGameExternally stays false, so the phone draws as it
             // always has. See ExternalDisplay.swift.
             ExternalDisplay.shared.renderer = renderer
-            // Same as the webview player: a running game is being watched
-            // even when nothing touches the screen, and with a physical
+            // A running game is being watched even when nothing touches the screen, and with a physical
             // controller nothing ever does. Without this the screen dims
             // and locks mid-game.
             UIApplication.shared.isIdleTimerDisabled = true
             // A Game & Watch plays in its artwork's own orientation,
             // Marcus's call: the tap surface needs the picture large,
             // and a wide unit held tall is neither. The lock releases
-            // with the player, same as the webview's lockToCurrent.
+            // with the player.
             if let spec = gwSpec {
                 if spec.isLandscape { OrientationLock.lockToLandscape() }
                 else { OrientationLock.lockToPortrait() }
@@ -295,8 +289,7 @@ struct NativePlayerView: View {
             }
             GameControllerManager.shared.onMenu = { openMenu() }
             // Nobody is holding anything after a disconnect, so pause into
-            // the menu rather than letting the game run on unattended. Same
-            // reasoning as the webview player's pauseGame on disconnect.
+            // the menu rather than letting the game run on unattended.
             // Player 1 losing their pad stops the game, since the person
             // who can drive the menu is now holding nothing. Player 2
             // dropping leaves player 1 playing: pausing on them would
@@ -462,7 +455,7 @@ struct NativePlayerView: View {
         }
     }
 
-    /// Mirrors the webview player's naming exactly (RomM 5.1.0's own
+    /// Mirrors RomM's own player's naming exactly (RomM 5.1.0's
     /// buildStateName): the rom's short name plus an ISO timestamp with
     /// colons and dots flattened to dashes, T to a space, Z dropped.
     private func stateFileStem() -> String {
@@ -488,8 +481,7 @@ struct NativePlayerView: View {
             return
         }
         // Captured before the upload starts, while the pause menu still
-        // holds the exact frame being saved. The webview player does the
-        // same one frame before its pause for the same reason.
+        // holds the exact frame being saved.
         let screenshot = renderer.screenshotPNG()
         let stem = stateFileStem()
 

@@ -233,8 +233,8 @@ final class NativePlayerRenderer: NSObject, ObservableObject, MTKViewDelegate {
 
     /// A launch-screen state waiting to be restored. Applied a second into
     /// the run rather than immediately: cores need a beat after booting
-    /// before a full machine state takes, the same settle delay the
-    /// webview player learned the hard way.
+    /// before a full machine state takes, a settle delay learned the hard
+    /// way.
     var pendingState: Data?
     /// A battery save (a PS1 memory card) waiting to be copied into the
     /// core's save RAM, set by the launch sync once it has decided which

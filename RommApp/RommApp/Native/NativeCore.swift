@@ -1,8 +1,6 @@
 import Foundation
 
-/// The natively compiled cores this app ships, one case per core. Kept
-/// apart from the webview player's core catalogue on purpose: that list
-/// is RomM's, this one is ours.
+/// The natively compiled cores this app has shipped, one case per core.
 enum NativeCore {
     case fbneo
     case beetleSaturn

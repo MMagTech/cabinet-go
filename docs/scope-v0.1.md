@@ -444,17 +444,12 @@ emulator. This rides on the same ROM fetch machinery offline browsing needs,
 so it belongs right after it, not as a separate project.
 
 A second, deliberately separate reason lands here too, settled 2026-08-03:
-keyboard machines, C64, Amiga, DOS and the rest, `ComputerPlatforms.swift`.
-Not unplayable by EmulatorJS the way Dreamcast is; unplayable *by touch*,
-which this app does not pretend to fix with a bad on screen keyboard. The
-launch screen blocks Play on these today with a plain explanation. Download
-is the planned way out for them too, once this item exists; an on screen
-keyboard is not planned at all, stated in the code as a decision rather
-than a gap. A physical Bluetooth keyboard should already reach these games
-today with no app support needed, reasoned from the code, not yet confirmed
-on a real keyboard: nothing here intercepts hardware key events before a
-WKWebView delivers them, and EmulatorJS has its own keyboard handling for
-exactly these cores.
+keyboard machines, C64, Amiga, DOS and the rest. Not unplayable by
+EmulatorJS the way Dreamcast is; unplayable *by touch*, which this app does
+not pretend to fix with a bad on screen keyboard. An on screen keyboard is
+not planned at all. Since the handheld scope (docs/scope-handheld.md) these
+machines are simply not played here, like every system that is not a
+handheld, and Keep is the way to their files.
 
 Netplay was considered on 2026-08-02 and declined, with reasons worth keeping
 because they will come up again. It is entirely socket based over

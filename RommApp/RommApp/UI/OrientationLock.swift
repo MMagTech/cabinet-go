@@ -3,14 +3,9 @@ import UIKit
 
 /// Pins the app to one orientation while a game is on screen.
 ///
-/// Rotation mid game was never safe to honour: resizing the webview makes
-/// WebKit relay out everything over a wasm core that already fills most of
-/// the process's memory allowance, and when the watchdog objects it kills
-/// the process and the game with it. Recovery exists and works, but even a
-/// graceful recovery interrupts a live run, and an interruption during a
-/// boss is a lost run. So the player does not rotate at all: a game is
-/// played in the orientation it was started in, and the rest of the app
-/// rotates freely.
+/// A Game & Watch game plays in its artwork's own orientation and the VMU
+/// player in portrait, so each pins it there while it is on screen and
+/// the rest of the app rotates freely.
 ///
 /// Locking to a family rather than one exact orientation keeps the 180
 /// degree flip working in landscape, which changes nothing about the
@@ -20,39 +15,15 @@ enum OrientationLock {
     /// every rotation, so changing this and prodding the scene is enough.
     static var mask: UIInterfaceOrientationMask = .all
 
-    static func lockToCurrent() {
-        let orientation = activeScene?.interfaceOrientation ?? .portrait
-        mask = orientation.isLandscape ? .landscape : .portrait
-        apply()
-    }
-
-    /// Landscape regardless of how the phone is held right now: the
-    /// phone-as-controller panel is a cabinet control panel, and a
-    /// cabinet has one orientation. Accepting the offer in portrait
-    /// rotates the panel in rather than drawing a portrait one.
+    /// Landscape regardless of how the phone is held right now.
     static func lockToLandscape() {
         mask = .landscape
         apply()
     }
 
-    /// The pistol grip: the phone stands upright when it is the gun, so
-    /// air mode's interface is portrait and locks there.
+    /// Portrait regardless of how the phone is held right now.
     static func lockToPortrait() {
         mask = .portrait
-        apply()
-    }
-
-    /// One exact landscape orientation, not the family. The family lock
-    /// keeps the 180 flip, which is right for a phone lying in front of
-    /// someone, and wrong for one being rolled as a steering wheel:
-    /// tilt steering sweeps through exactly the angle iOS reads as
-    /// "turned around", the UI flipped mid-corner, and the Gas pedal
-    /// changed sides under Marcus's thumb. Called once the orientation
-    /// has settled, it pins whichever landscape the panel opened in.
-    static func pinCurrentLandscape() {
-        guard let orientation = activeScene?.interfaceOrientation,
-              orientation.isLandscape else { return }
-        mask = orientation == .landscapeLeft ? .landscapeLeft : .landscapeRight
         apply()
     }
 
@@ -78,10 +49,8 @@ enum OrientationLock {
 
 /// Exists solely to answer UIKit's orientation question with the mask
 /// above. SwiftUI has no view level equivalent of this delegate call.
-// UIResponder rather than NSObject, the standard app-delegate shape:
-// the Mac menu-bar hook (buildMenu) is a UIResponder method, and an
-// NSObject delegate has nothing to override. Identical behavior
-// everywhere else; UIResponder is what the Xcode template uses.
+// UIResponder rather than NSObject: the standard app-delegate shape, the
+// one the Xcode template uses.
 final class AppDelegate: UIResponder, UIApplicationDelegate {
     func application(
         _ application: UIApplication,
