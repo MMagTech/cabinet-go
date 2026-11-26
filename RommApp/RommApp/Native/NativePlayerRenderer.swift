@@ -150,8 +150,8 @@ final class NativePlayerRenderer: NSObject, ObservableObject, MTKViewDelegate {
     /// already applied, 0 until the first frame has been fitted. This is
     /// the same value `aspectFitVertices` fits the picture with, published
     /// so a view layered over the Metal surface can reproduce the fitted
-    /// rect in SwiftUI coordinates: the touch pad reads it to keep its
-    /// gutters off the picture.
+    /// rect in SwiftUI coordinates: the Game & Watch artwork map reads it
+    /// to find the buttons drawn on the picture.
     @Published private(set) var displayAspect: Double = 0
     private var worstFrameDelta: CFTimeInterval = 0
     private var lastDrawTime: CFTimeInterval = 0
@@ -164,14 +164,14 @@ final class NativePlayerRenderer: NSObject, ObservableObject, MTKViewDelegate {
     /// Held RetroPad ids, merged from the touch overlay and any connected
     /// game controller. Both already speak the same id space (see
     /// ControllerBindings.swift's RetroPad constants), so merging is just
-    /// a union; FBNeo only needs "is this id down right now" each frame.
+    /// a union; a core only needs "is this id down right now" each frame.
     private var heldButtons: [Set<Int>] = [[], []]
 
     func setButton(_ id: Int, down: Bool, port: Int) {
         guard heldButtons.indices.contains(port) else { return }
-        // 0...13 is the standard joypad; 20...23 is the twin-stick second
-        // joystick's four directions (see GameControllerManager.stick2),
-        // which LibretroFrontend answers
+        // 0...13 is the standard joypad; 20...23 is the pad's right
+        // stick, digitized into four directions (see
+        // GameControllerManager.stick2), which LibretroFrontend answers
         // through RETRO_DEVICE_ANALOG rather than the joypad bitmask, but
         // carries in the same mask this renderer builds either way.
         // RetroPad.overlay (-1) isn't a game input at all.

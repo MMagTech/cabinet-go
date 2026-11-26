@@ -154,8 +154,8 @@ static void (^gRumbleHandler)(NSInteger port, BOOL strong, uint16_t strength) = 
 std::set<std::string> gVariableValuePool; // guarded by gOptionsMutex
 
 // Two ports, one per local player. Each port owns its whole input state
-// rather than sharing bits of one word: FBNeo's twin-stick digitizing
-// (bits 20-23 below) belongs to player 1's second joystick, and folding a
+// rather than sharing bits of one word: the right stick's digitizing
+// (bits 20-23 below) belongs to that player's own pad, and folding a
 // second player into spare bits of the same mask would alias directly
 // onto it. Shaped like gRumbleWasOn, which was already port-indexed.
 constexpr size_t kMaxPorts = 2;
@@ -167,19 +167,8 @@ std::atomic<uint32_t> gRotation{0};
 // case.
 std::atomic<float> gAnalogLeftX[kMaxPorts];
 std::atomic<float> gAnalogLeftY[kMaxPorts];
-// Relative pointing devices: dials, spinners and trackballs arrive from
-// the cores' side as RETRO_DEVICE_MOUSE deltas. The UI accumulates
-// counts here; the poll callback latches them so every read inside one
-// frame sees the same value, and a frame with no input reads zero.
-// Nothing feeds these except the analog touch controls, so every core
-// that does not ask, and every game without such a control, is exactly
-// where it was when these did not exist.
-std::atomic<int32_t> gMouseAccumX[kMaxPorts];
-std::atomic<int32_t> gMouseAccumY[kMaxPorts];
-int16_t gMouseLatchedX[kMaxPorts];
-int16_t gMouseLatchedY[kMaxPorts];
-// Absolute pointing: a touch on the game's own picture, which is what a
-// lightgun means on a touchscreen. -0x7fff..0x7fff in libretro's
+// Absolute pointing: a touch on the game's own picture, the DS touch
+// screen and Game & Watch's artwork. -0x7fff..0x7fff in libretro's
 // convention, pressed while the finger is down.
 // The pointer channel alone is sized past the pad ports: gw-libretro
 // declares its pointer on PORT 2, above the two seats every pad control
@@ -191,7 +180,6 @@ constexpr size_t kPointerPorts = 3;
 std::atomic<int16_t> gPointerX[kPointerPorts];
 std::atomic<int16_t> gPointerY[kPointerPorts];
 std::atomic<bool> gPointerDown[kPointerPorts];
-std::atomic<bool> gGunOffscreen[kMaxPorts];
 // TEST BUILD, with cabinetInputTrace below: samples-per-frame and last
 // value of the core's own analog-X reads on port 0.
 std::atomic<uint32_t> gAnalogReads{0};
@@ -997,16 +985,7 @@ size_t audioSampleBatch(const int16_t *data, size_t frames) {
 }
 
 void inputPoll(void) {
-    // Mouse deltas are relative-since-last-poll by convention, so the
-    // accumulator is swapped out here, once per frame, rather than
-    // consumed on read: a core reads X and Y as separate calls and both
-    // must describe the same frame. Clamped to int16 the way the API is.
-    for (size_t p = 0; p < kMaxPorts; p++) {
-        int32_t dx = gMouseAccumX[p].exchange(0, std::memory_order_relaxed);
-        int32_t dy = gMouseAccumY[p].exchange(0, std::memory_order_relaxed);
-        gMouseLatchedX[p] = (int16_t)std::clamp(dx, -32767, 32767);
-        gMouseLatchedY[p] = (int16_t)std::clamp(dy, -32767, 32767);
-    }
+    // Nothing to latch: every input this frontend answers is read live.
 }
 
 int16_t inputState(unsigned port, unsigned device, unsigned index, unsigned id) {
@@ -1028,29 +1007,13 @@ int16_t inputState(unsigned port, unsigned device, unsigned index, unsigned id) 
     if (device == RETRO_DEVICE_JOYPAD) {
         return id <= 13 ? (mask >> id) & 1 : 0;
     }
-    // A twin-stick arcade game's second joystick. FBNeo reads it as the
-    // analog right stick (confirmed against its own retro_input.cpp)
-    // even though the real cabinet's control is a plain 4-way joystick,
-    // not a true analog one: digital in, full deflection out, bits
+    // The pad's right stick, digitized: full deflection out, bits
     // 20 (right) / 21 (left) / 22 (down) / 23 (up) in the same mask the
-    // ordinary joypad buttons live in. Y-positive is down, matching
-    // libretro's own convention and confirmed against the touch pad's
-    // identical stick, which already relies on it.
+    // ordinary joypad buttons live in. PPSSPP reads it every frame
+    // (libretro.cpp, CTRL_STICK_RIGHT). Y-positive is down, matching
+    // libretro's own convention.
     if (device == RETRO_DEVICE_ANALOG && index == RETRO_DEVICE_INDEX_ANALOG_RIGHT) {
-        // melonDS reads this axis as a CURSOR SPEED, not a direction,
-        // and that changes what full deflection means. Its joystick
-        // touch mode moves the stylus by (value / 2048) pixels every
-        // frame, so the 0x7fff every other core wants here is 16
-        // pixels a frame: 960 a second across a screen 256 wide, at
-        // one fixed speed, because this stick is digitized and has no
-        // gentle. Reported on the Apple TV as the cursor jumping too
-        // far. Three pixels a frame crosses the touch screen in about
-        // a second and a half, which a thumb can actually aim.
-        //
-        // Scoped to this core alone: every other core reads this axis
-        // as a direction, where anything short of full deflection is
-        // simply a weaker push, and their lines here are unchanged.
-        const int16_t full = gCoreID == LibretroCoreIDMelonDS ? 3 * 2048 : 0x7fff;
+        const int16_t full = 0x7fff;
         if (id == RETRO_DEVICE_ID_ANALOG_X) {
             if ((mask >> 20) & 1) return full;
             if ((mask >> 21) & 1) return -full;
@@ -1074,41 +1037,6 @@ int16_t inputState(unsigned port, unsigned device, unsigned index, unsigned id) 
             gAnalogLastRead.store(value, std::memory_order_relaxed);
         }
         return (int16_t)(std::clamp(value, -1.0f, 1.0f) * 0x7fff);
-    }
-    // Relative pointing, the dial/spinner/trackball channel. Latched at
-    // poll time above; zero whenever nothing is feeding it, which for
-    // every existing game and control is always.
-    if (device == RETRO_DEVICE_MOUSE) {
-        switch (id) {
-            case RETRO_DEVICE_ID_MOUSE_X: return gMouseLatchedX[port];
-            case RETRO_DEVICE_ID_MOUSE_Y: return gMouseLatchedY[port];
-            default: return 0;
-        }
-    }
-    // A lightgun is the same absolute aim with a cabinet's own extra
-    // question: is the player pointing off the screen? That gesture is
-    // how these games reload, and the core only honours it on this
-    // device, not on the pointer.
-    if (device == RETRO_DEVICE_LIGHTGUN) {
-        switch (id) {
-            case RETRO_DEVICE_ID_LIGHTGUN_SCREEN_X: return gPointerX[port].load(std::memory_order_relaxed);
-            case RETRO_DEVICE_ID_LIGHTGUN_SCREEN_Y: return gPointerY[port].load(std::memory_order_relaxed);
-            case RETRO_DEVICE_ID_LIGHTGUN_TRIGGER:  return gPointerDown[port].load(std::memory_order_relaxed) ? 1 : 0;
-            case RETRO_DEVICE_ID_LIGHTGUN_IS_OFFSCREEN:
-            case RETRO_DEVICE_ID_LIGHTGUN_RELOAD:
-                return gGunOffscreen[port].load(std::memory_order_relaxed) ? 1 : 0;
-            default: return 0;
-        }
-    }
-    // Absolute pointing, a touch on the picture itself.
-    if (device == RETRO_DEVICE_POINTER) {
-        switch (id) {
-            case RETRO_DEVICE_ID_POINTER_X: return gPointerX[port].load(std::memory_order_relaxed);
-            case RETRO_DEVICE_ID_POINTER_Y: return gPointerY[port].load(std::memory_order_relaxed);
-            case RETRO_DEVICE_ID_POINTER_PRESSED: return gPointerDown[port].load(std::memory_order_relaxed) ? 1 : 0;
-            case RETRO_DEVICE_ID_POINTER_COUNT: return gPointerDown[port].load(std::memory_order_relaxed) ? 1 : 0;
-            default: return 0;
-        }
     }
     return 0;
 }
@@ -1488,11 +1416,6 @@ const LibretroCoreAPI *coreAPI(LibretroCoreID coreID) {
         gButtonMask[p].store(0, std::memory_order_relaxed);
         gAnalogLeftX[p].store(0, std::memory_order_relaxed);
         gAnalogLeftY[p].store(0, std::memory_order_relaxed);
-        gMouseAccumX[p].store(0, std::memory_order_relaxed);
-        gMouseAccumY[p].store(0, std::memory_order_relaxed);
-        gMouseLatchedX[p] = 0;
-        gMouseLatchedY[p] = 0;
-        gGunOffscreen[p].store(false, std::memory_order_relaxed);
         // Cleared per activation, or a platform that skips port 1 (a
         // handheld, say) after one that used it would inherit the
         // previous game's stale device type on a port it never asked for.
@@ -1535,22 +1458,11 @@ const LibretroCoreAPI *coreAPI(LibretroCoreID coreID) {
     gOptionsDirty.store(true, std::memory_order_release);
 }
 
-- (void)addMouseDeltaX:(NSInteger)dx y:(NSInteger)dy port:(NSInteger)port {
-    if (port < 0 || (size_t)port >= kMaxPorts) { return; }
-    gMouseAccumX[port].fetch_add((int32_t)dx, std::memory_order_relaxed);
-    gMouseAccumY[port].fetch_add((int32_t)dy, std::memory_order_relaxed);
-}
-
 - (void)setPointerX:(float)x y:(float)y down:(BOOL)down port:(NSInteger)port {
     if (port < 0 || (size_t)port >= kPointerPorts) { return; }
     gPointerX[port].store((int16_t)(std::clamp(x, -1.0f, 1.0f) * 0x7fff), std::memory_order_relaxed);
     gPointerY[port].store((int16_t)(std::clamp(y, -1.0f, 1.0f) * 0x7fff), std::memory_order_relaxed);
     gPointerDown[port].store(down, std::memory_order_relaxed);
-}
-
-- (void)setLightgunOffscreen:(BOOL)offscreen port:(NSInteger)port {
-    if (port < 0 || (size_t)port >= kMaxPorts) { return; }
-    gGunOffscreen[port].store(offscreen, std::memory_order_relaxed);
 }
 
 - (void)setControllerPortDevice:(unsigned)device port:(NSInteger)port {

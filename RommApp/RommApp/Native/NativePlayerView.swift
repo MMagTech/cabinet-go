@@ -70,7 +70,7 @@ struct NativePlayerView: View {
                 kind: .pill, label: "Menu", input: -1, inputs: nil,
                 frame: ControlLayout.Rect(x: 0.03, y: 0.015, w: 0.14, h: 0.042),
                 extended: ControlLayout.Rect(x: 0.01, y: 0.005, w: 0.18, h: 0.062),
-                fourWay: nil, sensitivity: nil)]
+                fourWay: nil)]
         }
         return controlLayout.items(landscape: landscape)
     }
@@ -85,18 +85,9 @@ struct NativePlayerView: View {
     /// The height of the portrait control strip below the picture.
     private var controlStripHeight: CGFloat { 330 }
 
-    private func handleRelative(_ dx: Int, _ dy: Int) {
-        LibretroFrontend.shared.addMouseDeltaX(dx, y: dy, port: 0)
-    }
-
-    private func handleOffscreen(_ offscreen: Bool) {
-        LibretroFrontend.shared.setLightgunOffscreen(offscreen, port: 0)
-    }
-
     private func handlePointer(_ x: Double, _ y: Double, _ down: Bool) {
         // gw-libretro reads its pointer on port 2, stated in its own
-        // controller_info; everything else that takes a pointer here
-        // (melonDS's touchscreen, the arcade guns) reads port 0.
+        // controller_info; melonDS's touchscreen reads port 0.
         let port = platform == .gameAndWatch ? 2 : 0
         LibretroFrontend.shared.setPointerX(Float(x), y: Float(y), down: down, port: port)
     }
@@ -159,14 +150,9 @@ struct NativePlayerView: View {
         GeometryReader { geometry in
             let isLandscape = geometry.size.width > geometry.size.height
             let showsControls = !controllers.isConnected
-            // A gun cabinet aims at the picture, so its pad has to reach
-            // the picture. In portrait the pad is normally a bottom strip
-            // that cannot, which left gun games with no aim at all there.
-            // They take the full-screen presentation in both orientations.
-            let gunPanel = controlLayout.items.contains { $0.kind == .gun }
 
             ZStack {
-                if isLandscape || !showsControls || gunPanel || platform == .gameAndWatch {
+                if isLandscape || !showsControls || platform == .gameAndWatch {
                     // Full screen canvas, pad in the gutters (or hidden with a
                     // controller connected).
                     ZStack {
@@ -197,7 +183,7 @@ struct NativePlayerView: View {
                             }
                         }
                         if showsControls {
-                            TouchControlPad(items: layoutItems(landscape: isLandscape), send: handleInput, sendStick: handleStick, sendRelative: handleRelative, sendPointer: handlePointer, sendOffscreen: handleOffscreen, pictureAspect: renderer.displayAspect, system: controlLayout.system, opacity: controlOpacity)
+                            TouchControlPad(items: layoutItems(landscape: isLandscape), send: handleInput, sendStick: handleStick, system: controlLayout.system, opacity: controlOpacity)
                         }
                     }
                     .frame(width: geometry.size.width, height: geometry.size.height)
@@ -238,7 +224,7 @@ struct NativePlayerView: View {
                         // centred picture, and a wide game or a rotated
                         // arcade board shrinks those gutters until they
                         // really are sitting on it.
-                        TouchControlPad(items: layoutItems(landscape: false), send: handleInput, sendStick: handleStick, sendRelative: handleRelative, sendPointer: handlePointer, sendOffscreen: handleOffscreen, pictureAspect: renderer.displayAspect, system: controlLayout.system, material: RaisedControls.isOn, opacity: controlOpacity)
+                        TouchControlPad(items: layoutItems(landscape: false), send: handleInput, sendStick: handleStick, system: controlLayout.system, material: RaisedControls.isOn, opacity: controlOpacity)
                             .frame(height: padHeight)
                             .frame(maxHeight: .infinity, alignment: .bottom)
                     }

@@ -229,25 +229,15 @@ typedef NS_ENUM(NSInteger, LibretroCoreID) {
 // (matching screen y and libretro's own RETRO_DEVICE_ID_ANALOG_Y
 // convention, confirmed against TouchControlPad's identical sign
 // choice for the touch stick). Call once per frame alongside
-// -setButtonMask:. Dreamcast is the first core here to read this;
-// the digital-only right stick FBNeo's twin-stick games use lives
-// entirely in -setButtonMask:'s own bits instead. Same port rules as
+// -setButtonMask:. The digitized right stick lives entirely in
+// -setButtonMask:'s own bits instead. Same port rules as
 // -setButtonMask:port:.
 - (void)setAnalogStickX:(float)x y:(float)y port:(NSInteger)port;
 
-// Relative pointing (dial, spinner, trackball), accumulated between
-// frames and read by cores as RETRO_DEVICE_MOUSE deltas. Counts, not
-// points: the core applies each game's own sensitivity on top.
-- (void)addMouseDeltaX:(NSInteger)dx y:(NSInteger)dy port:(NSInteger)port;
-
 // Absolute pointing, -1..1 across the visible game picture, read by
-// cores as RETRO_DEVICE_POINTER. What a lightgun means on a touchscreen.
+// cores as RETRO_DEVICE_POINTER: the DS touch screen, and Game &
+// Watch's artwork on port 2.
 - (void)setPointerX:(float)x y:(float)y down:(BOOL)down port:(NSInteger)port;
-
-// Aiming off the picture entirely, which on a cabinet meant pointing the
-// gun past the screen and is how these games reload. Answered on the
-// lightgun's own offscreen and reload ids.
-- (void)setLightgunOffscreen:(BOOL)offscreen port:(NSInteger)port;
 
 // Display rotation the core requested, in 90-degree counter-clockwise
 // steps (0-3). Vertical arcade boards render sideways and rely on the

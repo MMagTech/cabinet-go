@@ -4,15 +4,9 @@ import GameController
 import SwiftUI
 import UIKit
 
-/// Physical controllers, captured natively with GameController rather than
-/// the webview's Gamepad API, per the scope doc. The web side is suppressed
-/// separately in the player injection, or every press would register twice.
-///
-/// Buttons are bound through ControllerBindings rather than hardcoded, because
-/// controllers genuinely differ: a full size pad has Menu and Options where
-/// Start and Coin belong, while a compact pad may expose neither, which would
-/// leave an arcade game with no way to insert a credit. Whatever a controller
-/// reports can be pointed at whatever input the player needs.
+/// Physical controllers, captured natively with GameController, per the
+/// scope doc. Buttons reach a game through ControllerBindings' one fixed
+/// map, matched by position.
 @MainActor
 final class GameControllerManager: ObservableObject {
     /// One manager for the whole app. Button handlers live on the controller
@@ -28,11 +22,11 @@ final class GameControllerManager: ObservableObject {
     /// Everything that belongs to one player's controller. Kept per slot
     /// rather than as manager-wide fields so the two pads are genuinely
     /// independent: one disconnecting must not release the other's held
-    /// buttons, and two different controller models each need their own
-    /// bindings resolved from their own vendor name.
+    /// buttons.
+    ///
     /// The platform of the game currently running, or nil in the shell.
-    /// Only the base binding map depends on it, and only N64 differs; the
-    /// player sets it when a game starts so a controller connected mid
+    /// Only whether the left stick digitizes depends on it, and only PSP
+    /// differs; the player sets it when a game starts so a controller connected mid
     /// game resolves the same way as one connected before it.
     var activePlatform: String? {
         didSet {
@@ -106,47 +100,27 @@ final class GameControllerManager: ObservableObject {
     /// first.
     @Published private(set) var connectedNames: [String?] = Array(repeating: nil, count: GameControllerManager.maxPlayers)
     /// Set when a controller is paired but does not present a standard
-    /// gamepad, which no app can drive and no remapping can rescue.
+    /// gamepad, which no app can drive.
     @Published private(set) var unsupportedController: String?
 
     /// Sends a player slot, a RetroPad input id, and its state to the
-    /// emulator. The slot is the core port for native play and the
-    /// EmulatorJS player index for webview play; both count from 0.
+    /// emulator. The slot is the core port, counting from 0.
     var send: ((Int, Int, Bool) -> Void)?
     /// A player's left stick position, x and y each -1 to 1, alongside the
-    /// digitized d-pad bits `send` already carries: only Dreamcast and N64
-    /// read this continuous form (RETRO_DEVICE_INDEX_ANALOG_LEFT), the rest
-    /// simply never ask for it, so this fires unconditionally rather than
-    /// needing to know per platform which cores want it. Was previously
-    /// wired only from the touch overlay's stick, which is why a physical
-    /// controller's left stick never drove N64 movement at all: N64 mostly
-    /// ignores the digitized d-pad bits sent already, and needs the real
-    /// analog value to move.
+    /// digitized d-pad bits `send` already carries: PSP reads this
+    /// continuous form for its nub (RETRO_DEVICE_INDEX_ANALOG_LEFT), the
+    /// rest simply never ask for it, so this fires unconditionally rather
+    /// than needing to know per platform which cores want it.
     var sendStick: ((Int, Float, Float) -> Void)?
-    /// A player's RIGHT stick position, x and y each -1 to 1, alongside
-    /// the digitized bits 20-23 `stick2` already sends.
-    ///
-    /// Those bits are all a twin-stick arcade cabinet needs, because its
-    /// second stick is a digital joystick rather than an analog one, and
-    /// for a long time arcade was the only thing reading that stick at
-    /// all. A console's second stick is a real axis: PS2's right stick
-    /// and the GameCube's C stick aim with it, and four on/off
-    /// directions at full deflection is not aiming.
-    ///
-    /// The same shape and the same convention as `sendStick`, so a
-    /// consumer that already handles one handles both.
-    var sendStick2: ((Int, Float, Float) -> Void)?
     /// Whether the left stick also presses d-pad directions, as well as
     /// reporting its true analog value through `sendStick`.
     ///
-    /// True everywhere by default, which is every consumer that existed
-    /// before this flag: the webview player, and every native platform
-    /// whose real controller has no analog stick, where the digitized
-    /// bits are the only way a stick can move anything. Set false only
-    /// for the platforms whose cores read the real analog value AND whose
-    /// real controller carries a separate d-pad, since there one thumb
-    /// would otherwise work two different physical controls at once. The
-    /// Driven entirely by activePlatform through the platform profile
+    /// True by default, for every platform whose real controller has no
+    /// analog stick, where the digitized bits are the only way a stick
+    /// can move anything. False for PSP, whose core reads the real analog
+    /// value AND whose real controller carries a separate d-pad, since
+    /// there one thumb would otherwise work two different physical
+    /// controls at once. Driven entirely by activePlatform through the platform profile
     /// table (ControllerBindings.profile(for:)); nothing else may write
     /// it, which is what keeps one platform's stick mode out of another's.
     private var digitizesLeftStickAsDPad = true
@@ -256,14 +230,10 @@ final class GameControllerManager: ObservableObject {
         gamepad.leftThumbstick.valueChangedHandler = { [weak self] _, x, y in
             MainActor.assumeIsolated { self?.stick(x: x, y: y, player: index) }
         }
-        // A twin-stick arcade game's second joystick, ids 20-23. Digital in, full deflection out,
-        // matching every other source that reaches those ids: the real
-        // cabinet's second stick is a joystick, not a true analog stick,
-        // and both players' bridges treat it that way already. This was
-        // simply never wired: only the click button existed before.
-        // Safe per player now that each port owns its own mask: bits 20-23
-        // of player 2's mask are player 2's own right stick, and cannot
-        // alias onto the twin-stick bits FBNeo reads from player 1.
+        // The right stick, digitized into ids 20-23: full deflection
+        // out, which LibretroFrontend answers as the analog right stick.
+        // PPSSPP reads it every frame. Safe per player: each port owns
+        // its own mask, so player 2's bits 20-23 are player 2's own.
         gamepad.rightThumbstick.valueChangedHandler = { [weak self] _, x, y in
             MainActor.assumeIsolated { self?.stick2(x: x, y: y, player: index) }
         }
@@ -414,10 +384,6 @@ final class GameControllerManager: ObservableObject {
         ensureTestSlot(player)
         stick(x: x, y: y, player: player)
     }
-    func _testInjectStick2(x: Float, y: Float, player: Int = 0) {
-        ensureTestSlot(player)
-        stick2(x: x, y: y, player: player)
-    }
     private func ensureTestSlot(_ player: Int) {
         if slots[player] == nil { slots[player] = Slot() }
     }
@@ -443,8 +409,8 @@ final class GameControllerManager: ObservableObject {
         // Suppressed only where the core reads the true analog value, and
         // only for this stick. Everything about the second stick (stick2,
         // ids 20-23) and about platforms without an analog stick is
-        // untouched: FBNeo's arcade movement has no path in other than
-        // this digitizing, which is exactly what cabinet#3 was about.
+        // untouched: a d-pad handheld's movement has no path in other
+        // than this digitizing.
         if digitizesLeftStickAsDPad {
             digitizeAxis(RetroPad.left, magnitude: max(0, -x), slot: slot, player: player)
             digitizeAxis(RetroPad.right, magnitude: max(0, x), slot: slot, player: player)
@@ -486,17 +452,6 @@ final class GameControllerManager: ObservableObject {
         digitizeAxis(20, magnitude: max(0, x), slot: slot, player: player)
         digitizeAxis(22, magnitude: max(0, -y), slot: slot, player: player)
         digitizeAxis(23, magnitude: max(0, y), slot: slot, player: player)
-        // Additive, exactly as sendStick is for the left stick: the four
-        // digitized bits above are untouched and still fire first, so
-        // FBNeo's twin-stick path runs the same code in the same order
-        // it did before this line existed. Nothing consumes sendStick2
-        // unless it sets it, and only PS2 and GameCube do.
-        //
-        // Same y flip as sendStick, and for the same reason: everything
-        // downstream of these publishers speaks libretro's down-positive
-        // convention, while GameController reports up-positive and the
-        // digitizing above depends on the raw sign.
-        sendStick2?(player, x, -y)
     }
 
     /// Turns one direction's stick deflection into a digital press, the
@@ -504,11 +459,8 @@ final class GameControllerManager: ObservableObject {
     /// 0.5, release only below 0.4. A flat single threshold, what this
     /// replaced, let a stick resting right on the boundary during play
     /// chatter the direction on and off, which read on real hardware as
-    /// "the character doesn't go where I'm telling it" on FBNeo's arcade
-    /// games specifically, the one native platform whose movement has no
-    /// other path in: N64 and Dreamcast read the raw analog value instead
-    /// (see `sendStick`) and never hit this digitizing at all, which is
-    /// why they were never affected. Found and fixed 2026-08-15.
+    /// "the character doesn't go where I'm telling it" on a platform
+    /// whose movement has no other path in. Found and fixed 2026-08-15.
     private func digitizeAxis(_ id: Int, magnitude: Float, slot: Slot, player: Int) {
         let wasDown = slot.stickDown[id] ?? false
         let isDown = wasDown ? magnitude > 0.4 : magnitude > 0.5
