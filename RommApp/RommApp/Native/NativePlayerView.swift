@@ -76,22 +76,6 @@ struct NativePlayerView: View {
 
     /// The bundled per-platform touch layout.
     private var controlLayout: ControlLayout {
-        // The six-button Genesis pad follows the Controller core setting,
-        // the same lever that already tells the core which pad port 0
-        // presents: with the setting on, the touch overlay finally grows
-        // the X/Y/Z row and Mode that only physical controllers had.
-        if NativeCoreOptionsStore.padDevice(for: platform) == NativePadDevice.sixButton,
-           let sixButton = ControlLayout.named("genesis6") {
-            return sixButton
-        }
-        // Same idea for PCE's Avenue Pad 6, but through a genuine core
-        // variable rather than a controller-port device change, since
-        // that is what pce_fast_default_joypad_type_p1 actually is.
-        if (platform == .tg16 || platform == .tgCD),
-           NativeCoreOptionsStore.value(NativeCoreOptions.pceJoypad, for: platform) == "6 Buttons",
-           let sixButton = ControlLayout.named("pce6") {
-            return sixButton
-        }
         // A missing layout file already trips forPlatform's assertion in
         // a debug build; a release build draws no pad rather than crash.
         return ControlLayout.forPlatform(slug: canonicalSlug)
@@ -436,12 +420,6 @@ struct NativePlayerView: View {
             // still in flight; syncMemoryCardIn releases it.
             renderer.awaitingSaveRAM = hasMemoryCard
             renderer.shader = NativeShader.current(for: platform)
-            // The game's own translucent screen sheet, Vectrex only;
-            // nil (no sheet, toggle off, or any other platform) draws
-            // nothing and costs nothing. See VectrexOverlays.swift.
-            if platform == .vectrex {
-                renderer.overlayImage = VectrexOverlays.image(md5: rom.md5Hash, name: rom.fsNameNoExt)
-            }
             // Two screens with the hinge break, melonDS only; false
             // leaves every other core's draw path untouched. See
             // DSScreenLayout.swift.
@@ -774,14 +752,6 @@ struct NativePlayerView: View {
         GameControllerManager.companionRumble = { [weak link] port, strong, strength in
             link?.sendRumble(port: port, strong: strong, strength: strength)
         }
-        // Dreamcast alone: mirror player one's VMU LCD to the phone's
-        // controller screen, the display half of the phone-as-VMU
-        // design.
-        if platform == .dreamcast {
-            VMULCDRelay.shared.install { [weak link] packed in
-                link?.sendVMULCD(packed)
-            }
-        }
         // The pairing screen may still be alive underneath this cover
         // with its own listener up; one advertisement at a time.
         NotificationCenter.default.post(name: .cabinetGameLinkStarted, object: nil)
@@ -797,7 +767,6 @@ struct NativePlayerView: View {
         renderer.dsTopOnly = false
         macVideoServer?.stop()
         macVideoServer = nil
-        VMULCDRelay.shared.uninstall()
         GameControllerManager.companionRumble = nil
         macPhoneLink?.stop()
         macPhoneLink = nil

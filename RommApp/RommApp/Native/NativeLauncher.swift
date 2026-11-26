@@ -576,7 +576,8 @@ enum NativeLauncher {
         throw LaunchError.unsupportedFormat("Games can't run in the Simulator. Use a real Apple TV.")
         #endif
         #else
-        LibretroFrontend.shared.activateCore(core.coreID)
+        guard let coreID = core.coreID else { throw LaunchError.noNativeCore }
+        LibretroFrontend.shared.activateCore(coreID)
         LibretroFrontend.shared.setCoreOptions(NativeCoreOptionsStore.dictionary(for: platform))
         let padDevice = NativeCoreOptionsStore.padDevice(for: platform)
         LibretroFrontend.shared.setControllerPortDevice(padDevice, port: 0)

@@ -5,8 +5,8 @@
 // and an undefined macro there evaluates to 0 in silence rather than
 // failing the build.
 #include <TargetConditionals.h>
-// The fourteen per-core static libraries are built for real tvOS/iOS
-// hardware (arm64-apple-tvos), not for a simulator, and rebuilding
+// The per-core static libraries are built for real iOS hardware
+// (arm64-apple-ios), not for a simulator, and rebuilding
 // emulator cores for a simulator target buys nothing: performance there
 // is meaningless and the cores would still be a separate set of
 // artefacts to keep in sync. So a simulator build deliberately carries no
@@ -17,26 +17,11 @@
 // target defines it while no Mac core libraries exist yet, and drops the
 // definition, not this guard, when they land.
 #if !TARGET_OS_SIMULATOR && !CABINET_NO_NATIVE_CORES
-#import "FBNeoCore.h"
-#import "SaturnCore.h"
 #import "GambatteCore.h"
 #import "MGBACore.h"
 #import "GenesisPlusGXCore.h"
-#import "BeetlePCEFastCore.h"
-#import "Snes9xCore.h"
-#import "FCEUmmCore.h"
 #import "BeetleNGPCore.h"
-#import "ProSystemCore.h"
-#import "VecxCore.h"
-#import "Stella2014Core.h"
-#import "OperaCore.h"
-#import "BeetleVBCore.h"
 #import "MelonDSCore.h"
-#import "PicoDriveCore.h"
-#import "PCSXReARMedCore.h"
-#import "N64Core.h"
-#import "FlycastCore.h"
-#import "MAME2003PlusCore.h"
 #import "PPSSPPCore.h"
 #if !TARGET_OS_TV
 #import "GWCore.h"
@@ -96,7 +81,7 @@
 namespace {
 
 const LibretroCoreAPI *gCore = nullptr;
-LibretroCoreID gCoreID = LibretroCoreIDFBNeo;
+LibretroCoreID gCoreID = LibretroCoreIDGambatte;
 // Sized below kMaxPorts's own declaration, near gButtonMask, since both
 // share the same port-count constant; declared here because they're set
 // well before that point in the file and used at loadGame: time.
@@ -524,8 +509,13 @@ static void recordStage(std::atomic<double> &slot, double sample) {
 // them to a state a fresh retro_load_game accepts, which is the ordinary
 // libretro contract, and Flycast's reserved address space is virtual,
 // not committed.
+//
+// Both of those cores left with the systems they played, so every core
+// this app still carries takes the full teardown. The check stays so the
+// teardown paths below run exactly as they did, unchanged.
 static bool coreToleratesDeinit(LibretroCoreID coreID) {
-    return coreID != LibretroCoreIDFBNeo && coreID != LibretroCoreIDFlycast;
+    (void)coreID;
+    return true;
 }
 
 // Completes the hardware-render half of the libretro contract, which this
@@ -1074,28 +1064,11 @@ int16_t inputState(unsigned port, unsigned device, unsigned index, unsigned id) 
             if ((mask >> 23) & 1) return -full;
         }
     }
-    // Dreamcast's real analog stick, a true continuous value from
+    // The left analog stick, a true continuous value from
     // -setAnalogStickX:y:, not a digitized mask bit like every other
     // stick this frontend reads. y is already down-positive, matching
     // libretro's own convention, no flip needed here either.
-    //
-    // FBNeo is deliberately excluded. Its retro_input.cpp has a "fake
-    // analog" fallback that reads this axis even for plain digital
-    // joystick games and ORs the result into the digital directions.
-    // Physical controllers fed this channel unconditionally since the
-    // two-player rework, and at the time with GameController's raw
-    // up-positive y, opposite libretro's convention on this path, so a
-    // Bluetooth pad pushing up registered digital UP and fake-analog
-    // DOWN in the same frame: exactly the "character doesn't go where
-    // the stick points" report on Smash TV,
-    // github.com/MMagTech/cabinet#3, found 2026-08-15. The sign seam
-    // moved into GameControllerManager.stick on 2026-08-29 (pads now
-    // arrive down-positive like the touch stick always did), but this
-    // refusal stays regardless of sign: the fake-analog OR-ing is the
-    // problem, arcade sticks are fully covered by the digital bits, and
-    // FBNeo has no real analog-stick hardware to serve here at all.
-    if (device == RETRO_DEVICE_ANALOG && index == RETRO_DEVICE_INDEX_ANALOG_LEFT
-        && gCoreID != LibretroCoreIDFBNeo) {
+    if (device == RETRO_DEVICE_ANALOG && index == RETRO_DEVICE_INDEX_ANALOG_LEFT) {
         float value = id == RETRO_DEVICE_ID_ANALOG_X ? gAnalogLeftX[port].load(std::memory_order_relaxed)
                     : id == RETRO_DEVICE_ID_ANALOG_Y ? gAnalogLeftY[port].load(std::memory_order_relaxed)
                     : 0.0f;
@@ -1463,44 +1436,14 @@ const LibretroCoreAPI *coreAPI(LibretroCoreID coreID) {
     return nullptr;
 #else
     switch (coreID) {
-        case LibretroCoreIDFBNeo:
-            return FBNeoCoreAPI();
-        case LibretroCoreIDBeetleSaturn:
-            return BeetleSaturnCoreAPI();
         case LibretroCoreIDGambatte:
             return GambatteCoreAPI();
         case LibretroCoreIDMGBA:
             return MGBACoreAPI();
         case LibretroCoreIDGenesisPlusGX:
             return GenesisPlusGXCoreAPI();
-        case LibretroCoreIDBeetlePCEFast:
-            return BeetlePCEFastCoreAPI();
-        case LibretroCoreIDSnes9x:
-            return Snes9xCoreAPI();
-        case LibretroCoreIDFCEUmm:
-            return FCEUmmCoreAPI();
         case LibretroCoreIDBeetleNGP:
             return BeetleNGPCoreAPI();
-        case LibretroCoreIDProSystem:
-            return ProSystemCoreAPI();
-        case LibretroCoreIDPicoDrive:
-            return PicoDriveCoreAPI();
-        case LibretroCoreIDPCSXReARMed:
-            return PCSXReARMedCoreAPI();
-        case LibretroCoreIDMupen64Plus:
-            return N64CoreAPI();
-        case LibretroCoreIDFlycast:
-            return FlycastCoreAPI();
-        case LibretroCoreIDMAME2003Plus:
-            return MAME2003PlusCoreAPI();
-        case LibretroCoreIDVecx:
-            return VecxCoreAPI();
-        case LibretroCoreIDStella2014:
-            return Stella2014CoreAPI();
-        case LibretroCoreIDOpera:
-            return OperaCoreAPI();
-        case LibretroCoreIDBeetleVB:
-            return BeetleVBCoreAPI();
         case LibretroCoreIDMelonDS:
             return MelonDSCoreAPI();
         case LibretroCoreIDPPSSPP:
@@ -1753,8 +1696,8 @@ const LibretroCoreAPI *coreAPI(LibretroCoreID coreID) {
     // null deref destroyHWContextIfNeeded now explains in full. That crash
     // was reachable on the ordinary quit path too and predated the
     // widening, so reverting this was necessary but never sufficient. The
-    // real Dreamcast fix is coreToleratesDeinit plus the first_run patch
-    // in build-flycast.sh; neither needs anything widened here.
+    // real Dreamcast fix was coreToleratesDeinit plus a first_run patch
+    // to Flycast itself; neither needed anything widened here.
     if (gInitialized && gGameLoaded) {
         gCore->unload_game();
         gGameLoaded = false;
@@ -1857,23 +1800,6 @@ const LibretroCoreAPI *coreAPI(LibretroCoreID coreID) {
         if (gPortDeviceSet[p] && gPortDevice[p] != 0) {
             gCore->set_controller_port_device((unsigned)p, gPortDevice[p]);
         }
-    }
-
-    // Flycast only: its own retro_set_controller_port_device (see
-    // shell/libretro/libretro.cpp) waits on first run for every one of
-    // the four Maple ports to be explicitly set before it will do
-    // anything else, expansion slot setup (where the VMU lives)
-    // included. Port 1 now carries a real second player when the loop
-    // above set it, so only ports 2-3 (which this app never drives) get
-    // explicitly told RETRO_DEVICE_NONE to satisfy the gate; leaving
-    // port 1 alone here is what stops this from stepping on the second
-    // controller's own port-device call.
-    if (gCoreID == LibretroCoreIDFlycast) {
-        if (!gPortDeviceSet[1]) {
-            gCore->set_controller_port_device(1, 0);
-        }
-        gCore->set_controller_port_device(2, 0);
-        gCore->set_controller_port_device(3, 0);
     }
 
     struct retro_system_av_info avInfo = {};
@@ -2111,7 +2037,7 @@ static void cabinetInputTrace(void) {
     // the core's audio output is ahead of the wall clock, exactly the
     // Flycast arrangement. 60fps PSP games are at 1.0x already and the
     // governor never engages for them.
-    return gCoreID == LibretroCoreIDFlycast || gCoreID == LibretroCoreIDPPSSPP;
+    return gCoreID == LibretroCoreIDPPSSPP;
 }
 
 - (double)debugCoreRunMS {

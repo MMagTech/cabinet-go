@@ -189,10 +189,9 @@ struct SearchScreen: View {
         // to spare; a kept game either matches the text or it does not,
         // the same honest "no results" screen a real search with
         // nothing found already shows, not OfflineNotice, which implies
-        // a retry would help when nothing here needs one. Only
-        // native-capable kept games, the rule used everywhere else
-        // tonight: a webview-only kept game's player still needs the
-        // server, so surfacing it here would set up a tap that fails.
+        // a retry would help when nothing here needs one. Only kept
+        // games this phone plays: surfacing another would set up a tap
+        // that fails.
         guard !networkMonitor.isOffline else {
             results = keptStore.games
                 .filter { NativeCore.core(bySlug: $0.resolvedCanonicalSlug, isArcade: $0.rom.isArcade) != nil }

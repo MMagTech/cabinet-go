@@ -39,32 +39,22 @@ enum NativeCore {
     /// VMULauncher, never through NativeLauncher.prepare.
     case vemulator
 
-    /// The frontend's identifier for the statically linked core.
-    var coreID: LibretroCoreID {
+    /// The frontend's identifier for the statically linked core. Nil for
+    /// a core whose systems left the phone: the case stays for the save
+    /// tag and file names its games' rows on RomM already carry, but the
+    /// core itself is no longer in the app.
+    var coreID: LibretroCoreID? {
         switch self {
-        case .fbneo: return .fbneo
-        case .beetleSaturn: return .beetleSaturn
         case .gambatte: return .gambatte
         case .mgba: return .mgba
         case .genesisPlusGX: return .genesisPlusGX
-        case .beetlePCEFast: return .beetlePCEFast
-        case .snes9x: return .snes9x
-        case .fceumm: return .fceumm
         case .beetleNGP: return .beetleNGP
-        case .prosystem: return .prosystem
-        case .picoDrive: return .picoDrive
-        case .pcsxReARMed: return .pcsxReARMed
-        case .flycast: return .flycast
-        case .mupen64Plus: return .mupen64Plus
-        case .mame2003Plus: return .mame2003Plus
-        case .vecx: return .vecx
-        case .stella2014: return .stella2014
-        case .opera: return .opera
-        case .beetleVB: return .beetleVB
         case .melonDS: return .melonDS
         case .ppsspp: return .ppsspp
         case .gw: return .gw
         case .vemulator: return .vemulator
+        case .fbneo, .beetleSaturn, .beetlePCEFast, .snes9x, .fceumm, .prosystem, .picoDrive, .pcsxReARMed, .flycast, .mupen64Plus, .mame2003Plus, .vecx, .stella2014, .opera, .beetleVB:
+            return nil
         }
     }
 
@@ -178,14 +168,10 @@ enum NativeCore {
     /// for why matching against the raw metadata slug is wrong.
     static func core(for rom: Rom, canonicalSlug: String) -> NativeCore? {
         guard let platform = NativePlatform.platform(for: rom, canonicalSlug: canonicalSlug) else { return nil }
-        // The experimental gate. Nil here is exactly the state these
-        // platforms had before their cores graduated, so every caller,
-        // the launch screen's picker, Home's resume, keep offers, the
-        // offline library, falls back to its pre-graduation behavior
-        // without knowing the gate exists. Deliberately not applied to
-        // NativePlatform.platform() lookups: bookkeeping for already
-        // kept files must keep resolving while availability is off.
-        guard !platform.isExperimental || ExperimentalCores.enabled else { return nil }
+        // Only the systems this phone plays have a core in it. The other
+        // platforms stay known (`NativePlatform`) for the saves their
+        // games already have, but nothing can start them.
+        guard PlatformSupport.handheldPlatforms.contains(platform) else { return nil }
         return platform.core
     }
 
@@ -194,7 +180,7 @@ enum NativeCore {
     static func core(bySlug slug: String, isArcade: Bool) -> NativeCore? {
         guard let platform = NativePlatform.platform(bySlug: slug, isArcade: isArcade) else { return nil }
         // Same gate as above, same reasoning.
-        guard !platform.isExperimental || ExperimentalCores.enabled else { return nil }
+        guard PlatformSupport.handheldPlatforms.contains(platform) else { return nil }
         return platform.core
     }
 }

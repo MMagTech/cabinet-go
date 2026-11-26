@@ -2,13 +2,12 @@
 # Builds RommApp/RommApp/Native/PPSSPP/libppsspp_$PLATFORM.a from the
 # upstream PPSSPP sources. Usage: build-ppsspp.sh [ios|tvos]
 #
-# Same shape of output as build-flycast.sh: a single merged relocatable
+# Same shape of output as build-core.sh: a single merged relocatable
 # object whose only exported symbols are psp_retro_* forwarders
 # (psp_wrapper.c), so PPSSPP's own retro_* names, its vendored
 # libraries and its prebuilt ffmpeg cannot collide with any other
-# core's. See build-beetle-saturn.sh's header for why the renaming has
-# to happen in C: Apple's toolchain ships no object-file symbol
-# renamer.
+# core's. The renaming happens in C because Apple's toolchain ships no
+# object-file symbol renamer.
 #
 # PPSSPP builds with CMake and ships its own iOS toolchain file, which
 # also knows tvOS (IOS_PLATFORM=TVOS): it sets USING_GLES2 and

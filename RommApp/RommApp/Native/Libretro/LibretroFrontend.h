@@ -21,53 +21,10 @@ typedef NS_ENUM(uint32_t, LibretroPixelFormat) {
 // time by design: libretro callbacks are process-global, cores are not
 // re-entrant, and the app never runs two games at once.
 typedef NS_ENUM(NSInteger, LibretroCoreID) {
-    LibretroCoreIDFBNeo NS_SWIFT_NAME(fbneo) = 0,
-    LibretroCoreIDBeetleSaturn NS_SWIFT_NAME(beetleSaturn) = 1,
     LibretroCoreIDGambatte NS_SWIFT_NAME(gambatte) = 2,
     LibretroCoreIDMGBA NS_SWIFT_NAME(mgba) = 3,
     LibretroCoreIDGenesisPlusGX NS_SWIFT_NAME(genesisPlusGX) = 4,
-    LibretroCoreIDBeetlePCEFast NS_SWIFT_NAME(beetlePCEFast) = 5,
-    LibretroCoreIDSnes9x NS_SWIFT_NAME(snes9x) = 6,
-    LibretroCoreIDFCEUmm NS_SWIFT_NAME(fceumm) = 7,
     LibretroCoreIDBeetleNGP NS_SWIFT_NAME(beetleNGP) = 8,
-    LibretroCoreIDProSystem NS_SWIFT_NAME(prosystem) = 9,
-    LibretroCoreIDPicoDrive NS_SWIFT_NAME(picoDrive) = 10,
-    LibretroCoreIDPCSXReARMed NS_SWIFT_NAME(pcsxReARMed) = 11,
-    // Interpreter-only SH4 (no dynarec, same no-JIT exception as
-    // Saturn/PS1), hardware-rendered through a real GLES3 context since
-    // Flycast has no software renderer. Passed its go/no-go 2026-08-10
-    // and is wired into NativePlatform as of the same week.
-    LibretroCoreIDFlycast NS_SWIFT_NAME(flycast) = 12,
-    // Interpreter-only R4300 (mupen64plus-cpucore core option forced to
-    // pure_interpreter, no dynarec, same no-JIT exception as Flycast),
-    // hardware-rendered through a real GLES3 context via GLideN64, this
-    // core's own default RDP plugin already, forced explicitly rather
-    // than trusted. Passed its go/no-go 2026-08-11 and is wired into
-    // NativePlatform as of the same week.
-    LibretroCoreIDMupen64Plus NS_SWIFT_NAME(mupen64Plus) = 13,
-    // Cabinet's second arcade core, for the early-80s boards FinalBurn
-    // Neo does not cover: dials, spinners, trackballs, paddles, guns.
-    // Pure software rendering, no JIT, interpreter-era MAME (0.78+).
-    // docs/mame-core-comparison-2026-08-21.md records why this version.
-    LibretroCoreIDMAME2003Plus NS_SWIFT_NAME(mame2003Plus) = 14,
-    // Software vector renderer (HAS_GPU=0 at build time; the core's GLES2
-    // hardware path is never compiled in). Vectrex BIOS ships inside the
-    // core itself, so this is the one console core with no firmware story
-    // at all.
-    LibretroCoreIDVecx NS_SWIFT_NAME(vecx) = 15,
-    // The 2014 snapshot of Stella, libretro's light interpreter build of
-    // it, the same weight-class choice ProSystem was for the 7800.
-    LibretroCoreIDStella2014 NS_SWIFT_NAME(stella2014) = 16,
-    // Interpreter-only ARM60 (the core has no dynarec at all), software
-    // rendered, so it needs neither the JIT exception nor a GL context.
-    // The heaviest interpreter here after the CD consoles; its device
-    // runs are a go/no-go the way PS1's were, not a formality.
-    LibretroCoreIDOpera NS_SWIFT_NAME(opera) = 17,
-    // Virtual Boy. Interpreter V810, software rendered. Its display was
-    // stereoscopic red monochrome, which no flat screen reproduces; the
-    // core's own colour and anaglyph options are exposed as settings
-    // rather than chosen here.
-    LibretroCoreIDBeetleVB NS_SWIFT_NAME(beetleVB) = 18,
     // Nintendo DS. The libretro melonDS fork, interpreter-only on both
     // Apple platforms (its ios-arm64/tvos-arm64 builds set no JIT_ARCH),
     // software rendered with the core's own threaded-3D rasterizer
@@ -339,9 +296,9 @@ typedef NS_ENUM(NSInteger, LibretroCoreID) {
 // -saveRAM.
 - (nullable NSData *)memoryRegion:(unsigned)regionId;
 
-// Debug-only: the hardware-render pipeline's own state, for cores like
-// Flycast that have no software renderer to fall back on. nil for every
-// other core, which never sets it. See LibretroCoreIDFlycast.
+// Debug-only: the hardware-render pipeline's own state, for a
+// hardware-rendered core (PPSSPP). nil for every other core, which never
+// sets it.
 - (nullable NSString *)hwRenderDiagnostics;
 
 // Debug-only per-stage timings for one emulated frame, milliseconds,

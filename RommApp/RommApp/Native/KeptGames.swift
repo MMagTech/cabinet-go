@@ -354,10 +354,8 @@ final class KeptGameStore: ObservableObject {
     /// the library both, so the two can never draw a different picture
     /// of the same underlying data (Marcus, 2026-08-07: Home's offline
     /// view "should essentially just be what the current library looks
-    /// like"). Webview-only kept games are excluded, the rule used
-    /// everywhere else tonight: their player still needs the server, so
-    /// listing them would set up a tap that fails regardless of what is
-    /// actually stored. A `Platform` built straight from the kept rom's
+    /// like"). Kept games this phone cannot play are excluded: listing
+    /// them would set up a tap that fails regardless of what is stored. A `Platform` built straight from the kept rom's
     /// own embedded fields, not fetched: the count is how many are
     /// kept, not the server's full catalog size, which would mean
     /// nothing without a connection to trust it.
@@ -550,7 +548,11 @@ final class KeptGameStore: ObservableObject {
     func syncPendingStates(session: Session) async -> Int {
         var uploaded = 0
         for game in games {
-            guard let core = NativeCore.core(bySlug: game.resolvedCanonicalSlug, isArcade: game.rom.isArcade) else { continue }
+            // The platform's own core, not `NativeCore.core(bySlug:)`: a
+            // state made on a system the phone no longer plays is still
+            // owed to RomM, under the tag its core always used.
+            guard let core = NativePlatform.platform(bySlug: game.resolvedCanonicalSlug, isArcade: game.rom.isArcade)?.core
+            else { continue }
             for pending in pendingStates(for: game.romId) {
                 guard let stateData = try? Data(contentsOf: pending.stateURL) else { continue }
                 let screenshotData = pending.screenshotURL.flatMap { try? Data(contentsOf: $0) }

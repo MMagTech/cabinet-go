@@ -385,26 +385,6 @@ struct GameLaunchView: View {
         PlatformSupport.isSupported(canonicalSlug: canonicalSlug, isArcade: rom.isArcade)
     }
 
-    /// A platform this device could play but is not offering: behind the
-    /// experimental switch, switch off, and with no webview core to fall
-    /// back to (Dreamcast; N64 has a webview core and simply plays
-    /// there). Distinguished from plain unsupported so the screen can
-    /// name the one-sentence fix instead of shrugging.
-    private var gatedExperimental: Bool {
-        guard !isPlatformSupported,
-              let platform = NativePlatform.platform(for: rom, canonicalSlug: canonicalSlug)
-        else { return false }
-        return platform.isExperimental && !ExperimentalCores.enabled
-    }
-
-    private var experimentalCard: some View {
-        LaunchCard(title: "Experimental", systemImage: "testtube.2") {
-            Text("Speed varies by game on this platform. Turn on Experimental cores in Settings to play it.")
-                .font(.caption)
-                .foregroundStyle(.secondary)
-        }
-    }
-
     /// One visible action, no exceptions: a game with the keep toggle
     /// shows no export button at all. The kept files, firmware included,
     /// are all in the Files app's Games folder, so there is nothing left
@@ -787,17 +767,15 @@ struct GameLaunchView: View {
                 spacing: 12
             ) {
                 if isComputerPlatform { computerPlatformCard }
-                if gatedExperimental { experimentalCard }
                 downloadStatusCard
-                // Deliberately NOT hidden while gated, unlike the BIOS
-                // picker and resume list: unsupported platforms have
-                // always left a way to the file so it can be played in
-                // another emulator, and Keep is that way here, the game
-                // and its BIOS land in the Files app's Games folder.
+                // Unsupported platforms have always left a way to the
+                // file so it can be played in another emulator, and Keep
+                // is that way here: the game and its BIOS land in the
+                // Files app's Games folder.
                 if showsKeepCard { keepCard }
                 vmuCard
                 resetSettingsCard
-                if !gatedExperimental, !states.isEmpty || !saves.isEmpty { resumeCard }
+                if !states.isEmpty || !saves.isEmpty { resumeCard }
             }
         }
     }
@@ -813,17 +791,15 @@ struct GameLaunchView: View {
         } else {
             VStack(spacing: 14) {
                 if isComputerPlatform { computerPlatformCard }
-                if gatedExperimental { experimentalCard }
                 downloadStatusCard
-                // Deliberately NOT hidden while gated, unlike the BIOS
-                // picker and resume list: unsupported platforms have
-                // always left a way to the file so it can be played in
-                // another emulator, and Keep is that way here, the game
-                // and its BIOS land in the Files app's Games folder.
+                // Unsupported platforms have always left a way to the
+                // file so it can be played in another emulator, and Keep
+                // is that way here: the game and its BIOS land in the
+                // Files app's Games folder.
                 if showsKeepCard { keepCard }
                 vmuCard
                 resetSettingsCard
-                if !gatedExperimental, !states.isEmpty || !saves.isEmpty { resumeCard }
+                if !states.isEmpty || !saves.isEmpty { resumeCard }
             }
         }
     }
