@@ -1,4 +1,3 @@
-#if os(iOS)
 import CoreMotion
 import UIKit
 
@@ -11,13 +10,7 @@ import UIKit
 /// core in this app that asks for any of it, and it asks through
 /// libretro's sensor interface, which `LibretroFrontend` now answers.
 ///
-/// iOS only, and that is a decision rather than an omission. Apple
-/// removed the motion sensors from the Siri Remote in the 2021
-/// redesign, so on tvOS this would work or not depending on which
-/// controller happened to be in someone's hand, which is the kind of
-/// conditional feature that only generates confused bug reports. A
-/// phone, meanwhile, is better hardware for this than the cartridge
-/// ever was.
+/// A phone is better hardware for this than the cartridge ever was.
 @MainActor
 final class MotionSensor {
     static let shared = MotionSensor()
@@ -114,4 +107,3 @@ final class MotionSensor {
         LibretroFrontend.shared.setRotationRateZ(Float(motion.rotationRate.z))
     }
 }
-#endif

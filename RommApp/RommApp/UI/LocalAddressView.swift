@@ -6,9 +6,6 @@ import SwiftUI
 /// The address is typed, not discovered. Real discovery would mean RomM
 /// advertising itself over Bonjour, which is the server's decision to make,
 /// not something a client can add on its own.
-///
-/// iOS only today. tvOS compiles the routing underneath this screen and
-/// behaves exactly as before while no local address is set there.
 struct LocalAddressView: View {
     @EnvironmentObject private var session: Session
     @Environment(\.dismiss) private var dismiss

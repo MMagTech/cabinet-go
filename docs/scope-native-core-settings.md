@@ -6,9 +6,9 @@ each section below. The shader list shrank from nine to six on sight
 above Resume, the default is labelled plain "None", and FBNeo's
 options ship with source-exact values after guessed ones broke games.
 
-Originally: proposed, not started. Decided ahead of the next native core, per
-Marcus's call on 2026-08-06: get this settled once rather than retrofit it
-onto a third core later.
+Originally: proposed, not started. Decided ahead of the next native core on
+2026-08-06: get this settled once rather than retrofit it onto a third core
+later.
 
 ## Why
 
@@ -107,7 +107,7 @@ top of the per-game Player/Core/Firmware pickers that already exist.
 
 Correction, 2026-08-07, from looking at the real Metal ports on device:
 six shipped, not ten. Both ScaleHQ scalers and crt-geom looked bad
-enough that Marcus dropped them on sight. What remains: None (the
+enough that they were dropped on sight. What remains: None (the
 default, the untouched passthrough), SABR, and the aperture, easymode,
 mattias, beam and caligari CRT variants. The paragraph below records
 the original selection reasoning for what the list was drawn from.

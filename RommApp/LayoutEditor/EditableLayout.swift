@@ -24,9 +24,6 @@ struct EditableLayout {
     /// to portrait items in that case, which works but looks wrong, so the
     /// editor says so rather than quietly editing the portrait set twice.
     var landscapeItems: [EditableItem]?
-    /// The controller-only arrangement: landscape with no picture, for
-    /// a phone driving a television. See ControlLayout.companionItems.
-    var companionItems: [EditableItem]?
 
     func items(landscape: Bool) -> [EditableItem] {
         guard landscape, let wide = landscapeItems, !wide.isEmpty else { return items }
@@ -43,7 +40,6 @@ struct EditableItem: Identifiable {
     var frame: EditRect
     var extended: EditRect
     var fourWay: Bool?
-    var sensitivity: Double? = nil
 
     /// What the pad draws for this item. Built through `ControlLayout.Item`'s
     /// own initialiser so the editor can never render something the player
@@ -51,8 +47,7 @@ struct EditableItem: Identifiable {
     var rendered: ControlLayout.Item {
         ControlLayout.Item(
             kind: kind, label: label, input: input, inputs: inputs,
-            frame: frame.rendered, extended: extended.rendered, fourWay: fourWay,
-            sensitivity: sensitivity
+            frame: frame.rendered, extended: extended.rendered, fourWay: fourWay
         )
     }
 
@@ -156,8 +151,7 @@ extension EditableLayout {
             ergonomics: root["_ergonomics"] as? String,
             headroom: root["_headroom"] as? Double,
             items: decodeItems(root["items"]) ?? [],
-            landscapeItems: decodeItems(root["landscapeItems"]),
-            companionItems: decodeItems(root["companionItems"])
+            landscapeItems: decodeItems(root["landscapeItems"])
         )
     }
 
@@ -176,8 +170,7 @@ extension EditableLayout {
                 inputs: entry["inputs"] as? [Int],
                 frame: frame,
                 extended: extended,
-                fourWay: entry["fourWay"] as? Bool,
-                sensitivity: entry["sensitivity"] as? Double
+                fourWay: entry["fourWay"] as? Bool
             )
         }
     }
@@ -216,9 +209,6 @@ extension EditableLayout {
         if let landscapeItems {
             out += ",\n \"landscapeItems\": \(Self.emit(landscapeItems, indent: 1))"
         }
-        if let companionItems {
-            out += ",\n \"companionItems\": \(Self.emit(companionItems, indent: 1))"
-        }
         out += "\n}\n"
         return out
     }
@@ -239,7 +229,6 @@ extension EditableLayout {
             lines.append("\(field)\"frame\": \(rect(item.frame))")
             lines.append("\(field)\"extended\": \(rect(item.extended))")
             if let fourWay = item.fourWay { lines.append("\(field)\"fourWay\": \(fourWay)") }
-            if let sensitivity = item.sensitivity { lines.append("\(field)\"sensitivity\": \(sensitivity)") }
             return "\(inner){\n" + lines.joined(separator: ",\n") + "\n\(inner)}"
         }.joined(separator: ",\n")
         out += "\n\(pad)]"
@@ -331,12 +320,11 @@ enum WorkingCopy {
     /// it merely displayed, so one browsing session left ~50 snapshots
     /// shadowing every newer bundled layout. The per-screen banner heals
     /// them one visit at a time, which was the wrong cure for a backlog:
-    /// Marcus kept opening screens and seeing stale work, on the day the
-    /// whole arcade set changed underneath them. "Say it with me: editor
-    /// first."
+    /// screen after screen opened on stale work, on the day the whole
+    /// arcade set changed underneath them.
     ///
-    /// Green working copies are untouched, always: green is his mark and
-    /// outranks everything here. Copies whose layout no longer ships at
+    /// Green working copies are untouched, always: green marks a layout
+    /// as finished by hand and outranks everything here. Copies whose layout no longer ships at
     /// all (twin5 and friends, deleted upstream) are ghosts and go
     /// unconditionally. The rest of the sweep runs ONCE, keyed in
     /// defaults, because as a standing rule it would eat genuine

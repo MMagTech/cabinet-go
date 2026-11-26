@@ -1,15 +1,15 @@
 #!/usr/bin/env python3
-"""Puts Menu where Marcus has repeatedly said it goes.
+"""Puts Menu where the layouts have repeatedly been asked to put it.
 
-The rule, which fits every instruction he has given and needed all of
-them to see: Menu takes the LEFT CORNER, because it is the one control
+The rule, which fits every instruction given and needed all of them to
+see: Menu takes the LEFT CORNER, because it is the one control
 that is not part of the game and should sit in the same place on every
 machine. The single exception is a layout whose corners are already
 owned by shoulder buttons, where L and R have a stronger claim to the
 corner than Menu does; there, and only there, Menu takes the centre.
 
 That is why "always centred" and "always left" both kept producing
-something he had to correct. Neither is the rule. The corner is.
+something that had to be corrected. Neither is the rule. The corner is.
 
 A lone Menu with nothing to balance against is left alone.
 """

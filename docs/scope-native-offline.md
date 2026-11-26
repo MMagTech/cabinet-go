@@ -59,7 +59,7 @@ earlier ones are useful without the later ones.
   the phone only slows things down. States stay internal, never linked
   into the Files mirror: RomM's own library has no states folder, and a
   state blob is core-format-specific, no use to another app the way a
-  ROM is. Confirmed with Marcus before building.
+  ROM is. Confirmed before building.
 - Reached at length before any of this was built: a state cached at
   keep time and refreshed opportunistically whenever there is a
   connection is the right shape, not a queue, because Cabinet already
@@ -95,7 +95,7 @@ earlier ones are useful without the later ones.
   `KeptGameStore.syncPendingStates` is safe to call often: a file that
   uploads successfully leaves the queue, one that fails stays for the
   next attempt.
-- Upload is automatic and app-wide, per Marcus: `RommApp` observes
+- Upload is automatic and app-wide: `RommApp` observes
   `NetworkMonitor` directly and syncs on foreground, on the connection
   itself changing, or the manual toggle turning off, not only when the
   specific game's screen happens to be revisited.
@@ -107,8 +107,8 @@ earlier ones are useful without the later ones.
   prefers the newest local save when offline instead of failing.
 - Visibility: a terse "N saves waiting to upload" appears on the
   game's own Storage card and in the Storage settings list once
-  something is queued (Marcus: saves are important enough to warrant
-  this, not fully silent).
+  something is queued (saves are important enough to warrant this, not
+  fully silent).
 - Wording settled after a direct correction: the pause menu's offline
   save status is "Waiting for signal to upload.", not a longer
   "Saved on this iPhone, uploads once you're back online" draft,
@@ -120,16 +120,16 @@ earlier ones are useful without the later ones.
 
 Phase 2 shipped checking connectivity at specific moments, screen open,
 a boot stall. Nothing watched it continuously, so a screen already on
-screen had no way to react to a change; Marcus caught this directly
-("I have to exit it and then reenter to see offline view"). Built and
+screen had no way to react to a change, caught directly when the offline
+view only appeared after leaving a screen and coming back. Built and
 shipped 2026-08-07, same session:
 
 - `NetworkMonitor` became a `@MainActor ObservableObject` with
   `@Published isConnected`, not an actor with a polled property. Home
   and Library both observe it and re-run their own existing load
   functions the instant it changes, live.
-- A second, separate signal: a manual Offline Mode toggle (Marcus's
-  idea, the Low Data Mode shape, not a signal-loss fallback: forcing
+- A second, separate signal: a manual Offline Mode toggle (the Low Data
+  Mode shape, not a signal-loss fallback: forcing
   the app to act offline on purpose, roaming, a capped hotspot, or just
   not wanting a download to fire on signal you don't trust). Real
   suppression, not cosmetic, load functions check it before touching
@@ -154,8 +154,8 @@ shipped 2026-08-07, same session:
   case bypass that gate outright.
 - Library's biggest gap: it went completely dark behind `OfflineNotice`
   the moment either kind of offline was true, discarding kept games
-  entirely rather than surfacing them (Marcus: "Offline should show
-  platforms that have games downloaded for them"). `RomListView` gained
+  entirely rather than surfacing them, when offline should show the
+  platforms that have games downloaded for them. `RomListView` gained
   a `keptPlatform` source, roms assigned directly with no fetch, so
   Library now groups kept, native-capable games by platform and routes
   into the exact same grid/list screen live browsing already uses,
@@ -170,8 +170,8 @@ shipped 2026-08-07, same session:
   caught.
 - Consolidated same day: Home's offline list and the library's were two
   separately maintained copies of the identical grouping the moment
-  both existed, and Marcus caught it comparing them directly ("why
-  would the two need to exist... we just need a home"). `OfflineLibraryView`
+  both existed, caught by comparing them directly: there was no reason
+  for two, only for one home. `OfflineLibraryView`
   is now the one place this is drawn, platform grouping, label
   formatting, the `OfflineNotice` fallback, all of it; Home and Library
   each just show it with their own retry action.
@@ -182,7 +182,7 @@ shipped 2026-08-07, same session:
   game by name across everything kept is not redundant with Home's
   platform list the way Library's content was, so it was fixed instead
   of dropped, scoped to kept games with the same real-suppression rule
-  as everywhere else (Marcus caught it still leaking live server
+  as everywhere else (it was caught still leaking live server
   results).
 - The game launch screen itself was the last gap: it let the web player
   be selected and "launch" offline, which could only stall, since
@@ -191,9 +191,9 @@ shipped 2026-08-07, same session:
   Saturn, no picker where there is no real choice, backend forced to
   native, live if the toggle flips mid-view. Separately, the Storage
   toggle's remove action is a real, permanent-until-signal-returns
-  deletion, an easy accidental tap on a screen with no undo (Marcus:
-  "I can't think of a situation... they can go to files instead of
-  accidentally triggering in UI"); it disappears entirely once a game
+  deletion, an easy accidental tap on a screen with no undo, and no
+  situation needs it there when Files can do it deliberately; it
+  disappears entirely once a game
   is both kept and offline, informational caption unchanged, Files
   staying the deliberate path for that action. A not-yet-kept game's
   toggle stays visible but disabled offline, greyed rather than hidden,
@@ -208,8 +208,8 @@ shipped 2026-08-07, same session:
   to work offline and never will be; see the why above.
 - Kept ROMs are excluded from iOS backup. RomM is the source of truth
   and every kept file is re-downloadable from it; backing them up would
-  bloat iCloud backups to protect data that is not at risk. Confirmed by
-  Marcus 2026-08-07. No user-facing setting for this: a toggle whose
+  bloat iCloud backups to protect data that is not at risk. Confirmed
+  2026-08-07. No user-facing setting for this: a toggle whose
   tradeoff needs two paragraphs to explain mostly generates support
   questions, and it can be added later without migration pain if anyone
   actually asks, since it is a per-file flag flip either way.
@@ -222,7 +222,7 @@ shipped 2026-08-07, same session:
   few megabytes of download would couple the native offline path to the
   webview machinery it exists to escape. The reverse directions are
   different and do ship, and together they became the unified storage
-  model (Marcus, 2026-08-07, "why isn't there just one copy?"): the kept
+  model (2026-08-07, one copy rather than several): the kept
   store is the single source of truth, and everything else references
   it. The native player boots from it directly. The web player's cache
   is seeded from it at keep time, locally through the existing bridge,
@@ -241,14 +241,14 @@ shipped 2026-08-07, same session:
   un-kept and re-kept; the web player just downloads organically that
   once and re-caches itself. Phase 2 may revisit.
 - Kept games are visible in the Files app under On My iPhone, Cabinet,
-  shipped 2026-08-07 after Marcus made the case that the file someone
-  kept is theirs to copy wherever they want without a per-game Export
-  ceremony. The layout mirrors his server's actual library structure,
+  shipped 2026-08-07 on the case that the file someone kept is theirs
+  to copy wherever they want without a per-game Export ceremony. The
+  layout mirrors the reference server's actual library structure,
   system folder first: <platform folder>/roms/<server filename> and
   <platform folder>/bios/<firmware filename>. RomM supports two
-  structures and the first cut assumed the other one blind, which he
+  structures and the first cut assumed the other one blind, which was
   caught; the app cannot ask the server which structure it uses, so
-  this matches his instance and stays until that matters for someone
+  this matches that instance and stays until that matters for someone
   else. Server filenames keep name collisions impossible, the server's
   directories already guarantee uniqueness. Implementation is a hard-link mirror: same physical bytes
   as the store, zero extra space. The private store under Application
@@ -269,8 +269,8 @@ shipped 2026-08-07, same session:
   visible action, the storage toggle. Unsupported games caption it
   with nothing but the size: the library labels them unsupported, the
   platform name is on the screen, and the folder in Files says the
-  rest. Marcus held the line on one-visible-action through three of
-  my hedges and was right every time.
+  rest. One visible action held through three rounds of hedging, and
+  was right every time.
 - Save states remain per-core, per the state-format finding in the
   native player work: an offline save from the native player syncs up
   tagged fbneo-native, same as an online one.

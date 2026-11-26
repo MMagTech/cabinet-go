@@ -3,7 +3,7 @@
 //  the Dynamic Island and on the Lock Screen. Nothing else crosses that
 //  boundary: a platform's name and three numbers.
 
-#if canImport(ActivityKit) && !targetEnvironment(macCatalyst)
+#if canImport(ActivityKit)
 import ActivityKit
 
 struct DownloadActivityAttributes: ActivityAttributes {

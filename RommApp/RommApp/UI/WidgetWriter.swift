@@ -1,12 +1,10 @@
-#if os(iOS)
 import SwiftUI
 import UIKit
 import WidgetKit
 
 /// Keeps the home screen widget's data current.
 ///
-/// The same shape as the Apple TV's top shelf writer and for the same
-/// reason: the thing that draws cannot fetch, so the app has to leave it
+/// The thing that draws cannot fetch, so the app has to leave it
 /// something to draw. Recents come from the account rather than the
 /// device, so there is no local list to read; the app has to ask the
 /// server while it can and write the answer down.
@@ -159,7 +157,7 @@ enum WidgetWriter {
     ) async -> String? {
         // The large cover, not the small: the small one is sized for a
         // grid thumbnail and the widget's hero drew it blown up and soft
-        // (Marcus, 2026-09-03). Scaled down to a ceiling the widget can
+        // (2026-09-03). Scaled down to a ceiling the widget can
         // afford in memory, and written as JPEG so three of them stay
         // small in the shared container.
         guard let path = rom.pathCoverLarge ?? rom.pathCoverSmall else { return nil }
@@ -206,4 +204,3 @@ enum WidgetWriter {
         WidgetCenter.shared.reloadAllTimelines()
     }
 }
-#endif

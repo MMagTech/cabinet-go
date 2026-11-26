@@ -1,4 +1,3 @@
-#if os(iOS)
 import CoreSpotlight
 import UIKit
 
@@ -128,4 +127,3 @@ enum SpotlightIndexer {
         return items
     }
 }
-#endif

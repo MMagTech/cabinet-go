@@ -30,7 +30,6 @@ usage: tools/lab/lab <command> [args]
                       stations: wiring controls
   bench <args>        measure a core headless (see bench/README or -h)
   core <name>         bring-up status for one core, as a checklist
-  device <args>       drivers that need a real device attached
   stations            list what exists and what each one covers
 
 Exit code is nonzero if any assertion failed. Measuring never fails.
@@ -113,11 +112,6 @@ bench)
     ;;
 core)
     exec sh "$LAB/core-status.sh" "$@"
-    ;;
-device)
-    echo "device drivers live in tools/lab/bench/*.sh and need hardware attached" >&2
-    ls "$LAB"/bench/*.sh | sed 's|.*/|  |' >&2
-    exit 2
     ;;
 stations)
     cat <<'LIST'

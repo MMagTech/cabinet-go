@@ -2,11 +2,6 @@ import SwiftUI
 import MetalKit
 import AVFoundation
 
-// MetalGameView and NativePlayerRenderer live in their own file, shared
-// between iOS's real player (NativePlayerView) and tvOS's PS1PlayTestView,
-// rather than duplicated for tvOS: nothing in this pipeline (Metal,
-// AVFoundation, the UIKit types it touches) is iOS-only.
-
 struct MetalGameView: UIViewRepresentable {
     let renderer: NativePlayerRenderer
     /// The letterbox color. Black for every game screen, which is the
@@ -120,12 +115,6 @@ final class NativePlayerRenderer: NSObject, ObservableObject, MTKViewDelegate {
             ? min(1, dsSplitProgress + step)
             : max(0, dsSplitProgress - step)
     }
-    /// Hands each finished DS frame's bottom half to the video
-    /// encoder, bytes exactly as the core rendered them (BGRA rows).
-    /// Nil for everyone and everything except a DS game with a phone
-    /// connected; the check costs a nil test per frame.
-    var dsBottomFrameTap: ((Data, Int) -> Void)?
-
     /// The active shader, set by the pause menu's Shader row. The next
     /// `draw(in:)` picks it up immediately, which is what re-renders the
     /// frozen frame live behind the still-open menu. Published so the
@@ -155,28 +144,23 @@ final class NativePlayerRenderer: NSObject, ObservableObject, MTKViewDelegate {
     /// already applied, 0 until the first frame has been fitted. This is
     /// the same value `aspectFitVertices` fits the picture with, published
     /// so a view layered over the Metal surface can reproduce the fitted
-    /// rect in SwiftUI coordinates (tvOS's letterbox glow today; an iOS
-    /// HDMI-out treatment would need exactly this too).
+    /// rect in SwiftUI coordinates: the Game & Watch artwork map reads it
+    /// to find the buttons drawn on the picture.
     @Published private(set) var displayAspect: Double = 0
     private var worstFrameDelta: CFTimeInterval = 0
     private var lastDrawTime: CFTimeInterval = 0
 
-    /// Temporary instrumentation for issue #6: the time the Metal upload
-    /// took on this draw, milliseconds. The other three stages are timed
-    /// inside `LibretroFrontend` where they happen. See `FrameTrace`.
-    private var uploadMS: Double = 0
-
     /// Held RetroPad ids, merged from the touch overlay and any connected
     /// game controller. Both already speak the same id space (see
     /// ControllerBindings.swift's RetroPad constants), so merging is just
-    /// a union; FBNeo only needs "is this id down right now" each frame.
+    /// a union; a core only needs "is this id down right now" each frame.
     private var heldButtons: [Set<Int>] = [[], []]
 
     func setButton(_ id: Int, down: Bool, port: Int) {
         guard heldButtons.indices.contains(port) else { return }
-        // 0...13 is the standard joypad; 20...23 is the twin-stick second
-        // joystick's four directions (see GameControllerManager.stick2),
-        // which LibretroFrontend answers
+        // 0...13 is the standard joypad; 20...23 is the pad's right
+        // stick, digitized into four directions (see
+        // GameControllerManager.stick2), which LibretroFrontend answers
         // through RETRO_DEVICE_ANALOG rather than the joypad bitmask, but
         // carries in the same mask this renderer builds either way.
         // RetroPad.overlay (-1) isn't a game input at all.
@@ -249,8 +233,8 @@ final class NativePlayerRenderer: NSObject, ObservableObject, MTKViewDelegate {
 
     /// A launch-screen state waiting to be restored. Applied a second into
     /// the run rather than immediately: cores need a beat after booting
-    /// before a full machine state takes, the same settle delay the
-    /// webview player learned the hard way.
+    /// before a full machine state takes, a settle delay learned the hard
+    /// way.
     var pendingState: Data?
     /// A battery save (a PS1 memory card) waiting to be copied into the
     /// core's save RAM, set by the launch sync once it has decided which
@@ -303,11 +287,10 @@ final class NativePlayerRenderer: NSObject, ObservableObject, MTKViewDelegate {
 
     func draw(in view: MTKView) {
         let now = CACurrentMediaTime()
-        // Skipped while paused: nothing on tvOS displays these, and
-        // publishing them here republishes `self` once a second even with
-        // the core sitting idle, which re-renders the whole pause menu and
-        // made the Shader/Glow dropdown flicker while it was open, found
-        // on device 2026-08-15.
+        // Skipped while paused: publishing these republishes `self` once
+        // a second even with the core sitting idle, which re-renders the
+        // whole pause menu and made its shader dropdown flicker while it
+        // was open, found on device 2026-08-15.
         if !paused {
             if fpsWindowStart == 0 { fpsWindowStart = now }
             fpsFrameCount += 1
@@ -322,9 +305,6 @@ final class NativePlayerRenderer: NSObject, ObservableObject, MTKViewDelegate {
                 worstFrameDelta = 0
             }
         }
-        // Captured before lastDrawTime moves on, since the trace below
-        // wants the gap this draw actually followed.
-        let drawGapMS = lastDrawTime == 0 ? 0 : (now - lastDrawTime) * 1000
         lastDrawTime = now
 
         if !paused && !awaitingSaveRAM {
@@ -424,7 +404,7 @@ final class NativePlayerRenderer: NSObject, ObservableObject, MTKViewDelegate {
             // the governor lets the emulation run ahead of the wall clock
             // by up to the cushion, and the lead IS input latency, since
             // the frame on screen trails the emulated present by exactly
-            // that much. Reported by Marcus 2026-08-18 as bad input lag on
+            // that much. Reported 2026-08-18 as bad input lag on
             // Dreamcast only, which fits: the governor is Flycast-only,
             // and N64 felt fine. 0.02 keeps a full emulated frame of
             // slack (~17ms) against audio crackle; if crackle returns in
@@ -474,45 +454,9 @@ final class NativePlayerRenderer: NSObject, ObservableObject, MTKViewDelegate {
             }
 
             if ranThisDraw > 0 {
-                let uploadStart = CACurrentMediaTime()
                 if let frame = frontend.latestFrame() {
                     updateTexture(from: frame)
-                    uploadMS = (CACurrentMediaTime() - uploadStart) * 1000
-                    // The DS bottom screen, on its way to the phone.
-                    // The slice is the frame's lower half by row range,
-                    // one copy, only while a tap is installed.
-                    if let tap = dsBottomFrameTap, dsDualScreen,
-                       frame.height == 384, frame.pixels.count >= Int(frame.bytesPerRow) * 384 {
-                        let rowBytes = Int(frame.bytesPerRow)
-                        let bottom = frame.pixels.subdata(in: rowBytes * 192 ..< rowBytes * 384)
-                        tap(bottom, rowBytes)
-                    }
                 }
-            }
-
-            // Temporary, for issue #6. Recorded only on draws that actually
-            // advanced the core: a draw that was simply not due yet has no
-            // frame to account for and would dilute the trace with zeroes.
-            if ranThisDraw > 0 {
-                FrameTrace.shared.record(
-                    drawGap: drawGapMS,
-                    framesRun: ranThisDraw,
-                    run: frontend.debugCoreRunMS(),
-                    readback: frontend.debugReadbackMS(),
-                    swizzle: frontend.debugSwizzleMS(),
-                    upload: uploadMS,
-                    audioFrames: frontend.debugAudioFramesTotal(),
-                    hwFrames: frontend.debugHWFramesTotal(),
-                    runCalls: frontend.debugRunCallTotal(),
-                    hwDupes: frontend.debugHWDupeTotal(),
-                    targetFPS: frontend.targetFPS(),
-                    // Added 2026-08-17: the readback's cost scales with
-                    // pixel count, and N64 games switch resolution mid
-                    // game, so a trace that does not record the size
-                    // cannot tell a heavier scene from a bigger frame.
-                    frameWidth: textureWidth,
-                    frameHeight: textureHeight
-                )
             }
         }
 

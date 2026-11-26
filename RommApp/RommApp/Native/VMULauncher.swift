@@ -14,11 +14,6 @@ import Foundation
 /// kill orphaned back into the store's write-first queue before every
 /// boot. The server layer uploads on quit and on backgrounding, both
 /// through the same durable pending-flag queue every other card rides.
-///
-/// The two-writer rule lives at the door, not here: the launch screen's
-/// VMU row declines while a television is running a DC session for the
-/// same game (the pairing scout can tell), so the phone and the TV never
-/// edit one card at once.
 enum VMULauncher {
     /// The live play file. Its whole directory chain is deliberately
     /// dot-free: VeMUlator identifies the file type by the dot in the
@@ -151,15 +146,10 @@ enum VMULauncher {
     /// rather than defaulted.
     @MainActor
     static func boot(cardURL: URL) -> String? {
-        #if targetEnvironment(simulator) || CABINET_NO_NATIVE_CORES
+        #if targetEnvironment(simulator)
         // Same reasoning as NativeLauncher.activate: no cores link in a
-        // simulator build, nor in a Mac build until Mac core libraries
-        // land.
-        #if targetEnvironment(macCatalyst)
-        return "The VMU core isn't in the Mac build yet."
-        #else
+        // simulator build.
         return "Games can't run in the Simulator. Use a real iPhone."
-        #endif
         #else
         LibretroFrontend.shared.activateCore(.vemulator)
         LibretroFrontend.shared.setCoreOptions(["enable_flash_write": "enabled"])

@@ -1,17 +1,12 @@
-#if os(iOS)
 import CoreSpotlight
 import SwiftUI
 
 /// Opens Cabinet at a particular game, from anywhere outside the app.
 ///
-/// The Apple TV has had this since the top shelf: a URL carrying a rom id
-/// arrives and the launch screen opens on it. This is the iPhone's twin,
-/// and it serves the widget and Spotlight rather than a shelf.
+/// A URL carrying a rom id arrives, from the widget or a Spotlight
+/// result, and the launch screen opens on it.
 ///
-/// It differs from the television's version in one way that matters. The
-/// television resolves a link by asking the server, and treats a failure as
-/// the game having been deleted, which is fair on a mains-powered box
-/// sitting next to its own server. A phone genuinely goes offline, and
+/// A phone genuinely goes offline, and
 /// keeping games on it so they play without a server is the whole point of
 /// the native cores. So this looks in the kept games first and only asks
 /// the server when it finds nothing. A game you have downloaded opens in
@@ -27,9 +22,7 @@ struct DeepLinkHandler: ViewModifier {
     /// A cold launch is the normal case for this: the system hands the URL
     /// over immediately and the session is still coming back from disk, so
     /// checking readiness at that moment and giving up drops nearly every
-    /// link that matters. The television's version has the same guard and
-    /// gets away with it because a shelf press only happens on a machine
-    /// that has been sitting there paired.
+    /// link that matters.
     ///
     /// Held rather than dropped, and only dropped by never becoming ready,
     /// which is the unpaired case the guard was actually written for.
@@ -107,8 +100,7 @@ struct DeepLinkHandler: ViewModifier {
                 // Two different sentences on purpose. Offline and
                 // not downloaded is a state somebody can act on; being
                 // told the game was deleted when it was not is alarming
-                // and wrong, which is what the television currently does
-                // whenever it cannot reach RomM.
+                // and wrong.
                 problem = NetworkMonitor.shared.isOffline
                     ? "Cabinet Go can't reach your server, and this game isn't downloaded to this phone."
                     : "It may have been removed from your library."
@@ -122,4 +114,3 @@ extension View {
         modifier(DeepLinkHandler(session: session))
     }
 }
-#endif

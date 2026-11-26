@@ -36,7 +36,7 @@ enum NativeSessionMarker {
         let romId = UserDefaults.standard.integer(forKey: runningKey)
         let wasBackgrounded = UserDefaults.standard.bool(forKey: backgroundedKey)
         if !wasBackgrounded {
-            Compatibility.shared.recordNativeCrash(romId: romId)
+            Compatibility.shared.recordCrash(romId: romId)
         }
         recordCleanExit()
     }

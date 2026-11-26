@@ -8,7 +8,7 @@ import SwiftUI
 /// normalised 0 to 1 in each axis independently, so a grid of
 /// twentieths draws cells as oblong as the surface is, and two gaps
 /// that measure the same in layout units look different on screen.
-/// Marcus is judging distance between buttons by eye, so the grid has
+/// Distance between buttons is judged by eye, so the grid has
 /// to measure in one unit both ways: a cell is a fixed number of
 /// POINTS square, laid out from the centre so the two axes agree.
 ///

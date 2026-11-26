@@ -18,7 +18,6 @@
 //  in-game save are small and fetched by the store as it always has,
 //  right after the ROM lands.
 
-#if os(iOS) && !targetEnvironment(macCatalyst)
 import Foundation
 import UIKit
 
@@ -33,7 +32,7 @@ final class BackgroundDownloads: NSObject, URLSessionDownloadDelegate, @unchecke
     /// Every transfer this launch knows about, by rom id: started here,
     /// or found still running when the session was reattached.
     private var tasks: [Int: URLSessionDownloadTask] = [:]
-    private var continuations: [Int: CheckedContinuation<String?, Error>] = [:]
+    private var continuations: [Int: CheckedContinuation<Void, Error>] = [:]
     /// A bad status or a failed move, carried from the finish callback to
     /// the completion one, where the waiting caller is answered.
     private var failures: [Int: Error] = [:]
@@ -43,9 +42,7 @@ final class BackgroundDownloads: NSObject, URLSessionDownloadDelegate, @unchecke
     var eventsCompletionHandler: (() -> Void)?
 
     /// Where a finished ROM waits for the store, next to the kept games
-    /// themselves: Application Support/KeptGames/landed/<romId>, with
-    /// the response's Content-Length beside it as <romId>.length, since
-    /// the web player's cache validates on that exact string.
+    /// themselves: Application Support/KeptGames/landed/<romId>.
     private let landingRoot: URL
 
     private lazy var session: URLSession = {
@@ -106,24 +103,20 @@ final class BackgroundDownloads: NSObject, URLSessionDownloadDelegate, @unchecke
         landingRoot.appendingPathComponent(String(romId))
     }
 
-    private func lengthURL(romId: Int) -> URL {
-        landingRoot.appendingPathComponent("\(romId).length")
-    }
-
     /// The finished ROM for a game, if its transfer completed, in this
     /// launch or an earlier one.
-    func landed(romId: Int) -> (file: URL, contentLength: String?)? {
+    func landed(romId: Int) -> URL? {
         let file = landingURL(romId: romId)
-        guard FileManager.default.fileExists(atPath: file.path) else { return nil }
-        let length = try? String(contentsOf: lengthURL(romId: romId), encoding: .utf8)
-        return (file, length)
+        return FileManager.default.fileExists(atPath: file.path) ? file : nil
     }
 
     /// Forgets a landed ROM once the store has made it a kept game, or
     /// when the game is removed.
     func clearLanded(romId: Int) {
         try? FileManager.default.removeItem(at: landingURL(romId: romId))
-        try? FileManager.default.removeItem(at: lengthURL(romId: romId))
+        // Builds before 2026-11 also wrote the response's Content-Length
+        // beside it, for the web player's cache; cleared so none is left.
+        try? FileManager.default.removeItem(at: landingRoot.appendingPathComponent("\(romId).length"))
     }
 
     /// Starts a transfer unless one is already running or already
@@ -144,19 +137,18 @@ final class BackgroundDownloads: NSObject, URLSessionDownloadDelegate, @unchecke
     }
 
     /// Waits for a game's ROM to land, starting the transfer if nothing
-    /// has. Returns the response's Content-Length header, as the
-    /// store's foreground downloader does.
-    func download(_ request: URLRequest, romId: Int, wifiOnly: Bool) async throws -> String? {
+    /// has.
+    func download(_ request: URLRequest, romId: Int, wifiOnly: Bool) async throws {
         await enqueue(request, romId: romId, wifiOnly: wifiOnly)
-        if let landed = landed(romId: romId) { return landed.contentLength }
-        return try await withTaskCancellationHandler {
-            try await withCheckedThrowingContinuation { (continuation: CheckedContinuation<String?, Error>) in
+        if landed(romId: romId) != nil { return }
+        try await withTaskCancellationHandler {
+            try await withCheckedThrowingContinuation { (continuation: CheckedContinuation<Void, Error>) in
                 lock.lock()
                 // The transfer may have finished between the checks above
                 // and here: a small file on the local network is quick.
-                if let landed = landed(romId: romId) {
+                if landed(romId: romId) != nil {
                     lock.unlock()
-                    continuation.resume(returning: landed.contentLength)
+                    continuation.resume()
                     return
                 }
                 guard tasks[romId] != nil else {
@@ -216,9 +208,6 @@ final class BackgroundDownloads: NSObject, URLSessionDownloadDelegate, @unchecke
             let destination = landingURL(romId: romId)
             try? FileManager.default.removeItem(at: destination)
             try FileManager.default.moveItem(at: location, to: destination)
-            if let length = response?.value(forHTTPHeaderField: "Content-Length") {
-                try? length.write(to: lengthURL(romId: romId), atomically: true, encoding: .utf8)
-            }
         } catch {
             lock.lock()
             failures[romId] = error
@@ -243,7 +232,7 @@ final class BackgroundDownloads: NSObject, URLSessionDownloadDelegate, @unchecke
         } else if let failure {
             continuation.resume(throwing: failure)
         } else {
-            continuation.resume(returning: landed(romId: romId)?.contentLength)
+            continuation.resume()
         }
     }
 
@@ -254,4 +243,3 @@ final class BackgroundDownloads: NSObject, URLSessionDownloadDelegate, @unchecke
         }
     }
 }
-#endif

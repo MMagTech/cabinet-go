@@ -3,7 +3,7 @@ import Foundation
 /// The shader list started as RomM/EmulatorJS's own bundled set per
 /// docs/scope-native-core-settings.md, then got culled on device: the two
 /// ScaleHQ scalers and crt-geom looked bad enough in this Metal port that
-/// Marcus dropped them on sight (2026-08-07). SABR and four CRT variants
+/// they were dropped on sight (2026-08-07). SABR and four CRT variants
 /// survived, plus "Sharp" as the unfiltered default. Two handheld-specific
 /// shaders (LCD, Game Boy) joined 2026-08-08, gated to the platforms they
 /// actually apply to by `NativeShader.available(for:)`, not offered

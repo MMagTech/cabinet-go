@@ -1,25 +1,17 @@
 #if DEBUG
 import SwiftUI
 
-/// A way to run one kept game, headless, for a fixed number of seconds and
-/// then quit, so a core's cost can be measured without anybody playing.
-///
-/// This exists because the quality pass of 2026-08-17 needed to A/B core
-/// options on real hardware, and the alternative was asking Marcus to play
-/// each of twelve systems by hand after every single change. `FrameTrace`
-/// already writes everything worth knowing; the only missing piece was a
-/// way to start a game and stop it again from a shell.
+/// A way to run one game, headless, for a fixed number of seconds and then
+/// quit, so a core can be exercised on a device without anybody playing.
+/// What it reports goes to the device log: the pixel format the core
+/// really emitted, and with `-cabinetBenchStateCheck 1` whether a save
+/// state round-trips.
 ///
 /// Deliberately `#if DEBUG` and deliberately gated on a launch argument
 /// nothing else passes: with no `-cabinetBench` on the command line this
 /// file's only effect is one `UserDefaults` read at startup, and the app
 /// takes exactly the path it took before. It never ships in a release
 /// build at all.
-///
-/// Compiles for both platforms. tvOS gets it because nine platforms' worth
-/// of this pass's changes ship there on the strength of iPhone measurements
-/// alone, and the Apple TV 4K 3rd gen is a slower, fanless machine where
-/// that extrapolation is least safe.
 ///
 /// Drive it with:
 ///
@@ -33,8 +25,6 @@ import SwiftUI
 /// request (cost an hour on 2026-08-26). Note also that the seconds
 /// budget has to cover the download when the rom is not kept: a PSP ISO
 /// will not arrive inside a 40 second window.
-///
-/// then pull `Library/Caches/frame-trace-<core>.csv` off the device.
 enum NativeBenchHarness {
     struct Plan {
         let rom: Rom
@@ -114,8 +104,7 @@ enum NativeBenchHarness {
     /// only ever see what somebody had already chosen to keep: 46 titles,
     /// one of them SNES, against a library of 813. Measuring Mode 7 needed
     /// a Mode 7 game, and none was kept, so the restriction was costing far
-    /// more than the download it avoided. The download happens before
-    /// `FrameTrace.begin`, so it never lands in the numbers.
+    /// more than the download it avoided.
     @MainActor
     static func plan(session: Session) async -> Plan? {
         guard let romId = requestedRomId else { return nil }
@@ -138,9 +127,7 @@ enum NativeBenchHarness {
 /// Exiting with `exit(0)` rather than leaving the app open is what makes
 /// this scriptable: the launching shell waits on the process, so a run is
 /// finished when the command returns, with no polling and no guessing at
-/// how long a game takes to settle. `FrameTrace.end()` runs first through
-/// the player's own `onDisappear`, so the tail of the trace is on disk
-/// before the process goes away.
+/// how long a game takes to settle.
 struct NativeBenchRunnerView: View {
     @EnvironmentObject private var session: Session
     @State private var plan: NativeBenchHarness.Plan?
@@ -165,13 +152,8 @@ struct NativeBenchRunnerView: View {
         .fullScreenCover(isPresented: $ready) {
             if let plan {
                 // Each platform's own player, the same split HomeView makes.
-                #if os(iOS)
                 NativePlayerView(rom: plan.rom, core: plan.core)
                     .environmentObject(session)
-                #else
-                TVPlayerView(rom: plan.rom, core: plan.core)
-                    .environmentObject(session)
-                #endif
             }
         }
         .task {
@@ -217,10 +199,8 @@ struct NativeBenchRunnerView: View {
                 NSLog("[bench] state verdict: %@",
                       NativeStateCheck.verdict ?? "TIMED OUT, the core thread never ran the check")
             }
-            // What the core is actually emitting. Logged rather than added
-            // to FrameTrace: that file is shared with the in-flight
-            // Dreamcast investigation and is not this pass's to touch.
-            // This is the only direct read on whether an option that
+            // What the core is actually emitting. This is the only direct
+            // read on whether an option that
             // changes a core's output format (FBNeo's 32-bit colour depth,
             // PCSX ReARMed's rgb32 output) really took effect, as opposed
             // to being sent and quietly ignored.

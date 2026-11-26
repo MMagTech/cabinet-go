@@ -367,27 +367,7 @@ enum NativeCoreOptions {
     /// exactly now that the dial is real; re-tune per platform from
     /// measurements on the wired core, not before.
     static var dreamcastDefaultClock: String {
-        #if targetEnvironment(macCatalyst)
-        // The real SH4's 200MHz, measured rather than assumed, now that
-        // Dreamcast is this platform's alone and has a recompiler.
-        //
-        // The 100MHz default was a phone compromise the Mac inherited,
-        // and its cost is not framerate: Crazy Taxi 2 holds 60 either
-        // way. It is the TAIL. Measured 2026-09-01 over 25 seconds of
-        // scripted gameplay, emulation cost per frame, mean and p99:
-        //
-        //   100MHz 640x480    4.700 / 16.243 ms   worst 105.09
-        //   200MHz 640x480    3.750 /  4.599 ms   worst  18.31
-        //   100MHz 1920x1440  3.452 /  3.608 ms   worst  65.03
-        //   200MHz 1920x1440  3.226 /  3.339 ms   worst  60.02
-        //
-        // A p99 of 16.243 against a 16.67ms frame budget is a game
-        // living on the edge of dropping one, which is exactly what
-        // jitter feels like. The real clock takes that to 3.3.
-        return "400"
-        #else
         return "200"
-        #endif
     }
 
     /// Per-platform option sets. A platform absent from this switch has no
@@ -501,32 +481,18 @@ enum NativeCoreOptionsStore {
     ///
     /// The pad type is excluded: it is not a core variable, it reaches the
     /// core through `padDevice(for:)` instead.
-    /// The N64 CPU core. The Mac carries the JIT entitlement, so it
-    /// gets the real recompiler; iOS and tvOS stay on the cached
-    /// interpreter, which is as far as a process without that
-    /// entitlement can go. `dynamic_recompiler` reaches malloc_exec and
+    /// The N64 CPU core: the cached interpreter, which is as far as a
+    /// process without the JIT entitlement can go. `dynamic_recompiler` reaches malloc_exec and
     /// PROT_EXEC pages (r4300_core.c under EMUMODE_DYNAREC), which is
     /// exactly what they cannot do.
     private static var n64CpuCore: String {
-        #if targetEnvironment(macCatalyst)
-        "dynamic_recompiler"
-        #else
         "cached_interpreter"
-        #endif
     }
 
-    /// The PSP CPU core, now the same on every platform, and on the Mac
-    /// that is a measured choice rather than the accident it used to be.
-    ///
-    /// This asked for "JIT" on the Mac and did not get it. PPSSPP's
-    /// Catalyst build defines PPSSPP_PLATFORM_IOS, so it gated the
-    /// recompiler on RETRO_ENVIRONMENT_GET_JIT_CAPABLE, which this
-    /// frontend did not answer, and libretro.cpp quietly rewrote the
-    /// request to CPUCore::IR_INTERPRETER. The core never said so; that
-    /// is why the engine PSP was running sat unresolved for days. It
-    /// prints it now (tools/build-ppsspp.sh adds the line), and the
-    /// frontend answers the capability call, so this value is finally
-    /// the one that takes effect.
+    /// The PSP CPU core. "IR JIT" asks for the recompiler, and in a
+    /// process that cannot JIT, which every iOS app is, PPSSPP's
+    /// libretro.cpp resolves it to CPUCore::IR_INTERPRETER, the engine
+    /// tools/build-ppsspp.sh builds around. Upstream's own string.
     ///
     /// Measured 2026-09-01 on the M4, both engines, from the core's own
     /// reported engine number, mean and p99 emulation cost per frame:
@@ -537,67 +503,25 @@ enum NativeCoreOptionsStore {
     /// The recompiler is not faster here, and its worst frame is far
     /// worse (248 ms against 94 ms) because compilation stalls land
     /// inside frames. That matches upstream's own position that the IR
-    /// interpreter is close to full speed. It also costs an entitlement:
-    /// PPSSPP takes executable memory with mmap plus mprotect rather
-    /// than MAP_JIT, which hardened runtime kills outright
-    /// ("CODESIGNING Invalid Page", SIGKILL inside Core_RunLoopUntil on
-    /// the emu thread), so the native JIT only runs at all with
-    /// com.apple.security.cs.allow-unsigned-executable-memory added to
-    /// CabinetMac.entitlements. Paying a broader entitlement for a
-    /// slower engine is the wrong trade, so it is not paid.
-    ///
-    /// To revisit: add that entitlement and return "JIT" here, or teach
-    /// PPSSPP's Common/MemoryUtil.cpp the MAP_JIT path the other three
-    /// recompilers in this app already use. Both strings are upstream's
-    /// own (libretro.cpp maps them to CPUCore::JIT and
-    /// CPUCore::IR_INTERPRETER).
+    /// interpreter is close to full speed.
     private static var pspCpuCore: String { "IR JIT" }
 
-    /// PSP's internal resolution. Both values are upstream's own strings
-    /// from its option table; "Auto" is never used and that is the trap
-    /// this option is famous for here, since it sizes the render to a
-    /// display a libretro frontend never reports and every frame comes
-    /// out 0x0 and is dropped.
-    ///
-    /// 480x272 is the PSP's own screen, and it is what every platform
-    /// shipped until now. On a phone that is right. On a 5K panel it is
-    /// a 480-wide picture stretched across the desk.
     /// N64's internal resolution. The long note beside the option this
     /// feeds explains why 320x240: unanswered, the core keeps a static
     /// 640x480 rather than its own documented 4:3 default, which was
     /// four times the fragment work, four times the readback and four
     /// times the upload on a phone that could not spare any of it.
-    ///
-    /// The Mac can. Blast Corps, NTSC so the budget is a real 16.67ms,
-    /// three paired trials, p99 emulation cost per frame:
-    ///
-    ///   320x240   8.194 ms   49% of budget
-    ///   1280x960  8.973 ms   54% of budget
-    ///
-    /// Five percentage points for four times the pixels. Readback does
-    /// double, 1.25ms to 3.9ms, and it is still small enough not to
-    /// matter here.
-    ///
-    /// Worth recording that this was first measured as "no headroom" and
-    /// that was two mistakes stacked: the game benched was a PAL release
-    /// running at 50Hz, so its 20ms budget was read as 16.67, and a
-    /// first-run shader spike in one trial of three was read as a
-    /// recurring cost. Check target_fps in the trace before comparing
-    /// anything to a frame budget.
     private static var n64ScreenSize: String {
-        #if targetEnvironment(macCatalyst)
-        "1280x960"
-        #else
         "320x240"
-        #endif
     }
 
+    /// PSP's internal resolution: 480x272, the PSP's own screen.
+    /// Upstream's own string from its option table; "Auto" is never used
+    /// and that is the trap this option is famous for here, since it
+    /// sizes the render to a display a libretro frontend never reports
+    /// and every frame comes out 0x0 and is dropped.
     private static var pspInternalResolution: String {
-        #if targetEnvironment(macCatalyst)
-        "1920x1088"
-        #else
         "480x272"
-        #endif
     }
 
     static func dictionary(for platform: NativePlatform) -> [String: String] {
@@ -734,10 +658,8 @@ enum NativeCoreOptionsStore {
             // so the core's other layouts must never change the
             // geometry underneath it.
             //
-            // touch_mode is Touch on iOS, where the screen's own
-            // touches feed RETRO_DEVICE_POINTER directly, and Joystick
-            // on tvOS, where the right stick moves the core's own
-            // cursor: the only touch a controller-first platform has.
+            // touch_mode is Touch: the screen's own touches feed
+            // RETRO_DEVICE_POINTER directly.
             //
             // threaded_renderer is a hard requirement, not a tuning
             // choice: it moves 3D rasterization off the thread
@@ -746,37 +668,14 @@ enum NativeCoreOptionsStore {
             // the build machine). console_mode pins DS because DSi
             // mode needs NAND files this app does not stage, and the
             // core's own savestate code refuses DSi mode anyway.
-            #if os(tvOS)
-            let touchMode = "Joystick"
-            #else
-            let touchMode = "Touch"
-            #endif
-            //
-            // The five jit keys are Mac-only, matching the one platform
-            // whose melonDS is built with JIT_ARCH=aarch64; iOS and tvOS
-            // compile no recompiler at all, so the keys are not declared
-            // there. All five values are upstream's own declared
-            // defaults, restated rather than inherited: the core's
-            // libretro layer only assigns Config::JIT_* when the
-            // variable is answered, and Config.cpp starts JIT_Enable at
-            // false, so an unanswered melonds_jit_enable silently keeps
-            // the interpreter no matter what was compiled in.
-            var ds = [
+            return [
                 "melonds_console_mode": "DS",
                 "melonds_boot_directly": "enabled",
                 "melonds_screen_layout": "Top/Bottom",
                 "melonds_screen_gap": "0",
-                "melonds_touch_mode": touchMode,
+                "melonds_touch_mode": "Touch",
                 "melonds_threaded_renderer": "enabled",
             ]
-            #if targetEnvironment(macCatalyst)
-            ds["melonds_jit_enable"] = "enabled"
-            ds["melonds_jit_block_size"] = "32"
-            ds["melonds_jit_branch_optimisations"] = "enabled"
-            ds["melonds_jit_literal_optimisations"] = "enabled"
-            ds["melonds_jit_fast_memory"] = "enabled"
-            #endif
-            return ds
         case .threeDO:
             // opera_bios is the defaults trap at its purest: the option's
             // declared default is NULL, its value must be a BIOS filename,
@@ -819,35 +718,11 @@ enum NativeCoreOptionsStore {
             // card sync; card 2 stays explicitly off rather than
             // "shared", which would write a .mcd into the per-launch
             // temp directory the next launch deletes.
-            //
-            // drc is answered only on the Mac, and only because that is
-            // the one platform whose core has a recompiler compiled in:
-            // build-core.sh passes DYNAREC=ari64 there and nowhere else,
-            // so on iOS and tvOS the key is not even a declared option.
-            // The core would pick the recompiler unprompted (it treats
-            // an unanswered variable as "enabled"), but leaving the
-            // engine to a default is how the Mac ended up on
-            // interpreters without anyone noticing.
-            var psx = [
+            return [
                 "pcsx_rearmed_memcard1": "libretro",
                 "pcsx_rearmed_memcard2": "none",
             ]
-            #if targetEnvironment(macCatalyst)
-            psx["pcsx_rearmed_drc"] = "enabled"
-            #endif
-            return psx
         case .dreamcast:
-            // Internal resolution, Mac only. Flycast defaults to the
-            // console's own 640x480 and Cabinet never set it, so a
-            // Dreamcast game has been rendering at 1x and being scaled
-            // to a 5K panel. 3x measured FASTER per frame than 1x on
-            // this machine, at both clocks, which reads as odd until you
-            // remember the cost that matters here is not fill rate.
-            // Kept to 3x rather than higher because that is where the
-            // measurements stop and a number nobody benched is a guess.
-            //
-            // Anisotropic filtering is deliberately absent: Flycast
-            // already defaults it to 4.
             // Threaded rendering back ON, reversing the override this
             // returned between d49008d and 2026-08-16. That override was
             // added on the theory that running the core synchronously
@@ -885,8 +760,8 @@ enum NativeCoreOptionsStore {
             // per-platform default measured on device.
             // The Mac stays at the console's own 640x480 for now. The
             // 2026-09-01 move to 1920x1440 measured a lower mean and
-            // p99 and shipped, and the next morning Marcus reported
-            // Dreamcast launching "all weird". The frame trace shows
+            // p99 and shipped, and the next morning Dreamcast was seen
+            // launching badly. The frame trace shows
             // why: at 1920x1440 one retro_run in every 300 takes about
             // 60ms, a stall every five seconds for the whole session,
             // and at 640x480 with the same clock it never happens. One
@@ -898,7 +773,7 @@ enum NativeCoreOptionsStore {
             // The CD console's internal backup RAM defaults to "per
             // bios", one shared .brm per region across every Sega CD
             // game, real hardware's own behavior. Forced per game
-            // instead (decided with Marcus 2026-08-16): Cabinet's save
+            // instead (decided 2026-08-16): Cabinet's save
             // sync is per game on RomM's per-rom save model, a shared
             // file would have to live under some arbitrary game, and the
             // tiny 8KB BRAM can no longer fill up across the library.
@@ -987,11 +862,7 @@ enum NativeCoreOptionsStore {
                 "mupen64plus-cpucore": n64CpuCore,
                 "mupen64plus-rdp-plugin": "gliden64",
                 "mupen64plus-MaxTxCacheSize": "8000",
-                // Framebuffer emulation is OFF here and ON for the Mac
-                // (n64MacFramebufferTrial below), and 2026-08-30 is when
-                // that stopped being an open question.
-                //
-                // The history: turning it on together with both RDRAM
+                // Framebuffer emulation is OFF here. The history: turning it on together with both RDRAM
                 // copies was tried on 2026-08-17 to explain missing
                 // scenery in Hydro Thunder, made that game strictly
                 // worse, the boat and water stopped drawing at all, and
@@ -999,14 +870,9 @@ enum NativeCoreOptionsStore {
                 // it. Running the experiment this comment asked for,
                 // EnableFBEmulation alone with both copies explicitly
                 // Off, FIXED Hydro Thunder's missing walls and ramps on
-                // the Mac (Marcus, 2026-08-30). So framebuffer emulation
-                // was never the problem; one or both of the copies was,
-                // and the August result was the copies' fault.
-                //
-                // It stays off on iOS and tvOS only because those two
-                // have not been tested with it. That is a device pass
-                // waiting to happen, not a decision that they should
-                // differ.
+                // the Mac (2026-08-30). So framebuffer emulation was never
+                // the problem; one or both of the copies was, and the
+                // August result was the copies' fault.
                 //
                 // The cause is NOT established, and the obvious theory was
                 // checked and rejected: GLideN64 does treat framebuffer 0
@@ -1075,38 +941,10 @@ enum NativeCoreOptionsStore {
                 // gap-class as the missing pak1 default above.
                 "mupen64plus-astick-sensitivity": "100",
                 "mupen64plus-astick-deadzone": "15",
-            ].merging(n64MacFramebufferTrial) { _, trial in trial }
+            ]
         default:
             return [:]
         }
-    }
-
-    /// Framebuffer emulation, on for the Mac, with both RDRAM copies
-    /// explicitly off.
-    ///
-    /// That note records turning EnableFBEmulation on together with both
-    /// RDRAM copies on 2026-08-17, which made Hydro Thunder strictly
-    /// worse, and says plainly that anyone retrying it should set
-    /// EnableFBEmulation alone with both copies explicitly Off and
-    /// change one thing at a time. This is that, and it worked: Hydro
-    /// Thunder's walls and ramps came back, and Mario Kart 64 was
-    /// unaffected. The copies were what broke that game in August.
-    ///
-    /// Catalyst only, so the iPhone and the Apple TV keep running the
-    /// configuration they were verified on while this is evaluated. If
-    /// it holds up, promoting it to every platform is a separate
-    /// decision with its own device pass, not a side effect of a Mac
-    /// investigation.
-    private static var n64MacFramebufferTrial: [String: String] {
-        #if targetEnvironment(macCatalyst)
-        return [
-            "mupen64plus-EnableFBEmulation": "True",
-            "mupen64plus-EnableCopyColorToRDRAM": "Off",
-            "mupen64plus-EnableCopyDepthToRDRAM": "Off",
-        ]
-        #else
-        return [:]
-        #endif
     }
 
     /// Core defaults this app was silently not applying, restored
@@ -1329,7 +1167,7 @@ enum NativeCoreOptionsStore {
         // eight carry real drawn pixels, 146 to 154 distinct colours per
         // row. Cropping them is a judgement about what a CRT would have
         // hidden, not a correction of something plainly wrong, so it is
-        // Marcus's call and not this pass's.
+        // a deliberate call for later and not this pass's.
         case .psx:
             // Gaussian is what the PlayStation's SPU actually did: the
             // hardware interpolates sample playback with a fixed 4-point
@@ -1353,8 +1191,8 @@ enum NativeCoreOptionsStore {
     /// arguments. That one only has to show the core was not in the state
     /// it claimed. This one has to show the upgrade is worth what it costs,
     /// and every entry below carries the number it was judged on, measured
-    /// through `tools/bench/libretro_bench` and then confirmed against real
-    /// frame budget on an iPhone with `tools/bench/sweep.sh`.
+    /// through `tools/lab/bench/libretro_bench` and then confirmed against
+    /// real frame budget on an iPhone (the on-device bench of 2026-08).
     ///
     /// What is deliberately NOT here: anything that changes what the
     /// hardware did rather than how faithfully it is reproduced. CPU

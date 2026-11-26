@@ -1,7 +1,5 @@
 import Foundation
-#if os(iOS) && !targetEnvironment(macCatalyst)
 import UIKit
-#endif
 
 /// One game deliberately stored on this phone for offline, native play.
 /// Not a cache entry: nothing evicts it, and it exists because someone
@@ -19,18 +17,6 @@ struct KeptGame: Codable, Identifiable {
     let rom: Rom
     let totalBytes: Int64
     let keptAt: Date
-    /// What feeding the web player's cache needs, captured at keep time
-    /// because building the cache key and passing its validation both
-    /// depend on values only the server can provide: RomM's player
-    /// always requests `?file_ids={id}` even for a single-file game, and
-    /// EmulatorJS trusts a cached entry only when its stored
-    /// Content-Length string equals a live HEAD response's header
-    /// exactly. Optional: manifests written before this existed lack
-    /// them, and a kept game without them still plays natively and
-    /// exports fine, the web player just downloads organically instead.
-    let fileId: Int?
-    let webFileName: String?
-    let contentLength: String?
     /// The newest save state downloaded for this game, native only:
     /// states are core-build-specific and states belong to RomM's
     /// database, not its filesystem layout, so unlike the ROM and BIOS
@@ -84,7 +70,7 @@ struct KeptGame: Codable, Identifiable {
 /// The whole tree is excluded from iOS backup. RomM is the source of
 /// truth and every kept file is re-downloadable from it, so backing them
 /// up would bloat iCloud backups to protect data that is not at risk.
-/// Confirmed with Marcus 2026-08-07, no user-facing setting.
+/// Decided 2026-08-07, with no user-facing setting.
 @MainActor
 final class KeptGameStore: ObservableObject {
     static let shared = KeptGameStore()
@@ -130,8 +116,7 @@ final class KeptGameStore: ObservableObject {
     /// game whose finish fails once is tried again before it counts as
     /// failed: the app may have been put to sleep between the file
     /// landing and the manifest being written, which is not the
-    /// download's fault. The Mac and the television keep the plain
-    /// one-after-another download.
+    /// download's fault.
     func keepAll(_ roms: [Rom], platformId: Int, session: Session) {
         guard bulkTask == nil else { return }
         let queue = roms.filter { kept(romId: $0.id) == nil && tasks[$0.id] == nil }
@@ -139,12 +124,10 @@ final class KeptGameStore: ObservableObject {
         bulkQueue = queue
         bulk = BulkDownload(platformId: platformId, done: 0, total: queue.count, currentRomId: nil, failed: 0)
         bulkTask = Task { [weak self] in
-            #if os(iOS) && !targetEnvironment(macCatalyst)
             for rom in queue {
                 guard !Task.isCancelled, let request = try? await session.romContentRequest(rom) else { break }
                 await BackgroundDownloads.shared.enqueue(request, romId: rom.id, wifiOnly: true)
             }
-            #endif
             for rom in queue {
                 guard let self, !Task.isCancelled else { break }
                 self.errors[rom.id] = nil
@@ -155,13 +138,11 @@ final class KeptGameStore: ObservableObject {
                 // The same shape `keep` gives a single download, so the
                 // tasks table, cancel and the ring all see one of those.
                 let task = Task<Void, Never> {
-                    #if os(iOS) && !targetEnvironment(macCatalyst)
                     // Asks for time when the app has been woken in the
                     // background for a landed file, so the finish is
                     // not cut off halfway through writing the manifest.
                     let grace = UIApplication.shared.beginBackgroundTask(withName: "Download All")
                     defer { UIApplication.shared.endBackgroundTask(grace) }
-                    #endif
                     var attempts = 0
                     while true {
                         do {
@@ -200,8 +181,7 @@ final class KeptGameStore: ObservableObject {
     /// Coalesced: the system reports every chunk of every transfer in
     /// flight, and publishing `downloading` on each one re-rendered the
     /// whole covers grid dozens of times a second, which is what made
-    /// the phone feel stuck while a platform came down (Marcus,
-    /// 2026-09-03). Reports collect for a fifth of a second and land as
+    /// the phone feel stuck while a platform came down (2026-09-03). Reports collect for a fifth of a second and land as
     /// one publish; a ring cannot tell the difference.
     func reportTransfer(romId: Int, received: Int64, total: Int64) {
         guard kept(romId: romId) == nil else { return }
@@ -251,7 +231,6 @@ final class KeptGameStore: ObservableObject {
             tasks[current]?.cancel()
         }
         bulkTask?.cancel()
-        #if os(iOS) && !targetEnvironment(macCatalyst)
         // The transfers the system was still holding for the rest of
         // the platform, and the rings that showed them.
         for rom in bulkQueue where kept(romId: rom.id) == nil && tasks[rom.id] == nil {
@@ -259,29 +238,21 @@ final class KeptGameStore: ObservableObject {
             downloading[rom.id] = nil
             pendingTransfers[rom.id] = nil
         }
-        #endif
     }
 
     /// Bytes free on the volume the kept games live on, by the measure
     /// the system uses for a download it considers important, which
     /// counts purgeable space as free. Nil when the volume will not say.
     func availableCapacity() -> Int64? {
-        #if os(tvOS)
-        // The "important usage" measure, which counts purgeable space as
-        // free, does not exist on tvOS; the plain figure does.
-        let values = try? root.resourceValues(forKeys: [.volumeAvailableCapacityKey])
-        return values?.volumeAvailableCapacity.map(Int64.init)
-        #else
         let values = try? root.resourceValues(forKeys: [.volumeAvailableCapacityForImportantUsageKey])
         return values?.volumeAvailableCapacityForImportantUsage
-        #endif
     }
 
     private var tasks: [Int: Task<Void, Never>] = [:]
     private let root: URL
     /// The person-facing mirror in the Files app, laid out as RomM's
-    /// system-folder-first library structure, the one Marcus's server
-    /// uses (RomM supports two; assuming the other one blind was caught
+    /// system-folder-first library structure, the one the reference
+    /// server uses (RomM supports two; assuming the other one blind was caught
     /// and corrected): <platform folder>/roms/<server filename> and
     /// <platform folder>/bios/<firmware filename>, platform folders
     /// appearing directly under the app's root in Files. This app is a
@@ -316,17 +287,7 @@ final class KeptGameStore: ObservableObject {
         root = support.appendingPathComponent("KeptGames", isDirectory: true)
         try? fm.createDirectory(at: root, withIntermediateDirectories: true)
         Self.excludeFromBackup(root)
-        #if targetEnvironment(macCatalyst)
-        // The Mac build is unsandboxed, so .documentDirectory is the
-        // person's real ~/Documents. iOS scatters platform folders at
-        // the top of the app's own scoped Documents, which is right
-        // there and rude here: on the Mac everything gathers under one
-        // Cabinet folder, browsable in Finder like any library.
         documentsRoot = fm.urls(for: .documentDirectory, in: .userDomainMask)[0]
-            .appendingPathComponent("Cabinet", isDirectory: true)
-        #else
-        documentsRoot = fm.urls(for: .documentDirectory, in: .userDomainMask)[0]
-        #endif
         // Two builds shipped the mirror under earlier names before the
         // layout settled; anything inside was only ever hard links, so
         // deleting them loses no bytes. Platform folders are created
@@ -352,9 +313,8 @@ final class KeptGameStore: ObservableObject {
     /// Kept, native-capable games grouped by platform: the one shape
     /// Offline Mode uses for browsing everywhere it appears, Home and
     /// the library both, so the two can never draw a different picture
-    /// of the same underlying data (Marcus, 2026-08-07: Home's offline
-    /// view "should essentially just be what the current library looks
-    /// like"). Kept games this phone cannot play are excluded: listing
+    /// of the same underlying data (2026-08-07: Home's offline view is
+    /// just what the library looks like). Kept games this phone cannot play are excluded: listing
     /// them would set up a tap that fails regardless of what is stored. A `Platform` built straight from the kept rom's
     /// own embedded fields, not fetched: the count is how many are
     /// kept, not the server's full catalog size, which would mean
@@ -453,7 +413,6 @@ final class KeptGameStore: ObservableObject {
             let old = self.games[index]
             let updated = KeptGame(
                 rom: old.rom, totalBytes: Self.directorySize(dir), keptAt: old.keptAt,
-                fileId: old.fileId, webFileName: old.webFileName, contentLength: old.contentLength,
                 stateId: newest.id, stateUpdatedAt: newest.updatedAt,
                 canonicalPlatformSlug: old.rom.canonicalPlatformSlug(platformsVersions: session.platformsVersions),
                 needsMetadataRefresh: old.needsMetadataRefresh
@@ -615,7 +574,6 @@ final class KeptGameStore: ObservableObject {
             let dir = directory(for: game.romId)
             let updated = KeptGame(
                 rom: game.rom, totalBytes: game.totalBytes, keptAt: game.keptAt,
-                fileId: game.fileId, webFileName: game.webFileName, contentLength: game.contentLength,
                 stateId: game.stateId, stateUpdatedAt: game.stateUpdatedAt,
                 canonicalPlatformSlug: game.rom.canonicalPlatformSlug(platformsVersions: session.platformsVersions),
                 needsMetadataRefresh: game.needsMetadataRefresh
@@ -635,7 +593,6 @@ final class KeptGameStore: ObservableObject {
             let old = games[index]
             let updated = KeptGame(
                 rom: freshRom, totalBytes: old.totalBytes, keptAt: old.keptAt,
-                fileId: old.fileId, webFileName: old.webFileName, contentLength: old.contentLength,
                 stateId: old.stateId, stateUpdatedAt: old.stateUpdatedAt,
                 canonicalPlatformSlug: freshRom.canonicalPlatformSlug(platformsVersions: session.platformsVersions),
                 needsMetadataRefresh: nil
@@ -657,7 +614,6 @@ final class KeptGameStore: ObservableObject {
         let old = games[index]
         let updated = KeptGame(
             rom: old.rom, totalBytes: Self.directorySize(dir), keptAt: old.keptAt,
-            fileId: old.fileId, webFileName: old.webFileName, contentLength: old.contentLength,
             stateId: old.stateId, stateUpdatedAt: old.stateUpdatedAt,
             canonicalPlatformSlug: old.canonicalPlatformSlug,
             needsMetadataRefresh: old.needsMetadataRefresh
@@ -714,9 +670,7 @@ final class KeptGameStore: ObservableObject {
     /// either way.
     func remove(romId: Int, folder: [UInt64: URL]? = nil) {
         tasks[romId]?.cancel()
-        #if os(iOS) && !targetEnvironment(macCatalyst)
         BackgroundDownloads.shared.cancel(romId: romId)
-        #endif
         pendingTransfers[romId] = nil
         errors[romId] = nil
         if let game = kept(romId: romId) {
@@ -775,7 +729,7 @@ final class KeptGameStore: ObservableObject {
     }
 
     /// <platform folder>/roms or <platform folder>/bios, the
-    /// system-folder-first structure Marcus's server uses. No collision
+    /// system-folder-first structure the reference server uses. No collision
     /// handling because the server's directories already guarantee
     /// uniqueness within a platform; a manifest from before the slug
     /// field existed lands under "unknown".
@@ -807,8 +761,8 @@ final class KeptGameStore: ObservableObject {
     /// walk the whole mirror again was quadratic. At four hundred kept
     /// games that was a hundred and sixty thousand attribute reads on
     /// the main thread at every launch and every return to the app,
-    /// long enough for the watchdog to kill the app at launch (Marcus,
-    /// 2026-09-03, a black screen then a crash).
+    /// long enough for the watchdog to kill the app at launch
+    /// (2026-09-03, a black screen then a crash).
     private nonisolated func ensureLinks(for game: KeptGame, justKept: Bool = false, folder: [UInt64: URL]? = nil) {
         guard let storeFiles = try? FileManager.default.contentsOfDirectory(
             at: directory(for: game.romId), includingPropertiesForKeys: nil
@@ -827,7 +781,7 @@ final class KeptGameStore: ObservableObject {
             // likely a manifest that stopped decoding after a past
             // structural change and left its Files copy behind with
             // nothing tracking it any more. Removed, not skipped: found
-            // on device (Marcus, 2026-08-08) silently declining to link
+            // on device (2026-08-08) silently declining to link
             // here left a legitimately re-kept game permanently invisible
             // in Files, since nothing else ever revisits an occupied
             // path once this loop moves past it.
@@ -905,7 +859,7 @@ final class KeptGameStore: ObservableObject {
                 // A game kept moments ago cannot have been deleted in
                 // Files yet, no matter how this check is answered: a
                 // person cannot act faster than the download that just
-                // finished. Found on device (Marcus, 2026-08-07): opening
+                // finished. Found on device (2026-08-07): opening
                 // a game right after keeping it could read this check
                 // before it was ready to answer, and un-kept a game that
                 // had never been touched in Files at all. The grace
@@ -970,35 +924,23 @@ final class KeptGameStore: ObservableObject {
 
         do {
             let romRequest = try await session.romContentRequest(rom)
-            #if os(iOS) && !targetEnvironment(macCatalyst)
             // The system carries the transfer and lands the file; a hard
             // link brings it into staging, so a finish that fails part
             // way leaves the landed file for the retry rather than
             // downloading it again.
-            let contentLength = try await BackgroundDownloads.shared.download(
+            try await BackgroundDownloads.shared.download(
                 romRequest, romId: rom.id, wifiOnly: waitsForWiFi
             )
             guard let landed = BackgroundDownloads.shared.landed(romId: rom.id) else {
                 throw NSError(domain: "KeptGames", code: 0, userInfo: [NSLocalizedDescriptionKey: "The download didn't land."])
             }
-            try FileManager.default.linkItem(at: landed.file, to: staging.appendingPathComponent(rom.fsName))
-            #else
-            let contentLength = try await FileDownloader.download(
-                romRequest, to: staging.appendingPathComponent(rom.fsName)
-            ) { [weak self] received, total in
-                let expected = total > 0 ? total : rom.fsSizeBytes
-                self?.downloading[rom.id] = DownloadProgress(
-                    fraction: expected > 0 ? Double(received) / Double(expected) : 0,
-                    receivedBytes: received, totalBytes: expected
-                )
-            }
-            #endif
+            try FileManager.default.linkItem(at: landed, to: staging.appendingPathComponent(rom.fsName))
 
             var firmwareURLs: [URL] = []
             let firmwareList = try await session.firmware(platformId: rom.platformId)
             for firmware in firmwareList where !firmware.missingFromFS {
                 let url = staging.appendingPathComponent(firmware.fileName)
-                _ = try await FileDownloader.download(session.firmwareContentRequest(firmware), to: url, onProgress: nil)
+                try await FileDownloader.download(session.firmwareContentRequest(firmware), to: url, onProgress: nil)
                 firmwareURLs.append(url)
             }
             let canonicalSlug = rom.canonicalPlatformSlug(platformsVersions: session.platformsVersions)
@@ -1006,11 +948,6 @@ final class KeptGameStore: ObservableObject {
                 NativeLauncher.stageFirmware(from: firmwareURLs, in: staging, platform: platform)
             }
 
-            // Tolerated on failure, unlike everything above: without a
-            // file id the kept game merely cannot pre-fill the web
-            // player's cache, which the web player recovers from by
-            // downloading once, organically.
-            let webFile = try? await session.romFiles(romId: rom.id).first
             // The newest state, so a kept game can resume real progress
             // with zero network rather than only booting fresh. Native
             // only, and entirely tolerant of failure: a game that has
@@ -1044,7 +981,6 @@ final class KeptGameStore: ObservableObject {
 
             let manifest = KeptGame(
                 rom: rom, totalBytes: Self.directorySize(staging), keptAt: Date(),
-                fileId: webFile?.id, webFileName: webFile?.fileName, contentLength: contentLength,
                 stateId: cachedStateId, stateUpdatedAt: cachedStateUpdatedAt,
                 canonicalPlatformSlug: canonicalSlug, needsMetadataRefresh: nil
             )
@@ -1055,9 +991,7 @@ final class KeptGameStore: ObservableObject {
             let final = directory(for: rom.id)
             try? FileManager.default.removeItem(at: final)
             try FileManager.default.moveItem(at: staging, to: final)
-            #if os(iOS) && !targetEnvironment(macCatalyst)
             BackgroundDownloads.shared.clearLanded(romId: rom.id)
-            #endif
             games.append(manifest)
             games.sort { $0.displayName.localizedCaseInsensitiveCompare($1.displayName) == .orderedAscending }
             ensureLinks(for: manifest, justKept: true)
@@ -1076,9 +1010,6 @@ final class KeptGameStore: ObservableObject {
         let fsName: String
         let totalBytes: Int64
         let keptAt: Date
-        let fileId: Int?
-        let webFileName: String?
-        let contentLength: String?
         let platformFsSlug: String?
     }
 
@@ -1110,7 +1041,7 @@ final class KeptGameStore: ObservableObject {
     /// described a real, completed download is preserved either as a
     /// direct decode, a migrated legacy one, or, failing both, left
     /// entirely alone on disk rather than destroyed. The failure that
-    /// taught this (Marcus, 2026-08-07): a structural change to this
+    /// taught this (2026-08-07): a structural change to this
     /// exact struct wiped real kept games outright, their files
     /// surviving only by accident through an already-made Files link,
     /// which then caused a second, separate bug of its own.
@@ -1137,7 +1068,6 @@ final class KeptGameStore: ObservableObject {
             if let legacy = try? decoder.decode(LegacyKeptGameV1.self, from: data) {
                 let game = KeptGame(
                     rom: stubRom(from: legacy), totalBytes: legacy.totalBytes, keptAt: legacy.keptAt,
-                    fileId: legacy.fileId, webFileName: legacy.webFileName, contentLength: legacy.contentLength,
                     stateId: nil, stateUpdatedAt: nil,
                     canonicalPlatformSlug: nil, needsMetadataRefresh: true
                 )
@@ -1192,23 +1122,16 @@ private final class FileDownloader: NSObject, URLSessionDownloadDelegate, @unche
     private let onProgress: (@MainActor (Int64, Int64) -> Void)?
     private var continuation: CheckedContinuation<Void, Error>?
     private var moveError: Error?
-    /// The raw Content-Length header from the response, exactly as sent:
-    /// EmulatorJS validates cached entries by strict string comparison
-    /// against a live HEAD response, so recomputing it from byte count
-    /// is not the same thing.
-    private var contentLengthHeader: String?
 
     private init(destination: URL, onProgress: (@MainActor (Int64, Int64) -> Void)?) {
         self.destination = destination
         self.onProgress = onProgress
     }
 
-    /// Returns the response's Content-Length header string, when present.
-    @discardableResult
     static func download(
         _ request: URLRequest, to destination: URL,
         onProgress: (@MainActor (Int64, Int64) -> Void)?
-    ) async throws -> String? {
+    ) async throws {
         let downloader = FileDownloader(destination: destination, onProgress: onProgress)
         let session = URLSession(configuration: .default, delegate: downloader, delegateQueue: nil)
         defer { session.finishTasksAndInvalidate() }
@@ -1220,7 +1143,6 @@ private final class FileDownloader: NSObject, URLSessionDownloadDelegate, @unche
         } onCancel: {
             session.invalidateAndCancel()
         }
-        return downloader.contentLengthHeader
     }
 
     func urlSession(
@@ -1239,7 +1161,6 @@ private final class FileDownloader: NSObject, URLSessionDownloadDelegate, @unche
         // The temp file only exists for the duration of this callback, so
         // the move happens here, synchronously, and any failure is carried
         // to didCompleteWithError which always fires after.
-        contentLengthHeader = (downloadTask.response as? HTTPURLResponse)?.value(forHTTPHeaderField: "Content-Length")
         if let status = (downloadTask.response as? HTTPURLResponse)?.statusCode,
            !(200...299).contains(status) {
             moveError = NSError(

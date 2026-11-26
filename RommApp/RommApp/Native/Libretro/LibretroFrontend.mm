@@ -1,7 +1,7 @@
 #import <CommonCrypto/CommonCrypto.h>
 #import "LibretroFrontend.h"
 #include "LibretroCoreAPI.h"
-// Explicit, not inherited: TARGET_OS_MACCATALYST is used in an #if below,
+// Explicit, not inherited: TARGET_OS_SIMULATOR is used in an #if below,
 // and an undefined macro there evaluates to 0 in silence rather than
 // failing the build.
 #include <TargetConditionals.h>
@@ -13,20 +13,15 @@
 // cores at all and exists purely for UI work, which is most of what
 // anyone iterates on anyway. Everything above this line, the frontend
 // itself, still compiles, so nothing else in the app needs to know.
-// CABINET_NO_NATIVE_CORES is the same idea for a real platform: the Mac
-// target defines it while no Mac core libraries exist yet, and drops the
-// definition, not this guard, when they land.
-#if !TARGET_OS_SIMULATOR && !CABINET_NO_NATIVE_CORES
+#if !TARGET_OS_SIMULATOR
 #import "GambatteCore.h"
 #import "MGBACore.h"
 #import "GenesisPlusGXCore.h"
 #import "BeetleNGPCore.h"
 #import "MelonDSCore.h"
 #import "PPSSPPCore.h"
-#if !TARGET_OS_TV
 #import "GWCore.h"
 #import "VeMUlatorCore.h"
-#endif
 #endif
 
 #import <UIKit/UIKit.h>
@@ -159,8 +154,8 @@ static void (^gRumbleHandler)(NSInteger port, BOOL strong, uint16_t strength) = 
 std::set<std::string> gVariableValuePool; // guarded by gOptionsMutex
 
 // Two ports, one per local player. Each port owns its whole input state
-// rather than sharing bits of one word: FBNeo's twin-stick digitizing
-// (bits 20-23 below) belongs to player 1's second joystick, and folding a
+// rather than sharing bits of one word: the right stick's digitizing
+// (bits 20-23 below) belongs to that player's own pad, and folding a
 // second player into spare bits of the same mask would alias directly
 // onto it. Shaped like gRumbleWasOn, which was already port-indexed.
 constexpr size_t kMaxPorts = 2;
@@ -172,44 +167,19 @@ std::atomic<uint32_t> gRotation{0};
 // case.
 std::atomic<float> gAnalogLeftX[kMaxPorts];
 std::atomic<float> gAnalogLeftY[kMaxPorts];
-// Relative pointing devices: dials, spinners and trackballs arrive from
-// the cores' side as RETRO_DEVICE_MOUSE deltas. The UI accumulates
-// counts here; the poll callback latches them so every read inside one
-// frame sees the same value, and a frame with no input reads zero.
-// Nothing feeds these except the analog touch controls, so every core
-// that does not ask, and every game without such a control, is exactly
-// where it was when these did not exist.
-std::atomic<int32_t> gMouseAccumX[kMaxPorts];
-std::atomic<int32_t> gMouseAccumY[kMaxPorts];
-int16_t gMouseLatchedX[kMaxPorts];
-int16_t gMouseLatchedY[kMaxPorts];
-// Absolute pointing: a touch on the game's own picture, which is what a
-// lightgun means on a touchscreen. -0x7fff..0x7fff in libretro's
+// Absolute pointing: a touch on the game's own picture, the DS touch
+// screen and Game & Watch's artwork. -0x7fff..0x7fff in libretro's
 // convention, pressed while the finger is down.
 // The pointer channel alone is sized past the pad ports: gw-libretro
 // declares its pointer on PORT 2, above the two seats every pad control
 // uses, and the old kMaxPorts guard silently swallowed every tap sent
-// there. Marcus, first Banana boot: "buttons don't seem to register."
+// there, found on the first Game & Watch boot as taps that did nothing.
 // The pad-facing arrays stay at kMaxPorts on purpose; only pointing
 // widens, so seats, masks and sticks are untouched.
 constexpr size_t kPointerPorts = 3;
 std::atomic<int16_t> gPointerX[kPointerPorts];
 std::atomic<int16_t> gPointerY[kPointerPorts];
 std::atomic<bool> gPointerDown[kPointerPorts];
-std::atomic<bool> gGunOffscreen[kMaxPorts];
-// TEST BUILD, with cabinetInputTrace below: samples-per-frame and last
-// value of the core's own analog-X reads on port 0.
-std::atomic<uint32_t> gAnalogReads{0};
-std::atomic<float> gAnalogLastRead{0};
-// Defined in the Flycast core (Renderer_if.cpp in the spikes tree),
-// written at every render-queue enqueue. Resolved at runtime with dlsym
-// rather than linked, so an app paired with a Flycast archive that
-// predates the symbol (the iPhone's, currently) still builds and runs,
-// it just traces -1.
-static int cabinetQueueDepthNow(void) {
-    static int *p = (int *)dlsym(RTLD_DEFAULT, "cabinetPvrQueueDepth");
-    return p ? *p : -1;
-}
 
 // Cartridge sensors, for the Game Boy Advance carts that shipped with
 // hardware inside them. Only mGBA asks for any of this; every other core
@@ -441,46 +411,10 @@ std::atomic<uint32_t> gHWFrameCount{0};
 // their own hardcoded default regardless of what gOptions holds.
 std::atomic<bool> gThreadedRenderingQueried{false};
 
-// Per-stage timings for the hardware-render path, milliseconds, each
-// holding the most recent single sample rather than an average: the trace
-// that reads them (FrameTrace, NativePlayerRenderer.swift) wants raw
-// per-frame numbers so a stall shows up as a stall instead of being
-// smeared across its neighbours.
-//
-// Temporary instrumentation for issue #6: Dreamcast holds correct emulated
-// speed and correct realtime audio while the picture updates about 20
-// times a second, which says the SH4 is keeping up and something after it
-// is not. This splits "after it" into its actual parts so the answer is
-// measured rather than argued.
-std::atomic<double> gTimeCoreRunMS{0};
-std::atomic<double> gTimeReadbackMS{0};
-std::atomic<double> gTimeSwizzleMS{0};
-
-// Cumulative counters alongside them, same temporary purpose. These three
-// together answer the question the timings alone cannot: audio frames
-// against 44,100 a second says whether emulated time is advancing at
-// realtime, which is the only direct read on whether the SH4 interpreter
-// is keeping up; hardware frames says how often the core actually handed
-// over a new picture; run calls says how often we asked. Cumulative rather
-// than per-frame so no sample can be missed or double counted.
+// Audio frames the core has produced, cumulative. Against the declared
+// sample rate it says whether emulated time is advancing at realtime,
+// which is what the draw loop's audio governor reads.
 std::atomic<uint64_t> gAudioFramesTotal{0};
-std::atomic<uint64_t> gRunCallTotal{0};
-// Duplicate-frame reports from a hardware-rendered core. This is the one
-// signal that says which mode Flycast is actually running in, without
-// inferring it: its non-threaded path returns true from every
-// Emulator::render, so is_dupe is always false and a dupe can never be
-// reported. Any dupe at all means threaded rendering is genuinely on.
-std::atomic<uint64_t> gHWDupeCount{0};
-
-static double nowMS() {
-    return std::chrono::duration<double, std::milli>(
-        std::chrono::steady_clock::now().time_since_epoch()).count();
-}
-
-static void recordStage(std::atomic<double> &slot, double sample) {
-    slot.store(sample, std::memory_order_relaxed);
-}
-
 // Whether a core survives retro_deinit followed by a fresh retro_init in
 // the same process. Most do, and get the full teardown, which is the one
 // guarantee that holds across cores whose internal state does not reset
@@ -776,12 +710,6 @@ void setupHWFramebuffer(GLuint width, GLuint height) {
 }
 
 void videoRefresh(const void *data, unsigned width, unsigned height, size_t pitch) {
-    // A hardware-render core saying "same picture as last time". Counted
-    // for the mode discriminator above; the early return below already
-    // treated it as nothing-changed.
-    if (gUsesHWRender && data == nullptr) {
-        gHWDupeCount.fetch_add(1, std::memory_order_relaxed);
-    }
     if (data == RETRO_HW_FRAME_BUFFER_VALID) {
         // The frame is already sitting in gFBO on the GPU; read it back
         // once as BGRA (matching this frontend's existing XRGB8888 byte
@@ -829,7 +757,6 @@ void videoRefresh(const void *data, unsigned width, unsigned height, size_t pitc
         // implementation is required to accept.
         glBindFramebuffer(GL_FRAMEBUFFER, gFBO);
         glPixelStorei(GL_PACK_ALIGNMENT, 1);
-        double readbackStart = nowMS();
         GLenum readbackErr = GL_NO_ERROR;
         // Whether a finished picture landed in gFrameBytes this call. On
         // the async path the very first frame after activation (or after
@@ -905,15 +832,10 @@ void videoRefresh(const void *data, unsigned width, unsigned height, size_t pitc
             gFrameBytesPerRow = (uint32_t)bytesPerRow;
             published = true;
         }
-        recordStage(gTimeReadbackMS, nowMS() - readbackStart);
         if (wantWidth > gFBOWidth || wantHeight > gFBOHeight) {
             setupHWFramebuffer(std::max(wantWidth, gFBOWidth), std::max(wantHeight, gFBOHeight));
             glBindFramebuffer(GL_FRAMEBUFFER, 0);
         }
-        // Kept, reporting zero, rather than removed with its accessor:
-        // FrameTrace writes a fixed set of columns and a rebuilt trace
-        // should stay comparable against the ones already captured.
-        recordStage(gTimeSwizzleMS, 0);
         if (published) {
             gPixelFormat = LibretroPixelFormatRGBA8888;
             gFrameFlipped = true;
@@ -1002,16 +924,7 @@ size_t audioSampleBatch(const int16_t *data, size_t frames) {
 }
 
 void inputPoll(void) {
-    // Mouse deltas are relative-since-last-poll by convention, so the
-    // accumulator is swapped out here, once per frame, rather than
-    // consumed on read: a core reads X and Y as separate calls and both
-    // must describe the same frame. Clamped to int16 the way the API is.
-    for (size_t p = 0; p < kMaxPorts; p++) {
-        int32_t dx = gMouseAccumX[p].exchange(0, std::memory_order_relaxed);
-        int32_t dy = gMouseAccumY[p].exchange(0, std::memory_order_relaxed);
-        gMouseLatchedX[p] = (int16_t)std::clamp(dx, -32767, 32767);
-        gMouseLatchedY[p] = (int16_t)std::clamp(dy, -32767, 32767);
-    }
+    // Nothing to latch: every input this frontend answers is read live.
 }
 
 int16_t inputState(unsigned port, unsigned device, unsigned index, unsigned id) {
@@ -1033,29 +946,13 @@ int16_t inputState(unsigned port, unsigned device, unsigned index, unsigned id) 
     if (device == RETRO_DEVICE_JOYPAD) {
         return id <= 13 ? (mask >> id) & 1 : 0;
     }
-    // A twin-stick arcade game's second joystick. FBNeo reads it as the
-    // analog right stick (confirmed against its own retro_input.cpp)
-    // even though the real cabinet's control is a plain 4-way joystick,
-    // not a true analog one: digital in, full deflection out, bits
+    // The pad's right stick, digitized: full deflection out, bits
     // 20 (right) / 21 (left) / 22 (down) / 23 (up) in the same mask the
-    // ordinary joypad buttons live in. Y-positive is down, matching
-    // libretro's own convention and confirmed against the touch pad's
-    // identical stick, which already relies on it.
+    // ordinary joypad buttons live in. PPSSPP reads it every frame
+    // (libretro.cpp, CTRL_STICK_RIGHT). Y-positive is down, matching
+    // libretro's own convention.
     if (device == RETRO_DEVICE_ANALOG && index == RETRO_DEVICE_INDEX_ANALOG_RIGHT) {
-        // melonDS reads this axis as a CURSOR SPEED, not a direction,
-        // and that changes what full deflection means. Its joystick
-        // touch mode moves the stylus by (value / 2048) pixels every
-        // frame, so the 0x7fff every other core wants here is 16
-        // pixels a frame: 960 a second across a screen 256 wide, at
-        // one fixed speed, because this stick is digitized and has no
-        // gentle. Reported on the Apple TV as the cursor jumping too
-        // far. Three pixels a frame crosses the touch screen in about
-        // a second and a half, which a thumb can actually aim.
-        //
-        // Scoped to this core alone: every other core reads this axis
-        // as a direction, where anything short of full deflection is
-        // simply a weaker push, and their lines here are unchanged.
-        const int16_t full = gCoreID == LibretroCoreIDMelonDS ? 3 * 2048 : 0x7fff;
+        const int16_t full = 0x7fff;
         if (id == RETRO_DEVICE_ID_ANALOG_X) {
             if ((mask >> 20) & 1) return full;
             if ((mask >> 21) & 1) return -full;
@@ -1072,48 +969,7 @@ int16_t inputState(unsigned port, unsigned device, unsigned index, unsigned id) 
         float value = id == RETRO_DEVICE_ID_ANALOG_X ? gAnalogLeftX[port].load(std::memory_order_relaxed)
                     : id == RETRO_DEVICE_ID_ANALOG_Y ? gAnalogLeftY[port].load(std::memory_order_relaxed)
                     : 0.0f;
-        // TEST BUILD trace: how often the core actually samples the axis,
-        // and the last value it saw. Port 0 X only, the steering axis.
-        if (port == 0 && id == RETRO_DEVICE_ID_ANALOG_X) {
-            gAnalogReads.fetch_add(1, std::memory_order_relaxed);
-            gAnalogLastRead.store(value, std::memory_order_relaxed);
-        }
         return (int16_t)(std::clamp(value, -1.0f, 1.0f) * 0x7fff);
-    }
-    // Relative pointing, the dial/spinner/trackball channel. Latched at
-    // poll time above; zero whenever nothing is feeding it, which for
-    // every existing game and control is always.
-    if (device == RETRO_DEVICE_MOUSE) {
-        switch (id) {
-            case RETRO_DEVICE_ID_MOUSE_X: return gMouseLatchedX[port];
-            case RETRO_DEVICE_ID_MOUSE_Y: return gMouseLatchedY[port];
-            default: return 0;
-        }
-    }
-    // A lightgun is the same absolute aim with a cabinet's own extra
-    // question: is the player pointing off the screen? That gesture is
-    // how these games reload, and the core only honours it on this
-    // device, not on the pointer.
-    if (device == RETRO_DEVICE_LIGHTGUN) {
-        switch (id) {
-            case RETRO_DEVICE_ID_LIGHTGUN_SCREEN_X: return gPointerX[port].load(std::memory_order_relaxed);
-            case RETRO_DEVICE_ID_LIGHTGUN_SCREEN_Y: return gPointerY[port].load(std::memory_order_relaxed);
-            case RETRO_DEVICE_ID_LIGHTGUN_TRIGGER:  return gPointerDown[port].load(std::memory_order_relaxed) ? 1 : 0;
-            case RETRO_DEVICE_ID_LIGHTGUN_IS_OFFSCREEN:
-            case RETRO_DEVICE_ID_LIGHTGUN_RELOAD:
-                return gGunOffscreen[port].load(std::memory_order_relaxed) ? 1 : 0;
-            default: return 0;
-        }
-    }
-    // Absolute pointing, a touch on the picture itself.
-    if (device == RETRO_DEVICE_POINTER) {
-        switch (id) {
-            case RETRO_DEVICE_ID_POINTER_X: return gPointerX[port].load(std::memory_order_relaxed);
-            case RETRO_DEVICE_ID_POINTER_Y: return gPointerY[port].load(std::memory_order_relaxed);
-            case RETRO_DEVICE_ID_POINTER_PRESSED: return gPointerDown[port].load(std::memory_order_relaxed) ? 1 : 0;
-            case RETRO_DEVICE_ID_POINTER_COUNT: return gPointerDown[port].load(std::memory_order_relaxed) ? 1 : 0;
-            default: return 0;
-        }
     }
     return 0;
 }
@@ -1150,15 +1006,10 @@ bool rumbleSetState(unsigned port, enum retro_rumble_effect effect, uint16_t str
             }
             // Handler not wired yet (a rumble fired before app launch
             // finished setting it): fall back to a phone haptic directly
-            // rather than silently dropping the event. tvOS has no Taptic
-            // Engine to fall back to; a rumble that beats the handler wire-up
-            // there is simply dropped, same as it would be on an iPhone with
-            // haptics off.
-#if !TARGET_OS_TV
+            // rather than silently dropping the event.
             UIImpactFeedbackStyle style = strong ? UIImpactFeedbackStyleHeavy : UIImpactFeedbackStyleLight;
             UIImpactFeedbackGenerator *generator = [[UIImpactFeedbackGenerator alloc] initWithStyle:style];
             [generator impactOccurred];
-#endif
         });
     }
     return true;
@@ -1173,17 +1024,6 @@ void logCallback(enum retro_log_level level, const char *fmt, ...) {
     static const char *names[] = {"debug", "info", "warn", "error"};
     unsigned idx = level <= RETRO_LOG_ERROR ? level : RETRO_LOG_ERROR;
     NSLog(@"[core %s] %s", names[idx], buffer);
-#if TARGET_OS_MACCATALYST
-    // Mac only. NSLog is not a usable channel for reading what a core
-    // says: os_log redacts every %s as <private> unless the device has a
-    // logging profile installed, and its duplicate-to-stderr throttles
-    // itself off the moment a core logs in bulk, which is exactly when
-    // there is something to read. Between them, a core that is
-    // announcing its CPU engine, its memory map and its self-test can
-    // look completely silent. On a desktop app stderr is the console a
-    // developer already has, so send it there as well.
-    fprintf(stderr, "[core %s] %s\n", names[idx], buffer);
-#endif
 }
 
 // The two halves of libretro's sensor interface.
@@ -1323,36 +1163,6 @@ bool environmentCallback(unsigned cmd, void *data) {
             // 90-degree counter-clockwise steps.
             gRotation.store(*(const unsigned *)data, std::memory_order_relaxed);
             return true;
-#if TARGET_OS_MACCATALYST
-        case RETRO_ENVIRONMENT_GET_JIT_CAPABLE:
-            // Mac only, and compiled out everywhere else on purpose, so
-            // iOS and tvOS keep running this switch byte-identically.
-            //
-            // Three of the cores ask this: PPSSPP, Flycast and
-            // mupen64plus. It is here for PPSSPP, whose Catalyst build
-            // defines PPSSPP_PLATFORM_IOS (TARGET_OS_IPHONE is 1 under
-            // macabi) and therefore takes the iOS branch of
-            // System_GetPropertyBool(SYSPROP_CAN_JIT). Unanswered, that
-            // call fails and libretro.cpp quietly rewrites a request
-            // for CPUCore::JIT into CPUCore::IR_INTERPRETER, so the Mac
-            // asking for "JIT" in NativeCoreOptions had no effect at
-            // all: the option was set and then overruled.
-            //
-            // The other two are unaffected. Flycast only refuses to
-            // load when this call SUCCEEDS and says no, so it has been
-            // loading on the strength of the call failing; a yes is the
-            // same outcome by a better route. mupen64plus only consults
-            // it to demote the ParaLLEl RSP, and this app leaves that
-            // core on its own "hle" default, so that branch is
-            // unreachable here.
-            //
-            // Answering yes is a claim about the process, not the
-            // hardware: it is true because CabinetMac.entitlements
-            // carries com.apple.security.cs.allow-jit. If that
-            // entitlement is ever dropped, this must go with it.
-            *(bool *)data = true;
-            return true;
-#endif
         case RETRO_ENVIRONMENT_GET_LOG_INTERFACE:
             ((struct retro_log_callback *)data)->log = logCallback;
             return true;
@@ -1428,10 +1238,9 @@ bool environmentCallback(unsigned cmd, void *data) {
 // The one place a core id becomes a function table. Adding a core means
 // one wiring file and one line here.
 const LibretroCoreAPI *coreAPI(LibretroCoreID coreID) {
-#if TARGET_OS_SIMULATOR || CABINET_NO_NATIVE_CORES
-    // No cores in a simulator build, nor in a Mac build until the Mac
-    // core libraries exist; every launch path fails cleanly before it
-    // gets here (see NativePlatform.platform(bySlug:)).
+#if TARGET_OS_SIMULATOR
+    // No cores in a simulator build; every launch path fails cleanly
+    // before it gets here (see NativePlatform.platform(bySlug:)).
     (void)coreID;
     return nullptr;
 #else
@@ -1448,12 +1257,10 @@ const LibretroCoreAPI *coreAPI(LibretroCoreID coreID) {
             return MelonDSCoreAPI();
         case LibretroCoreIDPPSSPP:
             return PPSSPPCoreAPI();
-#if !TARGET_OS_TV
         case LibretroCoreIDGW:
             return GWCoreAPI();
         case LibretroCoreIDVeMUlator:
             return VeMUlatorCoreAPI();
-#endif
         default:
             // This used to fall through to the PlayStation core, so a
             // core id with no case did not fail to load: it silently ran
@@ -1542,11 +1349,6 @@ const LibretroCoreAPI *coreAPI(LibretroCoreID coreID) {
         gButtonMask[p].store(0, std::memory_order_relaxed);
         gAnalogLeftX[p].store(0, std::memory_order_relaxed);
         gAnalogLeftY[p].store(0, std::memory_order_relaxed);
-        gMouseAccumX[p].store(0, std::memory_order_relaxed);
-        gMouseAccumY[p].store(0, std::memory_order_relaxed);
-        gMouseLatchedX[p] = 0;
-        gMouseLatchedY[p] = 0;
-        gGunOffscreen[p].store(false, std::memory_order_relaxed);
         // Cleared per activation, or a platform that skips port 1 (a
         // handheld, say) after one that used it would inherit the
         // previous game's stale device type on a port it never asked for.
@@ -1566,37 +1368,11 @@ const LibretroCoreAPI *coreAPI(LibretroCoreID coreID) {
     gReadbackPBOValid[1] = false;
     gReadbackPBOCursor = 0;
     gForceSyncReadback = false;
-#if TARGET_OS_MACCATALYST
-    // The async pixel-buffer readback loses draws on this platform. With
-    // it on, N64 rendered skies and backgrounds while the depth-tested
-    // geometry went missing: Mario Kart 64 came back correct the moment
-    // the synchronous path was forced, Hydro Thunder came most of the
-    // way back (Marcus, 2026-08-30, on both an M4 and an A18 Pro).
-    // Whatever ANGLE's Metal backend does with a mapped pixel buffer
-    // here, it is not the finished frame the iPhone and Apple TV hand
-    // back, and correctness is worth more than the readback time.
-    //
-    // Deliberately Catalyst only. iOS and tvOS keep the async ladder,
-    // where it was measured taking readback from 3.5ms to 0.08ms, and
-    // compile this branch out entirely.
-    gForceSyncReadback = true;
-#endif
 #if DEBUG
-    // Either a launch argument or a stored default. The argument alone
-    // was untestable on the Mac: a Catalyst app relaunched through
-    // LaunchServices never sees the arguments `open --args` was given,
-    // so the lever could not be thrown on a machine being driven
-    // remotely. `defaults write <bundle id> cabinetSyncReadback -bool
-    // YES` reaches it either way.
+    // Either a launch argument or a stored default.
     gForceSyncReadback = gForceSyncReadback
         || [[NSProcessInfo processInfo].arguments containsObject:@"-cabinetSyncReadback"]
         || [[NSUserDefaults standardUserDefaults] boolForKey:@"cabinetSyncReadback"];
-    // The other direction, so the async path stays reachable on the
-    // platform that now defaults away from it and the next person can
-    // retest it rather than take the comment above on faith.
-    if ([[NSUserDefaults standardUserDefaults] boolForKey:@"cabinetAsyncReadback"]) {
-        gForceSyncReadback = false;
-    }
 #endif
 }
 
@@ -1615,22 +1391,11 @@ const LibretroCoreAPI *coreAPI(LibretroCoreID coreID) {
     gOptionsDirty.store(true, std::memory_order_release);
 }
 
-- (void)addMouseDeltaX:(NSInteger)dx y:(NSInteger)dy port:(NSInteger)port {
-    if (port < 0 || (size_t)port >= kMaxPorts) { return; }
-    gMouseAccumX[port].fetch_add((int32_t)dx, std::memory_order_relaxed);
-    gMouseAccumY[port].fetch_add((int32_t)dy, std::memory_order_relaxed);
-}
-
 - (void)setPointerX:(float)x y:(float)y down:(BOOL)down port:(NSInteger)port {
     if (port < 0 || (size_t)port >= kPointerPorts) { return; }
     gPointerX[port].store((int16_t)(std::clamp(x, -1.0f, 1.0f) * 0x7fff), std::memory_order_relaxed);
     gPointerY[port].store((int16_t)(std::clamp(y, -1.0f, 1.0f) * 0x7fff), std::memory_order_relaxed);
     gPointerDown[port].store(down, std::memory_order_relaxed);
-}
-
-- (void)setLightgunOffscreen:(BOOL)offscreen port:(NSInteger)port {
-    if (port < 0 || (size_t)port >= kMaxPorts) { return; }
-    gGunOffscreen[port].store(offscreen, std::memory_order_relaxed);
 }
 
 - (void)setControllerPortDevice:(unsigned)device port:(NSInteger)port {
@@ -1944,40 +1709,7 @@ const LibretroCoreAPI *coreAPI(LibretroCoreID coreID) {
     }
 }
 
-// TEST BUILD input trace: one line per frame, what the core is actually
-// being fed. Answers, without inference: is the analog axis arriving, is
-// anything pressing d-pad directions, and on which port. Buffered, flushed
-// every 60 frames. Delete with the tvOS steering investigation.
-static void cabinetInputTrace(void) {
-    static FILE *f = nullptr;
-    static uint32_t n = 0;
-    if (!f) {
-        const char *home = getenv("HOME");
-        if (!home) return;
-        char path[512];
-        snprintf(path, sizeof(path), "%s/Library/Caches/input-trace.txt", home);
-        f = fopen(path, "w");
-        if (!f) return;
-        fprintf(f, "frame,p0_ax,p0_ay,p0_up,p0_dn,p0_lt,p0_rt,p1_ax,p1_mask,analog_reads,last_read,qdepth\n");
-    }
-    uint32_t m0 = gButtonMask[0].load(std::memory_order_relaxed);
-    uint32_t m1 = gButtonMask[1].load(std::memory_order_relaxed);
-    fprintf(f, "%u,%.3f,%.3f,%d,%d,%d,%d,%.3f,%u,%u,%.3f,%d\n", n++,
-            gAnalogLeftX[0].load(std::memory_order_relaxed),
-            gAnalogLeftY[0].load(std::memory_order_relaxed),
-            (m0 >> RETRO_DEVICE_ID_JOYPAD_UP) & 1,
-            (m0 >> RETRO_DEVICE_ID_JOYPAD_DOWN) & 1,
-            (m0 >> RETRO_DEVICE_ID_JOYPAD_LEFT) & 1,
-            (m0 >> RETRO_DEVICE_ID_JOYPAD_RIGHT) & 1,
-            gAnalogLeftX[1].load(std::memory_order_relaxed), m1,
-            gAnalogReads.exchange(0, std::memory_order_relaxed),
-            gAnalogLastRead.load(std::memory_order_relaxed),
-            cabinetQueueDepthNow());
-    if (n % 60 == 0) fflush(f);
-}
-
 - (void)runFrame {
-    cabinetInputTrace();
     if (gInitialized && gGameLoaded) {
         if (gUsesHWRender && gGLContext) {
             // Nothing else in this app touches GLES, so this should
@@ -2006,10 +1738,7 @@ static void cabinetInputTrace(void) {
             glBindFramebuffer(GL_FRAMEBUFFER, gFBO);
             glViewport(0, 0, gFBOWidth, gFBOHeight);
         }
-        double runStart = nowMS();
         gCore->run();
-        recordStage(gTimeCoreRunMS, nowMS() - runStart);
-        gRunCallTotal.fetch_add(1, std::memory_order_relaxed);
     }
 }
 
@@ -2040,32 +1769,8 @@ static void cabinetInputTrace(void) {
     return gCoreID == LibretroCoreIDPPSSPP;
 }
 
-- (double)debugCoreRunMS {
-    return gTimeCoreRunMS.load(std::memory_order_relaxed);
-}
-
 - (uint64_t)debugAudioFramesTotal {
     return gAudioFramesTotal.load(std::memory_order_relaxed);
-}
-
-- (uint64_t)debugHWFramesTotal {
-    return gHWFrameCount.load(std::memory_order_relaxed);
-}
-
-- (uint64_t)debugRunCallTotal {
-    return gRunCallTotal.load(std::memory_order_relaxed);
-}
-
-- (uint64_t)debugHWDupeTotal {
-    return gHWDupeCount.load(std::memory_order_relaxed);
-}
-
-- (double)debugReadbackMS {
-    return gTimeReadbackMS.load(std::memory_order_relaxed);
-}
-
-- (double)debugSwizzleMS {
-    return gTimeSwizzleMS.load(std::memory_order_relaxed);
 }
 
 - (nullable LibretroFrame *)latestFrame {

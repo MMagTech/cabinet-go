@@ -130,9 +130,7 @@ actor RommClient {
     /// behind a domain, the public address is what lands in the second box.
     /// Preferring the second box on principle would send them out to the
     /// internet and back while sitting next to the server, the exact thing
-    /// this feature exists to stop. Telling them to pair again instead is
-    /// not free advice either: that changes the webview player's origin and
-    /// abandons its cache of games.
+    /// this feature exists to stop.
     private var preferredURL: URL? {
         guard let secondURL else { return nil }
         if LocalAddress.looksLocal(pairedURL), !LocalAddress.looksLocal(secondURL) {
@@ -280,17 +278,8 @@ actor RommClient {
         var req = request(path: "/api/auth/device/init", method: "POST")
         req.setValue("application/json", forHTTPHeaderField: "Content-Type")
 
-        #if targetEnvironment(macCatalyst)
-        // UIDevice.current.name under Catalyst reports a generic "iPad",
-        // which is exactly how the first Mac pairing showed up in RomM's
-        // devices list. The host name is the Mac's actual name.
-        let host = ProcessInfo.processInfo.hostName
-        let deviceName = host.hasSuffix(".local") ? String(host.dropLast(".local".count)) : host
-        let devicePlatform = "macOS"
-        #else
         let deviceName = await UIDevice.current.name
         let devicePlatform = "iOS"
-        #endif
         let body: [String: Any] = [
             "client_device_identifier": Self.deviceIdentifier,
             "name": deviceName.isEmpty ? devicePlatform : deviceName,
@@ -336,22 +325,12 @@ actor RommClient {
         }
     }
 
-    /// tvOS account switching only, for right now: defaults a newly paired
-    /// profile's label to whoever is actually signed in rather than the
-    /// server address. `me.read` is already in `RommScopes.required`, so
-    /// every token this app ever holds can already call this.
+    /// Who this token belongs to. `Session.setLocalAddress` calls it to
+    /// prove a second address reaches the same server. `me.read` is
+    /// already in `RommScopes.required`, so every token this app ever
+    /// holds can call this.
     func currentUser() async throws -> RommUser {
         try await send(request(path: "/api/users/me"), decoding: RommUser.self)
-    }
-
-    /// tvOS account switching only: the same account's avatar photo, so a
-    /// profile can show the real picture instead of a generic person
-    /// icon, confirmed live as a direct image response (not `avatar_path`,
-    /// a relative path this same call's user object also carries but
-    /// that a plain asset fetch cannot resolve the way `assetData` does
-    /// for a cover's timestamped path).
-    func avatarData(userId: Int) async throws -> Data {
-        try await assetData(path: "/api/users/\(userId)/avatar")
     }
 
     // MARK: Library
@@ -461,10 +440,9 @@ actor RommClient {
         return (200...299).contains(http.statusCode)
     }
 
-    /// Maps a platform's folder name to the short name EmulatorJS's core
-    /// catalogue actually uses, admin edited per install at Settings >
-    /// Platforms on the server. RomM's own page reads this from the same
-    /// endpoint before picking a core; skipping it is exactly what let a
+    /// Maps a platform's folder name to the platform's short name, admin
+    /// edited per install at Settings > Platforms on the server. RomM's own
+    /// page reads this from the same endpoint before picking a core; skipping it is exactly what let a
     /// TurboGrafx-16 library named anything other than the one folder name
     /// this app happened to guess load no core at all. `/api/config` needs
     /// no scope beyond being logged in, and decodes only the one field this
@@ -665,10 +643,9 @@ actor RommClient {
 
     /// Saves, states and firmware for the launch screen. Each is a plain
     /// list the server already models, so nothing here reinterprets RomM.
-    /// Uploads a save state the same way the webview player's injected
-    /// JavaScript does (POST /api/states?rom_id=&emulator=, multipart with
-    /// a `stateFile` part and an optional `screenshotFile`), but natively
-    /// with bearer auth instead of riding the webview's cookies. The bytes
+    /// Uploads a save state the way RomM's own player does (POST
+    /// /api/states?rom_id=&emulator=, multipart with a `stateFile` part and
+    /// an optional `screenshotFile`), with bearer auth. The bytes
     /// are opaque to RomM; what matters for later loads is the `emulator`
     /// tag, which the launch screen uses to grey out states that the
     /// running core cannot restore.
@@ -1134,10 +1111,9 @@ enum RommError: LocalizedError, Equatable {
     /// it with a retry rather than an explanation.
     case offline
     /// A reverse proxy in front of RomM rejecting an oversized request
-    /// body, most often a save state. The webview player's injected JS
-    /// already catches this on its own upload path; this is the same
-    /// case for RommClient.uploadState's native path, which had no
-    /// specific handling and fell through to the generic HTTP message.
+    /// body, most often a save state. RommClient.uploadState once had no
+    /// specific handling for it and fell through to the generic HTTP
+    /// message.
     case stateTooLarge
     case http(Int)
     case transport(String)

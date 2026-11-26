@@ -1,8 +1,6 @@
 import Foundation
 
-/// Daily-stable cover picks for the library's artwork tiles, shared by the
-/// iOS and tvOS library screens. Extracted from `TVLibraryView` when iOS
-/// adopted the same tile treatment, rather than copy-pasted into it.
+/// Daily-stable cover picks for the library's artwork tiles.
 ///
 /// Covers are chosen at a random offset into each platform or collection
 /// rather than from its first page, so a 141 game arcade set shows genuine
@@ -37,12 +35,10 @@ enum LibraryTileArt {
     /// pick is from another day. Restored before any network call so tiles
     /// are painted from the disk cache immediately; only a genuinely new
     /// roll has to wait on the server. Paths are short strings, a few KB
-    /// for a whole library, which matters because tvOS gives an app only
-    /// 500 KB of real persistent storage.
+    /// for a whole library.
     ///
-    /// The namespace keeps each platform's screen on its own storage keys:
-    /// tvOS was here first with "tv", and iOS uses "ios" rather than
-    /// inheriting a dictionary rolled for a different screen.
+    /// The namespace keeps each screen on its own storage keys. The
+    /// library uses "ios", the key its picks are already stored under.
     static func restore(namespace: String) -> [String: [String]] {
         let defaults = UserDefaults.standard
         guard defaults.integer(forKey: dayKey(namespace)) == today,

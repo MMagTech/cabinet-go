@@ -7,7 +7,7 @@ cd "$(dirname "$0")/../../.."
 
 SDK=$(xcrun --show-sdk-path --sdk iphonesimulator)
 OUT=/tmp/cabinet-controls-test
-xcrun swiftc \
+xcrun --sdk iphonesimulator swiftc \
   -sdk "$SDK" -target arm64-apple-ios17.0-simulator \
   -D DEBUG \
   RommApp/RommApp/Controls/ControllerBindings.swift \

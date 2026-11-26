@@ -44,8 +44,8 @@ so they are fully reproducible and are recorded as versions.
 
 This is live in the apps that ship today, not a risk.
 
-`build-core.sh` makes a separate checkout per platform and clones only
-when the directory is absent, so each platform froze at whatever upstream
+`build-core.sh` made a separate checkout per platform and cloned only
+when the directory was absent, so each platform froze at whatever upstream
 HEAD was on the day that platform was first built. Where those days were
 weeks apart, the revisions are weeks apart.
 
@@ -150,8 +150,8 @@ It converts a silent divergence into a loud one.
 
 ### What is still outstanding
 
-The pinning is in place and verified. The rebuilds are not done. Eleven
-cores need their iOS and tvOS libraries rebuilt at the pinned revision,
-which is twenty-two builds, followed by playing something on each
-platform. Until that happens the apps still ship what they shipped
+The pinning is in place and verified. The rebuilds are not done. Of the
+cores the iPhone app still ships, Gambatte and Genesis Plus GX need their
+iOS libraries rebuilt at the pinned revision, followed by playing
+something on each. Until that happens the app still ships what it shipped
 before, which is the divergence this file documents.

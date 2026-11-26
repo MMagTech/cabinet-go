@@ -1,14 +1,11 @@
 import Foundation
 
-/// The battery-save engine both players drive: which copy of an in-game
+/// The battery-save engine the player drives: which copy of an in-game
 /// save wins at launch, when a snapshot travels, and how each region
 /// (card, Game Boy clock, Sega CD cart, Dreamcast VMU, the file-writing
-/// cores' flushes) is captured and uploaded. One shared type on purpose,
-/// extracted 2026-08-16 from `NativePlayerView` when the tvOS pass would
-/// otherwise have meant a second copy: the tvOS player carried exactly
-/// such a copy once before and it silently went stale, which is how tvOS
-/// spent a day syncing only PS1 and N64 while iOS had every platform.
-/// The views own the *when* (pause, background, quit); this type owns
+/// cores' flushes) is captured and uploaded. Its own type rather than
+/// part of `NativePlayerView`, so the save logic has one home. The views
+/// own the *when* (pause, background, quit); this type owns
 /// the *what*.
 ///
 /// One instance per play session, created by the player view alongside

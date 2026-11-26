@@ -23,8 +23,8 @@ final class Session: ObservableObject {
     @Published private(set) var serverVersion: String?
     @Published private(set) var scopes: [String] = []
     /// An admin can rename any platform's folder to whatever they like, and
-    /// RomM remembers the mapping from that folder name back to the short
-    /// name EmulatorJS actually knows, admin editable at Settings > Platforms
+    /// RomM remembers the mapping from that folder name back to the
+    /// platform's short name, admin editable at Settings > Platforms
     /// on the server. `/api/config` is where RomM's own page reads this, and
     /// it is the only place this app can learn it too: nothing about a
     /// platform's folder name can be assumed or bundled, it is chosen fresh
@@ -60,11 +60,6 @@ final class Session: ObservableObject {
     /// never claim the second because of the first.
     @Published private(set) var isUsingLocalAddress = false
 
-    /// RomM's own id for the active pairing, so tvOS can hand it to a
-    /// profile it is backfilling. Nil for a pairing made before this was
-    /// stored.
-    var romDeviceId: String? { UserDefaults.standard.string(forKey: romDeviceKey) }
-
     private var client: RommClient?
 
     private let serverKey = "com.mmagtech.RommApp.serverURL"
@@ -79,68 +74,6 @@ final class Session: ObservableObject {
     init() {
         restore()
         watchNetworkChanges()
-    }
-
-    /// Swaps in a different account's server and token, and reloads as if
-    /// the app had freshly launched against it.
-    ///
-    /// tvOS-only in practice: it exists for account switching there
-    /// (`TVProfileStore`), which keeps every paired profile's own token in
-    /// its own separate Keychain entry, and calls this to make one of them
-    /// the active one. `Keychain.save(token:forHost:)` is the same public
-    /// call pairing itself already makes; this does not change Keychain's
-    /// format or how iOS reads it, and `serverKey`/`restore()` stay private
-    /// to this class rather than duplicated as string literals in a second
-    /// file. Nothing on iOS calls this today; iOS has no concept of
-    /// switching which RomM account is active mid-session.
-    ///
-    /// `localURL` is the profile's own second address, and it has to be
-    /// swapped here alongside the token rather than left where it is.
-    /// `localServerURL` is stored once for the whole app, so without this
-    /// a profile switch kept whichever second address was already set, no
-    /// matter which server the incoming profile points at. Two profiles on
-    /// two different servers is where that bites: routing would prefer the
-    /// first profile's local address for the second profile's requests,
-    /// the reachability probe would pass because a real RomM really is
-    /// answering there, and then every request would be refused by a
-    /// server that has never seen that token. That reads as the app being
-    /// broken rather than as a misconfiguration, and it is the same
-    /// failure `setLocalAddress` grew its `/api/users/me` check to
-    /// prevent. Passing nil clears it, which is right for a profile that
-    /// has no second address of its own.
-    func activateProfile(
-        serverURL url: URL,
-        token: String,
-        localURL: URL? = nil,
-        romDeviceId: String? = nil
-    ) throws {
-        guard let host = url.host else {
-            throw RommError.transport("That server address has no host.")
-        }
-        try Keychain.save(token: token, forHost: host)
-        UserDefaults.standard.set(url.absoluteString, forKey: serverKey)
-
-        // Swapped with the token for the same reason the second address
-        // is: RomM issues one of these per pairing, so a profile carrying
-        // the previous profile's id would report presence against the
-        // wrong device. Nil clears it, which correctly turns the
-        // heartbeat off for a profile paired before this was stored.
-        if let romDeviceId {
-            UserDefaults.standard.set(romDeviceId, forKey: romDeviceKey)
-        } else {
-            UserDefaults.standard.removeObject(forKey: romDeviceKey)
-        }
-
-        // Written before `restore()`, which reads this key back out and is
-        // what republishes `localServerURL` and rebuilds the client.
-        // Removing the key is what makes restore publish nil.
-        if let localURL {
-            UserDefaults.standard.set(localURL.absoluteString, forKey: localServerKey)
-        } else {
-            UserDefaults.standard.removeObject(forKey: localServerKey)
-        }
-
-        restore()
     }
 
     // MARK: Restoring a previous pairing
@@ -414,7 +347,7 @@ final class Session: ObservableObject {
         Task { [weak self] in
             guard let self, let client else { return }
             // A failure never overwrites a value that already worked.
-            // Found on device (Marcus, 2026-08-07): this fetch runs once,
+            // Found on device (2026-08-07): this fetch runs once,
             // at launch, and its old fallback was an empty mapping on any
             // failure, network blip included. Empty means every platform
             // falls back to its raw folder name, and for any platform

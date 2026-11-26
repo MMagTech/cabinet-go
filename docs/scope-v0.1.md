@@ -311,9 +311,9 @@ way back for a stated reason, not because the list looked short.
 **Declined, 2026-08-05: offline library browsing.** Cut after asking what it
 would actually be worth. Nothing offline can be acted on: Play, downloads,
 Data Saver, favoriting and compatibility marking all need the server, so what
-survives is a catalogue of games you cannot do anything with. Marcus put it
-plainly, that browsing a list you cannot act on is not what the app is for and
-is "another layer to remember". The cost was never the build, it was a
+survives is a catalogue of games you cannot do anything with. Browsing a list
+you cannot act on is not what the app is for, and it is one more layer to
+remember. The cost was never the build, it was a
 permanent second data path through every list screen plus staleness questions
 ("why is this game missing?" because it was added after the last sync) to
 debug forever.
@@ -360,7 +360,7 @@ per game override only earns its place if a specific game genuinely wants
 different controls.
 
 Rejected: editing inside the running game, which was the first suggestion
-here. Marcus's reasoning, and it is better: the fifteen shapes are the data
+here. The better reasoning: the fifteen shapes are the data
 model, so a list of them is the honest browse surface, and you can fix a
 layout before you next play rather than discovering it mid game. It is also
 the safer build, since an in game editor would put drag handling inside
@@ -419,8 +419,8 @@ least likely thing anyone running a personal instance has actually set
 up): user collections were the same shape as the Favourites collection
 this app already reads, so shipped first.
 
-**Declined, 2026-08-05: virtual and smart collections.** Marcus turned auto
-collections on at the instance and found the volume itself is the problem:
+**Declined, 2026-08-05: virtual and smart collections.** Turning auto
+collections on at the instance showed the volume itself is the problem:
 surfacing a hundred generated groupings trades one kind of overwhelm for
 another, and does not solve finding a game among 1,200 arcade titles. What
 solved that is the search tab shipped the same day, one thumb tap and a few
@@ -444,17 +444,12 @@ emulator. This rides on the same ROM fetch machinery offline browsing needs,
 so it belongs right after it, not as a separate project.
 
 A second, deliberately separate reason lands here too, settled 2026-08-03:
-keyboard machines, C64, Amiga, DOS and the rest, `ComputerPlatforms.swift`.
-Not unplayable by EmulatorJS the way Dreamcast is; unplayable *by touch*,
-which this app does not pretend to fix with a bad on screen keyboard. The
-launch screen blocks Play on these today with a plain explanation. Download
-is the planned way out for them too, once this item exists; an on screen
-keyboard is not planned at all, stated in the code as a decision rather
-than a gap. A physical Bluetooth keyboard should already reach these games
-today with no app support needed, reasoned from the code, not yet confirmed
-on a real keyboard: nothing here intercepts hardware key events before a
-WKWebView delivers them, and EmulatorJS has its own keyboard handling for
-exactly these cores.
+keyboard machines, C64, Amiga, DOS and the rest. Not unplayable by
+EmulatorJS the way Dreamcast is; unplayable *by touch*, which this app does
+not pretend to fix with a bad on screen keyboard. An on screen keyboard is
+not planned at all. Since the handheld scope (docs/scope-handheld.md) these
+machines are simply not played here, like every system that is not a
+handheld, and Keep is the way to their files.
 
 Netplay was considered on 2026-08-02 and declined, with reasons worth keeping
 because they will come up again. It is entirely socket based over

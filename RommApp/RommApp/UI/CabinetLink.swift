@@ -6,12 +6,10 @@ import Foundation
 /// its launch screen. Two URLs rather than one carrying a flag, so a link
 /// is readable on sight in a log or a crash report.
 ///
-/// Lives here, in the shared folder, rather than beside the Apple TV's top
-/// shelf where it started. The format is now spoken by four things that do
-/// not all compile the same files: the top shelf extension writes it, the
-/// television's deep link handler reads it, and on iPhone the widget writes
-/// it and Spotlight results carry it. One definition, so a change cannot
-/// reach three of them and miss the fourth.
+/// The widget writes it, Spotlight results carry it, and the app's deep
+/// link handler reads it, and the widget extension does not compile the
+/// app's files. One definition, compiled into both, so a change cannot
+/// reach one and miss the other.
 enum CabinetLink {
     static let scheme = "cabinetgo"
 

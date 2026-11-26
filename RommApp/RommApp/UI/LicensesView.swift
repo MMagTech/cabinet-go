@@ -42,7 +42,7 @@ struct LicensesView: View {
             id: "genesis-plus-gx",
             name: "Genesis Plus GX",
             role: "Native Game Gear core",
-            summary: "Free for non-commercial use, with the same distribution terms Cabinet Go already meets for FBNeo.",
+            summary: "Free for non-commercial use. Cabinet Go is free and is never sold, which is what these terms ask.",
             file: "genesis-plus-gx"
         ),
         Entry(
@@ -67,10 +67,31 @@ struct LicensesView: View {
             file: "drastic-freebios"
         ),
         Entry(
+            id: "ppsspp",
+            name: "PPSSPP",
+            role: "Native PSP core",
+            summary: "GPL version 2 or later.",
+            file: "ppsspp"
+        ),
+        Entry(
+            id: "gw-libretro",
+            name: "gw-libretro",
+            role: "Native Game & Watch core",
+            summary: "zlib license, by Andre Leiradella.",
+            file: "gw-libretro"
+        ),
+        Entry(
+            id: "vemulator",
+            name: "VeMUlator",
+            role: "Dreamcast VMU minigame player",
+            summary: "GPL version 3.",
+            file: "vemulator"
+        ),
+        Entry(
             id: "libretro-common",
             name: "libretro-common",
             role: "Emulator interface",
-            summary: "The libretro API and utility code FBNeo's core is built against, MIT licensed.",
+            summary: "The libretro API and utility code the cores are built against, MIT licensed.",
             file: "libretro-common"
         ),
         Entry(
@@ -84,7 +105,7 @@ struct LicensesView: View {
             id: "libchdr",
             name: "libchdr",
             role: "CHD disc image reading",
-            summary: "Reads the compressed disc format the CD-based cores load, BSD licensed.",
+            summary: "Reads CHD compressed disc images, built into PPSSPP and Genesis Plus GX, BSD licensed.",
             file: "libchdr"
         ),
         Entry(
@@ -115,6 +136,27 @@ struct LicensesView: View {
             summary: "Ben Hoyt's INI parser, built into mGBA, BSD licensed.",
             file: "inih"
         ),
+        Entry(
+            id: "ffmpeg",
+            name: "FFmpeg",
+            role: "PSP video and audio decoding",
+            summary: "LGPL version 2.1 or later. The prebuilt build PPSSPP carries for iOS, built without FFmpeg's GPL parts.",
+            file: "ffmpeg"
+        ),
+        Entry(
+            id: "lua",
+            name: "Lua",
+            role: "Script interpreter",
+            summary: "MIT licensed, by Lua.org, PUC-Rio. Built into PPSSPP and into gw-libretro, which runs the Game & Watch simulations as Lua programs.",
+            file: "lua"
+        ),
+        Entry(
+            id: "bzip2",
+            name: "bzip2",
+            role: "Decompression inside gw-libretro",
+            summary: "BSD-style license, by Julian Seward.",
+            file: "bzip2"
+        ),
     ]
 
     var body: some View {
@@ -131,9 +173,7 @@ struct LicensesView: View {
             }
         }
         .navigationTitle("Licenses")
-        #if os(iOS)
         .navigationBarTitleDisplayMode(.inline)
-        #endif
     }
 }
 
@@ -157,16 +197,12 @@ private struct LicenseTextView: View {
                 Text(licenseText)
                     .font(.caption.monospaced())
                     .foregroundStyle(.secondary)
-                    #if os(iOS)
                     .textSelection(.enabled)
-                    #endif
             }
             .frame(maxWidth: .infinity, alignment: .leading)
             .padding()
         }
         .navigationTitle(entry.name)
-        #if os(iOS)
         .navigationBarTitleDisplayMode(.inline)
-        #endif
     }
 }

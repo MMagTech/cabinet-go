@@ -11,28 +11,15 @@ struct PlatformTile: View {
     let covers: [String]
 
     static var height: CGFloat {
-        #if targetEnvironment(macCatalyst)
-        110
-        #else
         96
-        #endif
     }
 
-    /// Desk-distance type on the Mac tile, phone sizes elsewhere.
     private static var titleFont: Font {
-        #if targetEnvironment(macCatalyst)
-        .title3.weight(.semibold)
-        #else
         .subheadline.weight(.semibold)
-        #endif
     }
 
     private static var countFont: Font {
-        #if targetEnvironment(macCatalyst)
-        .footnote
-        #else
         .caption2
-        #endif
     }
 
     var body: some View {
@@ -63,8 +50,8 @@ struct PlatformTile: View {
     /// with the label zone kept a flat opaque panel that fades out over
     /// the art. Proportional, never fixed points: the label zone is a
     /// fraction of the tile's own width, so the same tile works on any
-    /// phone or pad width. The lesson came from the tvOS tile, where
-    /// fixed widths squeezed "Arcade" until it hyphenated.
+    /// phone or pad width. Fixed widths once squeezed a long platform name
+    /// until it hyphenated.
     private func backdrop(covers: [String]) -> some View {
         GeometryReader { geo in
             // Where the covers start, as a fraction of the tile. The
@@ -87,10 +74,10 @@ struct PlatformTile: View {
                     .frame(maxWidth: .infinity, alignment: .trailing)
 
                     // A solid fill for the label zone rather than the
-                    // gradient's own opaque stop: on the tvOS tile an
-                    // interpolated "opaque" stop left a per-platform
-                    // hairline of art color at the tile's edge, and a
-                    // plain Rectangle has no interpolation to get wrong.
+                    // gradient's own opaque stop: an interpolated
+                    // "opaque" stop once left a per-platform hairline of
+                    // art color at the tile's edge, and a plain
+                    // Rectangle has no interpolation to get wrong.
                     HStack(spacing: 0) {
                         Rectangle()
                             .fill(Self.panel)
@@ -112,9 +99,9 @@ struct PlatformTile: View {
         }
     }
 
-    /// The same panel value the tvOS tile settled on, and deliberately
-    /// darker and less saturated than the approved mockup's purple: the
-    /// same sRGB values render far more vividly on a wide-gamut display,
-    /// which is how the first tvOS build came out a loud electric purple.
+    /// Deliberately darker and less saturated than the approved mockup's
+    /// purple: the same sRGB values render far more vividly on a
+    /// wide-gamut display, where the mockup's own came out a loud
+    /// electric purple.
     private static let panel = Color(red: 0.14, green: 0.10, blue: 0.24)
 }

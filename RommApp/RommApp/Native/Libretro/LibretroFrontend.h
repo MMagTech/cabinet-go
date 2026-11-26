@@ -25,8 +25,8 @@ typedef NS_ENUM(NSInteger, LibretroCoreID) {
     LibretroCoreIDMGBA NS_SWIFT_NAME(mgba) = 3,
     LibretroCoreIDGenesisPlusGX NS_SWIFT_NAME(genesisPlusGX) = 4,
     LibretroCoreIDBeetleNGP NS_SWIFT_NAME(beetleNGP) = 8,
-    // Nintendo DS. The libretro melonDS fork, interpreter-only on both
-    // Apple platforms (its ios-arm64/tvos-arm64 builds set no JIT_ARCH),
+    // Nintendo DS. The libretro melonDS fork, interpreter-only (its
+    // ios-arm64 build sets no JIT_ARCH),
     // software rendered with the core's own threaded-3D rasterizer
     // carrying the heavy frames. Two ARM CPUs interpreted at once makes
     // this the heaviest core in the binary; its device runs are a
@@ -229,25 +229,15 @@ typedef NS_ENUM(NSInteger, LibretroCoreID) {
 // (matching screen y and libretro's own RETRO_DEVICE_ID_ANALOG_Y
 // convention, confirmed against TouchControlPad's identical sign
 // choice for the touch stick). Call once per frame alongside
-// -setButtonMask:. Dreamcast is the first core here to read this;
-// the digital-only right stick FBNeo's twin-stick games use lives
-// entirely in -setButtonMask:'s own bits instead. Same port rules as
+// -setButtonMask:. The digitized right stick lives entirely in
+// -setButtonMask:'s own bits instead. Same port rules as
 // -setButtonMask:port:.
 - (void)setAnalogStickX:(float)x y:(float)y port:(NSInteger)port;
 
-// Relative pointing (dial, spinner, trackball), accumulated between
-// frames and read by cores as RETRO_DEVICE_MOUSE deltas. Counts, not
-// points: the core applies each game's own sensitivity on top.
-- (void)addMouseDeltaX:(NSInteger)dx y:(NSInteger)dy port:(NSInteger)port;
-
 // Absolute pointing, -1..1 across the visible game picture, read by
-// cores as RETRO_DEVICE_POINTER. What a lightgun means on a touchscreen.
+// cores as RETRO_DEVICE_POINTER: the DS touch screen, and Game &
+// Watch's artwork on port 2.
 - (void)setPointerX:(float)x y:(float)y down:(BOOL)down port:(NSInteger)port;
-
-// Aiming off the picture entirely, which on a cabinet meant pointing the
-// gun past the screen and is how these games reload. Answered on the
-// lightgun's own offscreen and reload ids.
-- (void)setLightgunOffscreen:(BOOL)offscreen port:(NSInteger)port;
 
 // Display rotation the core requested, in 90-degree counter-clockwise
 // steps (0-3). Vertical arcade boards render sideways and rely on the
@@ -275,8 +265,8 @@ typedef NS_ENUM(NSInteger, LibretroCoreID) {
 
 // The frame rate the core declares it wants to be run at (its
 // retro_system_av_info timing.fps), which is not the display's refresh
-// rate: NTSC systems ask for 59.94 and an Apple TV's display link can
-// run far above that. The draw loop must pace retro_run against this,
+// rate: NTSC systems ask for 59.94 and a ProMotion display link runs
+// far above that. The draw loop must pace retro_run against this,
 // not against how often it happens to be asked to draw.
 - (double)targetFPS;
 
@@ -301,36 +291,16 @@ typedef NS_ENUM(NSInteger, LibretroCoreID) {
 // sets it.
 - (nullable NSString *)hwRenderDiagnostics;
 
-// Debug-only per-stage timings for one emulated frame, milliseconds,
-// smoothed. Temporary instrumentation for issue #6, where Dreamcast holds
-// correct emulated speed and realtime audio while the picture arrives at
-// about 20fps: that combination rules the SH4 interpreter out and points
-// at everything between the core finishing a frame and Metal drawing it.
-// -debugCoreRunMS covers the whole retro_run, the two below are the parts
-// of it this frontend itself owns, so run minus the other two is what
-// Flycast spent emulating and submitting GL.
 // Whether this core needs the draw loop's audio governor, which holds a
 // core to realtime by skipping retro_run when its own audio output has
 // run ahead of the wall clock. True for Flycast alone; see the
 // implementation for why every other core must not get it.
 - (BOOL)needsAudioGovernor;
 
-- (double)debugCoreRunMS;
-- (double)debugReadbackMS;
-- (double)debugSwizzleMS;
-
-// Cumulative counters for the same trace. Audio frames against 44,100 a
-// second is the only direct read on whether emulated time is advancing at
-// realtime, and so on whether the interpreter is keeping up; hardware
-// frames counts the pictures the core actually produced, run calls counts
-// the times we asked for one.
+// Audio frames the core has produced, cumulative. Against the declared
+// sample rate it is the only direct read on whether emulated time is
+// advancing at realtime, which is what the audio governor holds to.
 - (uint64_t)debugAudioFramesTotal;
-- (uint64_t)debugHWFramesTotal;
-- (uint64_t)debugRunCallTotal;
-// Duplicate-frame reports from a hardware core. Nonzero proves Flycast's
-// threaded rendering is actually on: the non-threaded path can never
-// report a dupe.
-- (uint64_t)debugHWDupeTotal;
 
 // Copies bytes into the core's save RAM buffer, the standard libretro
 // frontend contract for restoring battery saves: call it after the game

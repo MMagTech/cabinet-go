@@ -2,9 +2,8 @@
 # One command for a control-layout change, so shipping it is not a thing
 # anyone has to remember.
 #
-# Marcus, 2026-08-24, after being told twice that an app was updated
-# when it was not, and then having to ask again: "I shouldn't need to
-# keep reminding you."
+# Written 2026-08-24, after an app was twice reported updated when it
+# was not.
 #
 # The trap is that a layout lives in FOUR places at once. The repo has
 # it; the app and the editor BUNDLE it, so a layout change is a code change as far
@@ -28,7 +27,7 @@ echo "== building (layouts are bundled, so this is not optional) =="
 # Piping xcodebuild into grep hands the PIPELINE grep's exit status, so
 # `set -e` never sees a failed build and the script sails on to install
 # a stale binary. That is exactly how a broken Layout Editor reached
-# Marcus's phone on 2026-08-24: the build had been failing for half an
+# the phone on 2026-08-24: the build had been failing for half an
 # hour and every run still printed its way to "done". Capture the log,
 # check the real status, print only on failure.
 build() {
@@ -54,11 +53,11 @@ for app in "Layout Editor" "Cabinet"; do
         >/dev/null 2>&1 && echo "   $app -> phone" || echo "   FAILED $app"
 done
 
-# The editor's working copies are HIS, and this script only ever READS
-# them. A layout comes into the repo when he marks it green and
-# pull-ready.sh collects it; nothing here writes to the device.
-# Reported, never repaired: a problem in a working copy is his to fix in
-# the editor.
+# The editor's working copies belong to whoever is editing, and this
+# script only ever READS them. A layout comes into the repo when it is
+# marked green and pull-ready.sh collects it; nothing here writes to the
+# device. Reported, never repaired: a problem in a working copy is fixed
+# in the editor.
 echo "== the editor's working copies (reported only, never written) =="
 WORK=$(mktemp -d)
 xcrun devicectl device copy from --device $PHONE --domain-type appDataContainer \

@@ -4,15 +4,15 @@ import SwiftUI
 /// Home and the library both. Not two screens each drawing their own
 /// version of the same idea: Home's own resume-first "Kept games" list
 /// and the library's platform-grouped one used to be separately
-/// maintained copies of the identical underlying data, and Marcus
-/// caught it the moment he compared them side by side, 2026-08-07: "why
-/// would the two need to exist... we just need a home."
+/// maintained copies of the identical underlying data, which showed the
+/// moment they were compared side by side (2026-08-07): there was no
+/// reason for two, only for one home.
 ///
 /// Kept, native-capable games grouped by platform, each opening into the
 /// exact grid or list screen live browsing already uses, badges and
-/// context menu included. Webview-only kept games are excluded: their
-/// player still needs the server to start, so listing them would set up
-/// a tap that fails regardless of what is actually stored. Nothing kept
+/// context menu included. Kept games this app cannot play (kept only for
+/// their files) are excluded: listing them would set up a tap that fails
+/// regardless of what is actually stored. Nothing kept
 /// yet falls through to the same `OfflineNotice` every other empty state
 /// in this app already uses, so a launch with nothing downloaded still
 /// gets an honest, familiar answer rather than a browsing screen with
@@ -72,28 +72,22 @@ struct OfflineLibraryView: View {
                                     .font(.callout.monospacedDigit())
                             }
                         }
-                        #if os(iOS) && !targetEnvironment(macCatalyst)
                         // Remove All Downloads on a long press, the one
                         // platform action that makes sense with no
-                        // connection (Marcus, 2026-09-03, airplane mode).
+                        // connection (2026-09-03, airplane mode).
                         .contextMenu {
                             PlatformDownloadMenuItems(platform: entry.platform, label: platformLabel(for: entry.platform), offersDownloadAll: false)
                         }
-                        #endif
                     }
                 } header: {
                     // Text alone, no icon: the real toggle is already on
                     // screen wherever this view appears, and repeating
-                    // its airplane glyph here just doubled it (Marcus,
-                    // 2026-08-07: "redundant to the airplane above it").
+                    // its airplane glyph here just doubled it
+                    // (2026-08-07).
                     Text(networkMonitor.offlineReason.label)
                 }
             }
-            #if os(iOS)
             .listStyle(.insetGrouped)
-            #else
-            .listStyle(.plain)
-            #endif
         }
     }
 }

@@ -22,10 +22,6 @@ struct LibraryScreen: View {
     /// appears immediately and the art fills in rather than the whole
     /// screen waiting on N extra requests.
     @State private var mosaics: [String: [String]] = [:]
-    #if targetEnvironment(macCatalyst)
-    /// The platform a Mac tile opens; see platformTile.
-    @State private var openPlatform: Platform?
-    #endif
 
     @State private var collections: [Collection] = []
     @State private var loadingCollections = true
@@ -75,16 +71,8 @@ struct LibraryScreen: View {
         // than stacking both: the tab bar already says Library, so a large
         // title would only repeat it while pushing the list further down.
         .navigationTitle("Library")
-        #if os(iOS)
         .navigationBarTitleDisplayMode(.inline)
-        #endif
         .toolbar {
-            // Neither control on the Mac. Its sidebar already lists the
-            // collections, so a Platforms/Collections switcher would be
-            // a second way to the same place, and its game lists are the
-            // TV grid with no view toggle (see RomListView, and the Mac
-            // target's founding commit). The menu was also inert there.
-            #if !targetEnvironment(macCatalyst)
             ToolbarItem(placement: .principal) {
                 Picker("Browse by", selection: $browsing) {
                     ForEach(Browsing.allCases, id: \.self) { Text($0.rawValue) }
@@ -105,7 +93,6 @@ struct LibraryScreen: View {
                     Image(systemName: viewMode == .grid ? "square.grid.3x3" : "list.bullet")
                 }
             }
-            #endif
         }
         .onChange(of: viewMode) { _, mode in
             UserDefaults.standard.set(mode.rawValue, forKey: Self.viewModeKey)
@@ -127,19 +114,9 @@ struct LibraryScreen: View {
         // it once a connection returns.
         .onChange(of: networkMonitor.isConnected) { _, _ in Task { await loadPlatforms() } }
         .onChange(of: networkMonitor.manualOfflineMode) { _, _ in Task { await loadPlatforms() } }
-        // GameLaunchView is iOS-only for now; see HomeView.swift for why.
-        #if targetEnvironment(macCatalyst)
-        .navigationDestination(item: $playing) { rom in
-            GameLaunchView(rom: rom)
-        }
-        .navigationDestination(item: $openPlatform) { platform in
-            RomListView(source: .platform(platform))
-        }
-        #elseif os(iOS)
         .fullScreenCover(item: $playing) { rom in
             NavigationStack { GameLaunchView(rom: rom) }
         }
-        #endif
     }
 
     // MARK: Platforms
@@ -151,10 +128,10 @@ struct LibraryScreen: View {
         // deliberate toggle, or a real signal loss, has to visibly
         // change what this screen shows the moment it happens, not wait
         // for the live list to be empty already. The same view Home
-        // shows, not a second one built to look like it (Marcus,
-        // 2026-08-07): browsing the full server catalog was always out
-        // of scope for offline, but kept games were never meant to be
-        // invisible here just because the rest of the catalog is.
+        // shows, not a second one built to look like it (2026-08-07):
+        // browsing the full server catalog was always out of scope for
+        // offline, but kept games were never meant to be invisible here
+        // just because the rest of the catalog is.
         if networkMonitor.isOffline {
             OfflineLibraryView(onRetry: loadPlatforms)
         } else if viewMode == .list {
@@ -194,11 +171,7 @@ struct LibraryScreen: View {
             }
             // Inset rows read as cards floating under the bars, where the
             // full width plain style ran straight into them.
-            #if os(iOS)
             .listStyle(.insetGrouped)
-            #else
-            .listStyle(.plain)
-            #endif
             .refreshable { await loadPlatforms() }
         } else {
             ScrollView {
@@ -232,9 +205,7 @@ struct LibraryScreen: View {
                         .foregroundStyle(.secondary)
                         .padding(.top, 60)
                 } else {
-                    // Two columns of artwork tiles, the same visual
-                    // language as the tvOS platform tile at phone scale.
-                    // This was the one screen in the app with no artwork
+                    // Two columns of artwork tiles. This was the one screen in the app with no artwork
                     // at all. Only what this app plays, so no headings.
                     LazyVGrid(
                         columns: Self.tileColumns,
@@ -248,11 +219,7 @@ struct LibraryScreen: View {
                     .padding(.bottom, 12)
                 }
             }
-            // Not on the Mac: pull to refresh is a touch gesture, and a
-            // Mac list refreshes on its own triggers.
-            #if !targetEnvironment(macCatalyst)
             .refreshable { await loadPlatforms() }
-            #endif
         }
     }
 
@@ -268,44 +235,15 @@ struct LibraryScreen: View {
                     .font(.callout.monospacedDigit())
             }
         }
-        #if os(iOS) && !targetEnvironment(macCatalyst)
         // The same download items the tile carries, so the list mode
-        // is not a way to lose them (Marcus, 2026-09-03).
+        // is not a way to lose them (2026-09-03).
         .contextMenu {
             PlatformDownloadMenuItems(platform: platform, label: platformLabel(for: platform))
         }
-        #endif
     }
 
     private func platformTile(_ platform: Platform) -> some View {
-        #if targetEnvironment(macCatalyst)
-        // A plain Button on the Mac, opening the platform through
-        // navigationDestination below, lifted under the pointer the way
-        // the covers are, with the platform's menu on it. Built this
-        // way while chasing a doubled context menu that turned out to
-        // be MacWindow's title bar timer, not the link; kept because it
-        // matches the covers' construction exactly.
-        let covers = mosaics[LibraryTileArt.key(platform: platform)] ?? []
-        return Button {
-            openPlatform = platform
-        } label: {
-            PlatformTile(title: platformLabel(for: platform), count: platform.romCount, covers: covers)
-        }
-        .buttonStyle(.plain)
-        .macHoverLift()
-        .contextMenu {
-            MacPlatformMenu(platform: platform, label: platformLabel(for: platform))
-        }
-        #elseif os(tvOS)
-        return tile(
-            title: platformLabel(for: platform),
-            count: platform.romCount,
-            coverKey: LibraryTileArt.key(platform: platform),
-            source: .platform(platform)
-        )
-        #else
-        // The platform's download items on a long press, the phone's
-        // context menu, as the Mac's tile has them on a right click.
+        // The platform's download items on a long press.
         return tile(
             title: platformLabel(for: platform),
             count: platform.romCount,
@@ -315,7 +253,6 @@ struct LibraryScreen: View {
         .contextMenu {
             PlatformDownloadMenuItems(platform: platform, label: platformLabel(for: platform))
         }
-        #endif
     }
 
     private func collectionTile(_ collection: Collection) -> some View {
@@ -335,14 +272,7 @@ struct LibraryScreen: View {
     /// slices into seamed landscape crops. Adaptive columns hand the
     /// tile its intended proportions back, five or six to a row.
     private static var tileColumns: [GridItem] {
-        #if targetEnvironment(macCatalyst)
-        // Four across at any window width, Marcus's call: tiles stay
-        // small and even rather than adapting into five or six slivers
-        // at fullscreen.
-        Array(repeating: GridItem(.flexible(), spacing: 12), count: 4)
-        #else
         [GridItem(.flexible(), spacing: 10), GridItem(.flexible())]
-        #endif
     }
 
     private func tile(
@@ -403,10 +333,6 @@ struct LibraryScreen: View {
         loadingPlatforms = false
     }
 
-    /// Unsupported platforms get art too: on iOS "unsupported" only means
-    /// no native core, and those games still play through the webview
-    /// player, so their tiles are not a dead end the way they would be
-    /// on tvOS.
     private func loadTileArt() async {
         let fresh = await LibraryTileArt.load(
             platforms: platforms, collections: collections,
@@ -441,11 +367,7 @@ struct LibraryScreen: View {
                     }
                 }
             }
-            #if os(iOS)
             .listStyle(.insetGrouped)
-            #else
-            .listStyle(.plain)
-            #endif
             .refreshable { await loadCollections() }
         } else {
             ScrollView {

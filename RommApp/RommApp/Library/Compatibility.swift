@@ -2,18 +2,18 @@ import SwiftUI
 
 /// Which games do not work on this phone, and what the app has noticed.
 ///
-/// Some games simply do not survive here. CV1000 boards run at a fraction
-/// of speed because iOS forbids the core's dynarec, and a game can be
-/// perfectly emulated and still no fun to play. None of that is knowable
-/// from RomM, which models a library rather than a device, and none of it
-/// is true of the library generally: the same ROM may be fine on a
-/// desktop. So the mark is local, per device, and per ROM.
+/// Some games simply do not survive here. A core can run a game too slowly
+/// without its recompiler, which iOS forbids, and a game can be perfectly
+/// emulated and still no fun to play. None of that is knowable from RomM,
+/// which models a library rather than a device, and none of it is true of
+/// the library generally: the same ROM may be fine on a desktop. So the
+/// mark is local, per device, and per ROM.
 ///
 /// Two things feed it. Someone can say so directly, which covers judgement
 /// the app cannot make, like a game being technically fine and too slow to
-/// enjoy. And the player counts how often each game's web process died,
-/// because after the third or fourth time that is evidence worth offering
-/// rather than a thing to keep quiet about.
+/// enjoy. And the app counts how often each game took the player down
+/// mid-play (`NativeSessionMarker`), because after the third time that is
+/// evidence worth offering rather than a thing to keep quiet about.
 ///
 /// An object rather than a namespace of statics so that marking a game
 /// redraws every shelf and list showing it. Defaults are not observable,
@@ -39,8 +39,11 @@ final class Compatibility: ObservableObject {
 
     // MARK: What the app noticed
 
+    /// The key keeps its old "nativeCrashes" name, from when the web
+    /// player kept a count of its own, so counts already on a phone carry
+    /// over.
     private func crashKey(_ romId: Int) -> String {
-        "com.mmagtech.RommApp.crashes.\(romId)"
+        "com.mmagtech.RommApp.nativeCrashes.\(romId)"
     }
 
     func recordCrash(romId: Int) {
@@ -55,24 +58,6 @@ final class Compatibility: ObservableObject {
     /// is the threshold because one is bad luck and two is a coincidence.
     func shouldSuggestMark(romId: Int) -> Bool {
         !isMarked(romId) && crashes(romId: romId) >= 3
-    }
-
-    // MARK: Native player crashes
-
-    /// Counted separately from webview crashes on purpose: webview counts
-    /// push a game's default toward the native player, so a native core
-    /// that also dies on that game must be able to push back, or a bad
-    /// game gets locked into whichever player failed second.
-    private func nativeCrashKey(_ romId: Int) -> String {
-        "com.mmagtech.RommApp.nativeCrashes.\(romId)"
-    }
-
-    func recordNativeCrash(romId: Int) {
-        UserDefaults.standard.set(nativeCrashes(romId: romId) + 1, forKey: nativeCrashKey(romId))
-    }
-
-    func nativeCrashes(romId: Int) -> Int {
-        UserDefaults.standard.integer(forKey: nativeCrashKey(romId))
     }
 }
 
@@ -183,7 +168,7 @@ private struct DownloadProgressRing: View {
                 let fraction = min(max(progress.fraction, 0), 1)
                 // Softened to sit as lightly on the cover as the star
                 // does: a full-strength tint ring read heavier than the
-                // favorite badge beside it (Marcus, 2026-09-02).
+                // favorite badge beside it (2026-09-02).
                 ZStack {
                     Circle()
                         .stroke(.tint.opacity(0.2), lineWidth: 2)
@@ -258,7 +243,7 @@ private struct GameContextMenu: ViewModifier {
                     // Podcasts and Music draw Remove Download and the
                     // way the platform's Remove All Downloads already
                     // reads; the two sat side by side in different
-                    // colours (Marcus, 2026-09-03).
+                    // colours (2026-09-03).
                     Button(role: .destructive) {
                         keptStore.remove(romId: romId)
                     } label: {

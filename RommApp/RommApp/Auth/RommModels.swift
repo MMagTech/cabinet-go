@@ -53,13 +53,8 @@ struct DeviceAuthToken: Decodable {
     }
 }
 
-/// `GET /api/users/me`. Just the fields tvOS account switching actually
-/// wants: the username, so a newly paired profile can default its label
-/// to who is actually signed in rather than the server address, and the
-/// id, needed to fetch that same user's avatar from `/api/users/{id}/avatar`,
-/// a real image endpoint confirmed live (200, image/png) against
-/// romm.mmagtech.com, distinct from `avatar_path`, which is a relative
-/// path this user object also carries but that endpoint resolves directly.
+/// `GET /api/users/me`. Only whether it answers matters to the app (see
+/// `RommClient.currentUser`); these two fields are all it decodes.
 struct RommUser: Decodable {
     let id: Int
     let username: String
@@ -112,18 +107,12 @@ struct Collection: Decodable, Identifiable, Hashable {
 /// Scopes are fixed at pair time. Adding one later means the person has to pair
 /// again, so this list is deliberately in one place and should change rarely.
 ///
-/// The webview player raises the bar beyond plain library browsing: RomM's
-/// frontend asks `/api/users/me` (me.read) before it renders anything, marks
-/// the game as last played through user rom props (roms.user.write), and
-/// ingests play sessions the same way. Verified against protected_route
-/// declarations in RomM's backend/endpoints.
-///
-/// collections.read is not for a collections feature. RomM's web frontend
-/// treats any 403 from any endpoint as a dead session and bounces to its
-/// login screen (frontend/src/services/api/index.ts), and its boot sequence
-/// always fetches collections. Without the scope, the player loads and is
-/// immediately kicked out. Any scope the SPA's startup path touches must be
-/// granted, or the webview cannot host it.
+/// The list was set when the app hosted RomM's own web player, whose
+/// startup needed every scope here (me.read, roms.user.write for last
+/// played and play sessions, collections.read for its boot fetch; checked
+/// then against protected_route declarations in RomM's backend/endpoints).
+/// That player has left and the list is unchanged: narrowing it would mean
+/// every phone pairs again.
 enum RommScopes {
     static let required = [
         "me.read",

@@ -42,14 +42,13 @@ struct Rom: Codable, Identifiable, Hashable {
     /// this app must seed and clear those keys under exactly this value to
     /// agree with RomM about which game they belong to. Not safe to use for
     /// anything else: IGDB disambiguates near duplicate platform entries
-    /// with a trailing "--1", TurboGrafx-16 among them, and that string
-    /// appears nowhere in EmulatorJS's own core catalogue.
+    /// with a suffix of two hyphens and a 1, TurboGrafx-16 among them,
+    /// which matches none of the short names RomM maps platforms to.
     let platformSlug: String
     /// The platform's folder name on the server's filesystem, chosen by
     /// whoever set the instance up and free to be anything. This is the key
     /// into RomM's admin editable PLATFORMS_VERSIONS mapping, which is the
-    /// only reliable way to reach the short name EmulatorJS's core
-    /// catalogue actually indexes by.
+    /// only reliable way to reach the platform's short name.
     let platformFsSlug: String
     let platformDisplayName: String?
     let summary: String?
@@ -97,8 +96,7 @@ struct Rom: Codable, Identifiable, Hashable {
         PlatformSupport.arcadeSlugs.contains(platformSlug)
     }
 
-    /// The short name EmulatorJS's own core catalogue actually indexes by,
-    /// resolved the same way RomM's own page resolves it: look the folder
+    /// The platform's short name, resolved the same way RomM's own page resolves it: look the folder
     /// name up in the server's admin editable mapping, and only fall back
     /// to the folder name itself, lowercased, when nothing is mapped. Every
     /// lookup this app makes against its bundled core and control data

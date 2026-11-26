@@ -1,14 +1,11 @@
-// iOS-only, like the core it serves; the television never links gw
-// (docs/building.md) and tvOS has no touches to map anyway.
-#if !os(tvOS)
 import UIKit
 
 /// Where each Game & Watch simulator draws its buttons, so a tap on the
 /// artwork presses the real thing.
 ///
-/// Marcus, 2026-08-25: "I don't want a controller, I want to click the
-/// buttons on the screen as if I were really playing the game back in
-/// the day." The simulators ignore the libretro pointer (proven with
+/// The point (2026-08-25) is not a controller: it is pressing the
+/// buttons on the screen as if really playing the game back in the day.
+/// The simulators ignore the libretro pointer (proven with
 /// scripted taps in the bench), so taps must become JOYPAD presses, and
 /// that needs to know where every drawn button sits, per game.
 ///
@@ -23,7 +20,7 @@ struct GWHotspots: Decodable {
     let width: Int
     let height: Int
     /// The artwork's own orientation: wider than tall plays landscape.
-    /// The player locks to this, per Marcus's call that a game may own
+    /// The player locks to this, by a deliberate call that a game may own
     /// its orientation if that is what the tap surface needs.
     let orientation: String
     let buttons: [String: [Int]]
@@ -333,4 +330,3 @@ final class GWPointerSurface: UIView {
     }
 }
 
-#endif

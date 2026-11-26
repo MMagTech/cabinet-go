@@ -11,9 +11,9 @@ struct CoverImage: View {
     let title: String
     /// Whether a missing or failed cover draws the titled placeholder.
     /// Defaults to true, so every existing caller behaves exactly as
-    /// before. tvOS's library tiles pass false: there the art sits on the
-    /// app's own coloured panel, and a grey placeholder box reads as a
-    /// broken tile rather than as a game with no art.
+    /// before. The library's platform tiles pass false: there the art
+    /// sits on the app's own coloured panel, and a grey placeholder box
+    /// reads as a broken tile rather than as a game with no art.
     var showsPlaceholder: Bool = true
     /// Fill for grids and rails, where every tile has to be the same shape.
     /// Fit for the Home hero, which shows the whole image rather than a
