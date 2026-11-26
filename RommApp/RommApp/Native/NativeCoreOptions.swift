@@ -246,24 +246,6 @@ enum NativeCoreOptions {
         ),
     ]
 
-    /// Not a core option at all: the screen overlay toggle, this app's
-    /// own setting wearing the option plumbing so it gets storage and a
-    /// Settings row for free. The "cabinet_" prefix marks it; it rides
-    /// along in the options dictionary and vecx simply never asks for
-    /// it. See VectrexOverlays.swift for what it controls.
-    static let vectrex: [NativeCoreOption] = [
-        NativeCoreOption(
-            key: VectrexOverlays.optionKey,
-            label: "Screen overlays",
-            detail: "Draws each game's original translucent overlay over the picture, the colored sheet every Vectrex cartridge shipped with. Games whose sheet is not reproduced show the bare screen.",
-            choices: [
-                .init(value: "enabled", label: "On"),
-                .init(value: "disabled", label: "Off"),
-            ],
-            defaultValue: "enabled"
-        ),
-    ]
-
     /// Opera's two real levers, from its own option table. The 3DO ran
     /// many of its games below 20fps on the actual hardware, which is why
     /// the overclock option exists and why it is worth exposing: it is a
@@ -359,7 +341,7 @@ enum NativeCoreOptions {
     ///
     /// Labels are EFFECTIVE speeds, half the nominal values sent to the
     /// core, because the build charges interpreted instructions double
-    /// (CPU_RATIO=2, see tools/build-flycast.sh). A row saying 200MHz
+    /// (CPU_RATIO=2 in Cabinet's Flycast build). A row saying 200MHz
     /// while delivering 100 would be a lie users tune against.
     static let dreamcast: [NativeCoreOption] = [
         NativeCoreOption(
@@ -432,7 +414,6 @@ enum NativeCoreOptions {
         case .dreamcast: return dreamcast
         case .atari2600: return atari2600
         case .threeDO: return threeDO
-        case .vectrex: return vectrex
         case .virtualBoy: return virtualBoy
         default: return []
         }

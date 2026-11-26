@@ -18,9 +18,8 @@ data is yours and stays wherever you host it.
 crash reporting service, no advertising, and no accounts other than the
 one on your own server. Cabinet has no servers of its own.
 
-**Local network.** Cabinet asks for local network access so a phone can be
-a controller for an Apple TV or a Mac on the same Wi-Fi, and so it can
-reach a RomM server by a local address. That traffic stays on your network.
+**Local network.** Cabinet asks for local network access so it can reach a
+RomM server by a local address. That traffic stays on your network.
 
 **Notifications and Live Activities.** Used only to tell you when a
 platform finishes downloading. Nothing about them is sent to anyone.

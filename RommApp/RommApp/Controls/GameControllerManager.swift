@@ -355,9 +355,7 @@ final class GameControllerManager: ObservableObject {
         gamepad.leftThumbstick.valueChangedHandler = { [weak self] _, x, y in
             MainActor.assumeIsolated { self?.stick(x: x, y: y, player: index) }
         }
-        // A twin-stick arcade game's second joystick, ids 20-23, the same
-        // ones the on-screen pad's own second stick already drives (see
-        // ArcadeLayout.secondStick). Digital in, full deflection out,
+        // A twin-stick arcade game's second joystick, ids 20-23. Digital in, full deflection out,
         // matching every other source that reaches those ids: the real
         // cabinet's second stick is a joystick, not a true analog stick,
         // and both players' bridges treat it that way already. This was
@@ -664,9 +662,8 @@ final class GameControllerManager: ObservableObject {
     }
 
     /// Same digitizing as the left stick, ids 23/22/21/20 (up/down/left/
-    /// right) instead of the standard RetroPad directions: see
-    /// ArcadeLayout.secondStick for why those specific numbers and where
-    /// they lead downstream in each player.
+    /// right) instead of the standard RetroPad directions: the ids
+    /// LibretroFrontend answers through RETRO_DEVICE_ANALOG.
     private func stick2(x: Float, y: Float, player: Int) {
         guard let slot = slots[player] else { return }
         digitizeAxis(21, magnitude: max(0, -x), slot: slot, player: player)

@@ -5,29 +5,19 @@ memory card, and a tiny handheld with a 48x32 monochrome LCD that games
 drew on through the controller (Sonic Adventure's Chao status, Resident
 Evil Code: Veronica's hidden health readout) and downloaded whole
 minigames onto (Chao Adventure: carry your creature away from the
-console, raise it on the go, sync it back). Cabinet gives both halves to
-the phone, because the phone already is the thing in your hand while the
-television plays.
+console, raise it on the go, sync it back). Cabinet Go gives the phone
+the second half: it plays those minigames, because a VMU was the thing
+you took away from the console.
 
 Everything in this document is settled and built as of 2026-08-29. It
 records the design so its boundaries are legible; the reasoning that got
-here is compressed, not omitted.
+here is compressed, not omitted. Which Dreamcast games show in the
+library, and how the card crosses with CabinetOS, is in
+[scope-handheld.md](scope-handheld.md).
 
-## The two halves
+## The minigame player
 
-**The companion window (display).** While an Apple TV runs a Dreamcast
-game and the phone is its controller, the phone's Dreamcast pad shows
-the game's live VMU LCD in a small slate-and-sage window at the top
-centre, where the real controller's VMU window sat. Flycast receives
-every LCD write on the television (`push_vmu_screen`, given a callback
-by the patch in `tools/build-flycast.sh`); `VMULCDRelay` packs the
-48x32 frame to 192 bytes and the pairing wire carries it as its
-`vmuLCD` packet kind, sent on change and once at join, tagged and
-verified like every other television-to-phone kind. Display only, by
-decision: no overlay when playing Dreamcast on the phone itself, no
-standalone couch mode, no settings.
-
-**The minigame player (play).** When a Dreamcast game's memory card
+When a Dreamcast game's memory card
 carries a GAME-type file, that game's launch screen grows a VMU row.
 Tapping it boots the card in VeMUlator (core #22, the smallest core in
 the app by two orders of magnitude), fullscreen, portrait, with the
@@ -56,12 +46,9 @@ The VMU is never a platform. It does not appear in RomM, the library,
 settings, or the emulator picker; the minigame is cargo inside a DC
 game's save, and the launch-screen row is the only door.
 
-**The two-writer rule.** While a television on the network is running a
-Dreamcast session for the same game, the row declines: the pairing
-wire's advertisement (`dreamcast.<rom id>`) is how the phone knows, and
-one card must never have two writers. On the go, play follows Cabinet's
-normal remote flow: fetch the latest card, play, upload on exit. Fully
-offline works exactly when the card was already on the phone.
+Play follows the normal remote flow: fetch the latest card, play, upload
+on exit. Fully offline works exactly when the card was already on the
+phone.
 
 ## MENU, SLEEP, and the LED
 
@@ -87,20 +74,6 @@ nothing may ever send `RETRO_DEVICE_ID_JOYPAD_START` to the core:
 Buttons give a haptic tick honoring the existing Rumble setting. All
 audio comes from the emulated VMU's own beeper through the normal core
 audio path; the skin makes no sounds of its own.
-
-## Platform split
-
-The minigame player is iOS-only, by decision (`docs/building.md`): the
-minigame's identity is the thing you take away from the television, and
-48x32 is absurd at living room size. The television keeps the display
-half only. A bonus of the split: the two-writer rule stays simple,
-because the phone is the only standalone VMU that exists.
-
-**The door left open, not scope creep:** with a Bluetooth pad as player
-one there is currently no VMU display anywhere. A view-only variant of
-the TV Controller screen that shows the LCD large without claiming a
-player seat is the recorded later idea; the seat-claiming change is its
-one piece of real work.
 
 ## What settled it
 

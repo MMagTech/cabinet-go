@@ -78,13 +78,10 @@ final class NativePlayerAudio {
         guard !started else { return }
         started = true
 
-        // The same session the webview player has always set
-        // (PlayerView's own setCategory/setActive pair). The native
-        // player never set one, so native games ran under whatever
+        // Without a session of its own the player ran under whatever
         // category the process happened to have, which is not the
         // category a game wants and leaves the I/O buffer at whatever
-        // the system picked. Two players in one app should not disagree
-        // about this.
+        // the system picked.
         try? AVAudioSession.sharedInstance().setCategory(.playback, mode: .default)
         try? AVAudioSession.sharedInstance().setActive(true)
 

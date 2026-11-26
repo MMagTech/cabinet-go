@@ -60,18 +60,6 @@ struct NativePlayerView: View {
     /// once the environment session exists.
     @State private var cardSync: MemoryCardSync?
 
-    /// The cabinet's controls, read against the generation of MAME data
-    /// that matches the core about to run them. On MAME 2003-Plus that
-    /// means the driver's own listxml fills what the modern map never
-    /// knew and trims buttons the driver cannot see; every other core,
-    /// FBNeo included, resolves through the modern map exactly as before.
-    private var profile: ArcadeProfile {
-        ArcadeProfileStore.shared.resolve(
-            romId: rom.id, shortname: rom.fsNameNoExt,
-            using: core == .mame2003Plus ? .mame2003Plus : .modern
-        )
-    }
-
     private var canonicalSlug: String {
         rom.canonicalPlatformSlug(platformsVersions: session.platformsVersions)
     }
@@ -86,42 +74,12 @@ struct NativePlayerView: View {
         NativePlatform.platform(for: rom, canonicalSlug: canonicalSlug) ?? .arcade
     }
 
-    /// Matches PlayerView.controlLayout exactly: arcade resolves per game
-    /// through the MAME profile map, everything else through the bundled
-    /// per-platform file. This used to be arcade-only unconditionally,
-    /// which was correct while FBNeo was the only native core, and wrong
-    /// the moment Saturn joined it: every Saturn game got FBNeo's fallback
-    /// arcade pad, Coin button included, since nothing here ever branched.
-    /// What the game's own driver says it wants in your hands, passed to
-    /// the arcade layout builder only when the running core's mouse
-    /// channel is wired (MAME 2003-Plus today). Nil keeps every other
-    /// core's layouts byte-identical.
-    private var analogControls: AnalogControls? {
-        guard core == .mame2003Plus else { return nil }
-        return AnalogControls.controls(forShortname: rom.fsNameNoExt)
-    }
-
+    /// The bundled per-platform touch layout.
     private var controlLayout: ControlLayout {
-        if rom.isArcade {
-            return ArcadeLayout.build(for: profile, analog: analogControls)
-        }
-        // The six-button Genesis pad follows the Controller core setting,
-        // the same lever that already tells the core which pad port 0
-        // presents: with the setting on, the touch overlay finally grows
-        // the X/Y/Z row and Mode that only physical controllers had.
-        if NativeCoreOptionsStore.padDevice(for: platform) == NativePadDevice.sixButton,
-           let sixButton = ControlLayout.named("genesis6") {
-            return sixButton
-        }
-        // Same idea for PCE's Avenue Pad 6, but through a genuine core
-        // variable rather than a controller-port device change, since
-        // that is what pce_fast_default_joypad_type_p1 actually is.
-        if (platform == .tg16 || platform == .tgCD),
-           NativeCoreOptionsStore.value(NativeCoreOptions.pceJoypad, for: platform) == "6 Buttons",
-           let sixButton = ControlLayout.named("pce6") {
-            return sixButton
-        }
-        return ControlLayout.forPlatform(slug: canonicalSlug) ?? ArcadeLayout.build(for: .fallback)
+        // A missing layout file already trips forPlatform's assertion in
+        // a debug build; a release build draws no pad rather than crash.
+        return ControlLayout.forPlatform(slug: canonicalSlug)
+            ?? ControlLayout(system: "default", items: [], landscapeItems: nil, companionItems: nil, headroom: nil)
     }
 
     private func layoutItems(landscape: Bool) -> [ControlLayout.Item] {
@@ -146,12 +104,8 @@ struct NativePlayerView: View {
         platform == .gameAndWatch ? GWHotspots.spec(for: rom.fsName) : nil
     }
 
-    /// Matches PlayerView.controlStripHeight exactly: only arcade's vertical
-    /// boards trade control height for canvas, everything else gets the
-    /// flat height.
-    private var controlStripHeight: CGFloat {
-        rom.isArcade && profile.vertical ? 280 : 330
-    }
+    /// The height of the portrait control strip below the picture.
+    private var controlStripHeight: CGFloat { 330 }
 
     private func handleRelative(_ dx: Int, _ dy: Int) {
         LibretroFrontend.shared.addMouseDeltaX(dx, y: dy, port: 0)
@@ -266,7 +220,7 @@ struct NativePlayerView: View {
             ZStack {
                 if isLandscape || !showsControls || gunPanel || platform == .gameAndWatch {
                     // Full screen canvas, pad in the gutters (or hidden with a
-                    // controller connected), matching PlayerView's .overlay case.
+                    // controller connected).
                     ZStack {
                         // Exactly one MTKView may hold this renderer at a
                         // time. Two would run two draw loops and advance
@@ -311,9 +265,7 @@ struct NativePlayerView: View {
                 } else {
                     // Portrait: the pad's items are normalised against a
                     // bottom strip, not the full screen, so the canvas keeps
-                    // exactly the height it always has, matching PlayerView's
-                    // .bottomStrip case exactly, same strip height. The
-                    // canvas stays below the top safe area so the island
+                    // exactly the height it always has. The canvas stays below the top safe area so the island
                     // never eats the picture.
                     //
                     // The pad itself can be taller than the strip it is
@@ -468,12 +420,6 @@ struct NativePlayerView: View {
             // still in flight; syncMemoryCardIn releases it.
             renderer.awaitingSaveRAM = hasMemoryCard
             renderer.shader = NativeShader.current(for: platform)
-            // The game's own translucent screen sheet, Vectrex only;
-            // nil (no sheet, toggle off, or any other platform) draws
-            // nothing and costs nothing. See VectrexOverlays.swift.
-            if platform == .vectrex {
-                renderer.overlayImage = VectrexOverlays.image(md5: rom.md5Hash, name: rom.fsNameNoExt)
-            }
             // Two screens with the hinge break, melonDS only; false
             // leaves every other core's draw path untouched. See
             // DSScreenLayout.swift.
@@ -547,12 +493,9 @@ struct NativePlayerView: View {
         }
     }
 
-    /// Matches PlayerView's pause menu exactly: same card (regularMaterial,
-    /// 280pt wide, the same padding), same "Paused" subtitle, same icons,
-    /// and the same order for the reason given there. Quit leads, in the
-    /// spot a stray tap is cheapest; Resume trails, in the spot a reaching
-    /// thumb naturally lands. The two players used to disagree on both the
-    /// look and the order, which read as two different apps mid-session.
+    /// The pause menu: a regularMaterial card, 280pt wide, with a "Paused"
+    /// subtitle. Quit leads, in the spot a stray tap is cheapest; Resume
+    /// trails, in the spot a reaching thumb naturally lands.
     #if targetEnvironment(macCatalyst)
     /// The rows of the Mac pause panel, in the order they are drawn, so
     /// a pad walks them in the order they appear rather than in whatever
@@ -809,14 +752,6 @@ struct NativePlayerView: View {
         GameControllerManager.companionRumble = { [weak link] port, strong, strength in
             link?.sendRumble(port: port, strong: strong, strength: strength)
         }
-        // Dreamcast alone: mirror player one's VMU LCD to the phone's
-        // controller screen, the display half of the phone-as-VMU
-        // design.
-        if platform == .dreamcast {
-            VMULCDRelay.shared.install { [weak link] packed in
-                link?.sendVMULCD(packed)
-            }
-        }
         // The pairing screen may still be alive underneath this cover
         // with its own listener up; one advertisement at a time.
         NotificationCenter.default.post(name: .cabinetGameLinkStarted, object: nil)
@@ -832,7 +767,6 @@ struct NativePlayerView: View {
         renderer.dsTopOnly = false
         macVideoServer?.stop()
         macVideoServer = nil
-        VMULCDRelay.shared.uninstall()
         GameControllerManager.companionRumble = nil
         macPhoneLink?.stop()
         macPhoneLink = nil

@@ -491,28 +491,6 @@ actor RommClient {
         }
     }
 
-    /// The ceiling EmulatorJS applies to its own on-device cache writes
-    /// (`EmulatorJS-roms`, an IndexedDB database inside the player
-    /// webview's origin), in bytes. Server config (`emulatorjs.cache_limit`
-    /// in RomM's `config.yml`), not a RomM UI toggle. In EmulatorJS 4.2.3,
-    /// the version RomM 5.1.0 pins, this is a per-file write threshold:
-    /// a file whose `content-length` is at or over the limit still plays
-    /// but is never cached; there is no whole-cache total and no eviction.
-    /// `nil` when unset, in which case EmulatorJS falls back to its own
-    /// hardcoded 1 GiB (1073741824 byte) default rather than any value
-    /// RomM chose.
-    func cacheLimitBytes() async throws -> Int64? {
-        let req = request(path: "/api/config")
-        return try await send(req, decoding: CacheLimitResponse.self).cacheLimitBytes
-    }
-
-    private struct CacheLimitResponse: Decodable {
-        let cacheLimitBytes: Int64?
-        enum CodingKeys: String, CodingKey {
-            case cacheLimitBytes = "EJS_CACHE_LIMIT"
-        }
-    }
-
     /// The games with play history, most recent first. Same query RomM's own
     /// home screen makes (frontend getRecentPlayedRoms), so this app's Home
     /// agrees with the web UI about what you were last playing.

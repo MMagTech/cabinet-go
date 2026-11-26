@@ -39,12 +39,12 @@ struct LayoutEditorView: View {
     @State private var note: String?
     @State private var ready = false
 
-    /// `PlayerView.controlStripHeight` and `NativePlayerView.controlStripHeight`
-    /// both return this for everything that is not a vertical arcade board,
-    /// which is every layout this editor opens.
+    /// `NativePlayerView.controlStripHeight` returns this for everything
+    /// that is not a vertical arcade board, which is every layout this
+    /// editor opens.
     private static let stripHeight: CGFloat = 330
 
-    /// Mirrors both players' `padHeight` exactly: zero headroom reproduces
+    /// Mirrors the player's `padHeight` exactly: zero headroom reproduces
     /// `stripHeight` unchanged, so every layout that has never asked for
     /// headroom edits at the same size it always has.
     /// Which landscape arrangement is being shaped. Rotation picks

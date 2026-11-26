@@ -10,7 +10,7 @@ on:
 jobs:
   build:
     name: Build for device
-    # Needs the iOS 26 SDK: Cabinet deploys to iOS 18 but compiles against a
+    # Needs the iOS 26 SDK: the app deploys to iOS 18 but compiles against a
     # few iOS 26 APIs behind availability checks. macos-15 ships Xcode 16 and
     # fails on them.
     runs-on: macos-26
@@ -23,10 +23,11 @@ jobs:
           xcodebuild -version
           xcode-select -p
 
-      # Cabinet cannot build for the simulator: the twelve libretro cores are
-      # device-only arm64 static libraries and are linked unconditionally.
-      # Signing is skipped so this needs no secrets and a fork can run it too.
-      # This exists to prove the repository compiles from a clean checkout.
+      # For a device, because that is the only build that links the native
+      # cores: they are device-only arm64 static libraries, left out of a
+      # simulator build. Signing is skipped so this needs no secrets and a
+      # fork can run it too. This exists to prove the repository compiles
+      # and links from a clean checkout.
       #
       # -target rather than -scheme because the project has no shared schemes,
       # and only the RommApp target ships. LayoutEditor is a dev tool.

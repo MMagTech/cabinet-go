@@ -93,6 +93,3 @@ the same wall, it also requires `me.write`. A direct phone-to-TV handoff over
 the local network is the only remaining route that removes typing the
 address, and it was not taken for now: it is the most code of the three and
 only helps at home.
-
-Full reasoning, the six design questions this went through, and the test
-plan for if it's ever revisited: [docs/scope-icloud-pairing-continuity.md](scope-icloud-pairing-continuity.md).

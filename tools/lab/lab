@@ -27,10 +27,9 @@ usage() {
 usage: tools/lab/lab <command> [args]
 
   check [station]     run every assertion, or one station's
-                      stations: wiring controls arcade
+                      stations: wiring controls
   bench <args>        measure a core headless (see bench/README or -h)
   core <name>         bring-up status for one core, as a checklist
-  hw <args>           the Dreamcast/ANGLE station, needs ANGLE built
   device <args>       drivers that need a real device attached
   stations            list what exists and what each one covers
 
@@ -41,20 +40,17 @@ USAGE
 # Stations that assert, and the exact script that does the asserting.
 #
 # Named explicitly rather than guessed from the directory, because
-# guessing got this wrong once already: arcade holds both a generator
-# (run.sh, which rewrites the layout files from the generator and would
-# discard hand tuning) and a checker (verify.sh). Picking the first
-# plausible filename meant "check" silently regenerated the layouts. It
-# was harmless only because nothing had been tuned yet.
+# guessing got this wrong once already: a station once held both a
+# generator that rewrote files and a checker, and picking the first
+# plausible filename meant "check" silently regenerated them.
 #
 # A check must never modify the working tree. The tripwire below enforces
 # that rather than trusting it.
-CHECK_STATIONS="wiring controls arcade"
+CHECK_STATIONS="wiring controls"
 check_script_for() {
     case "$1" in
     wiring)   echo "$LAB/wiring/run.sh" ;;
     controls) echo "$LAB/controls/run.sh" ;;
-    arcade)   echo "$LAB/arcade/verify.sh" ;;
     *)        echo "" ;;
     esac
 }
@@ -118,11 +114,6 @@ bench)
 core)
     exec sh "$LAB/core-status.sh" "$@"
     ;;
-hw)
-    echo "the Dreamcast/ANGLE station: see tools/lab/hw/README.md" >&2
-    echo "it needs an ANGLE build and a ROM, so it is driven by hand" >&2
-    exit 2
-    ;;
 device)
     echo "device drivers live in tools/lab/bench/*.sh and need hardware attached" >&2
     ls "$LAB"/bench/*.sh | sed 's|.*/|  |' >&2
@@ -130,11 +121,9 @@ device)
     ;;
 stations)
     cat <<'LIST'
-wiring    asserts   core ids, symbol collisions, both platforms built, layouts present
+wiring    asserts   core ids, symbol collisions, layouts present
 controls  asserts   the real controller state machines, headless in the simulator
-arcade    asserts   the bundled arcade layouts still match their generator
 bench     measures  any core headless: frame time, audio rate, geometry, hashes
-hw        measures  Dreamcast on ANGLE, with the SH4 profiler. Needs ANGLE.
 core      reports   bring-up status for one core, as a checklist
 LIST
     ;;

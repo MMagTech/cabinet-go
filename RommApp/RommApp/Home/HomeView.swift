@@ -29,9 +29,6 @@ struct HomeView: View {
     /// caption. Drives coverCaptionSlide.
     @FocusState private var focusedShelfCard: String?
     #endif
-    #if os(iOS)
-    @State private var directLaunch: DirectLaunch?
-    #endif
     @State private var nativeDirectLaunch: NativeDirectLaunch?
     @State private var preparingResume = false
     @ObservedObject private var keptStore = KeptGameStore.shared
@@ -50,27 +47,9 @@ struct HomeView: View {
 
     /// Everything the player needs to start without the launch screen in
     /// front of it. Identifiable so it can drive a `fullScreenCover` the
-    /// same way `resuming` does.
-    ///
-    /// iOS-only: it exists purely to feed `PlayerView`, itself iOS-only in
-    /// this pass. See `beginResume` below for tvOS's fallback.
-    #if os(iOS)
-    private struct DirectLaunch: Identifiable {
-        let id = UUID()
-        let rom: Rom
-        let choices: LaunchChoices
-        let resumeFromAutosave: Bool
-        let stateToLoad: PlayerView.StateToLoad?
-    }
-    #endif
-
-    /// The native equivalent of `DirectLaunch`. Separate rather than one
-    /// shared shape with optional fields either player never uses: native
-    /// has no `resumeFromAutosave` concept (that is webview's injected
-    /// autosave script, see `SessionMarker`) and takes state as raw bytes
-    /// rather than `PlayerView.StateToLoad`'s local/remote distinction,
-    /// `NativeLauncher.prepare` already handles the on-device-vs-download
-    /// question before this is ever built.
+    /// same way `resuming` does. State comes as raw bytes:
+    /// `NativeLauncher.prepare` has already settled on-device against
+    /// download before this is ever built.
     private struct NativeDirectLaunch: Identifiable {
         let id = UUID()
         let rom: Rom
@@ -234,10 +213,6 @@ struct HomeView: View {
             // 2026-08-07).
             .onChange(of: networkMonitor.isConnected) { _, _ in Task { await load() } }
             .onChange(of: networkMonitor.manualOfflineMode) { _, _ in Task { await load() } }
-            // GameLaunchView/PlayerView are the webview launch path, iOS-only:
-            // tvOS has no webview player and never will (see CLAUDE.md's JIT
-            // boundary). Native launch (nativeDirectLaunch, below) is the one
-            // tvOS actually has, PS1 only for now.
             #if targetEnvironment(macCatalyst)
             .navigationDestination(item: $resuming) { rom in
                 GameLaunchView(rom: rom)
@@ -251,24 +226,9 @@ struct HomeView: View {
                 #endif
             }
             #endif
-            #if os(iOS)
-            .fullScreenCover(item: $directLaunch) { launch in
-                PlayerView(
-                    rom: launch.rom,
-                    launch: launch.choices,
-                    resumeFromAutosave: launch.resumeFromAutosave,
-                    stateToLoad: launch.stateToLoad
-                )
-            }
-            #endif
             .onChange(of: resuming == nil) { _, playerClosed in
                 if playerClosed { Task { await load() } }
             }
-            #if os(iOS)
-            .onChange(of: directLaunch == nil) { _, playerClosed in
-                if playerClosed { Task { await load() } }
-            }
-            #endif
             .fullScreenCover(item: $nativeDirectLaunch) { launch in
                 #if os(iOS)
                 // Explicit for the same Catalyst reason as
@@ -723,130 +683,28 @@ struct HomeView: View {
     /// answer: no core for the platform means nothing to launch, and any
     /// failure reaching the server is better spent on a screen that can
     /// explain itself than on a player that would just fail later.
-    ///
-    /// An interrupted session wins over a stored state, matching what the
-    /// launch screen itself does: the local autosave is newer than
-    /// anything uploaded, and it is the run that was actually cut short.
-    ///
-    /// Otherwise, this is what actually makes switching between desktop
-    /// and mobile transparent: the newest state is loaded regardless of
-    /// which device wrote it, by weight of its timestamp, not by trusting
-    /// whichever copy happens to be closest. The one exception is the
-    /// local pause menu slot outrunning the server, which happens when its
-    /// own upload failed, already reported in the game at the time; the
-    /// comparison catches it anyway rather than relying on remembering
-    /// that warning.
     private func beginResume(_ rom: Rom) async {
         preparingResume = true
         defer { preparingResume = false }
 
-        // The direct-launch fast path below skips the launch screen by
-        // going straight to PlayerView, which is iOS-only for now (see
-        // GameLaunchView.swift and the #if guards around it). tvOS always
-        // falls back to the launch screen instead, same as the "need a
-        // human" cases below already do.
         #if os(tvOS)
         resuming = rom
         return
         #else
         let canonicalSlug = rom.canonicalPlatformSlug(platformsVersions: session.platformsVersions)
-        let cores = CoreCatalog.cores(for: canonicalSlug)
-        guard PlatformSupport.isSupported(canonicalSlug: canonicalSlug, isArcade: rom.isArcade) else {
+        guard PlatformSupport.isSupported(canonicalSlug: canonicalSlug, isArcade: rom.isArcade),
+              let nativeCore = NativeCore.core(for: rom, canonicalSlug: canonicalSlug) else {
             resuming = rom
             return
         }
-
-        // Resume honors whichever backend this game actually last played
-        // on, same as the full launch screen already does via
-        // `LaunchChoices.defaultBackend`. Hardcoding webview here used to
-        // silently replay a stale choice for any platform that graduated
-        // to native since it was last played (Dreamcast and N64 both did,
-        // 2026-08-10/11), and risked resuming a native save into the
-        // webview's own player, or the reverse, since the two do not share
-        // a save format.
-        let backend = LaunchChoices.defaultBackend(rom: rom, canonicalSlug: canonicalSlug)
-        if backend == .native, let nativeCore = NativeCore.core(for: rom, canonicalSlug: canonicalSlug) {
-            await beginNativeResume(rom, core: nativeCore)
-            return
-        }
-        // A webview resume needs a webview core; native ones never did,
-        // which is why this check sits after the native path. Game &
-        // Watch has no webview core and still resumes in one tap.
-        guard !cores.isEmpty else {
-            resuming = rom
-            return
-        }
-
-        let core = LaunchChoices.defaultCore(rom: rom, canonicalSlug: canonicalSlug, from: cores)
-        let firmware = (try? await session.firmware(platformId: rom.platformId)) ?? []
-        let firmwareId = LaunchChoices.defaultFirmware(platformId: rom.platformId, from: firmware)?.id
-        let choices = LaunchChoices(core: core, firmwareId: firmwareId, saveId: nil)
-
-        if SessionMarker.offersResume(romId: rom.id) {
-            directLaunch = DirectLaunch(
-                rom: rom, choices: choices, resumeFromAutosave: true, stateToLoad: nil
-            )
-            return
-        }
-
-        guard let states = try? await session.states(romId: rom.id) else {
-            resuming = rom
-            return
-        }
-        guard !states.isEmpty else {
-            // Genuinely no states: nothing to resume into, so the game
-            // just starts. Not a fallback to the launch screen, there is
-            // no real question left to ask.
-            directLaunch = DirectLaunch(
-                rom: rom, choices: choices, resumeFromAutosave: false, stateToLoad: nil
-            )
-            return
-        }
-        // Plain string comparison, matching the launch screen's own
-        // newest-first sort: RomM's `updated_at` is not documented as a
-        // specific format, only "string", in its own OpenAPI schema, and
-        // this comparison is already relied on elsewhere, so it stays
-        // format agnostic rather than risk a date parser silently
-        // rejecting a shape that was never actually confirmed.
-        let newest = states.max { ($0.updatedAt ?? "") < ($1.updatedAt ?? "") }!
-
-        // The one place an actual Date is unavoidable: weighing that
-        // newest server state against the local pause menu slot, which
-        // only ever carries a native timestamp. If the server's string
-        // cannot be parsed at all, that is not a "local wins" signal, it
-        // is a genuine unknown, and guessing either way risks the exact
-        // silent wrong load this whole change exists to fix. The launch
-        // screen is where an unknown gets a human rather than a guess.
-        guard let newestDate = RommDate.parse(newest.updatedAt) else {
-            resuming = rom
-            return
-        }
-        if let localDate = ManualSave.date(romId: rom.id), localDate > newestDate {
-            directLaunch = DirectLaunch(
-                rom: rom, choices: choices, resumeFromAutosave: false, stateToLoad: .local
-            )
-            return
-        }
-
-        guard let bytes = try? await session.stateContent(newest) else {
-            // A state exists and should be loaded, but fetching it failed:
-            // better to explain that on the launch screen than to guess and
-            // either start over or load something stale.
-            resuming = rom
-            return
-        }
-        directLaunch = DirectLaunch(
-            rom: rom, choices: choices, resumeFromAutosave: false, stateToLoad: .remote(bytes)
-        )
+        await beginNativeResume(rom, core: nativeCore)
         #endif
     }
 
-    /// The native counterpart to the newest-state resolution above, minus
-    /// the `SessionMarker`/`ManualSave` autosave branches: those exist for
-    /// the webview's own injected autosave script, which native has no
-    /// equivalent of, so native resume compares only server states against
-    /// whatever is already on the device, same as `GameLaunchView`'s own
-    /// native launch path does.
+    /// Loads the newest state this core wrote, regardless of which device
+    /// wrote it, by weight of its timestamp: what makes switching between
+    /// devices transparent. Compares server states against whatever is
+    /// already on the device, same as `GameLaunchView`'s own launch path.
     private func beginNativeResume(_ rom: Rom, core: NativeCore) async {
         do {
             try await NativeLauncher.prepare(rom: rom, session: session)

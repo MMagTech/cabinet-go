@@ -75,21 +75,18 @@ if [ -z "$OUT" ] || [ -z "$LIB" ]; then
 fi
 
 if [ -n "$OUT" ]; then
-    IOS="RommApp/RommApp/Native/$OUT/$LIB"
-    TVOS=$(echo "$IOS" | sed 's/_ios\.a$/_tvos.a/')
-    for a in "$IOS" "$TVOS"; do
-        if [ -f "$a" ]; then
-            C=$(nm "$a" 2>/dev/null | awk '$2 == "C"' | wc -l | tr -d ' ')
-            T=$(nm -g "$a" 2>/dev/null | grep -c ' T ' || true)
-            if [ "$C" -ne 0 ]; then
-                bad "$(basename "$a") has $C common symbols; they merge with other cores' storage"
-            else
-                ok "$(basename "$a") scoped clean, $T exported entry points"
-            fi
+    a="RommApp/RommApp/Native/$OUT/$LIB"
+    if [ -f "$a" ]; then
+        C=$(nm "$a" 2>/dev/null | awk '$2 == "C"' | wc -l | tr -d ' ')
+        T=$(nm -g "$a" 2>/dev/null | grep -c ' T ' || true)
+        if [ "$C" -ne 0 ]; then
+            bad "$(basename "$a") has $C common symbols; they merge with other cores' storage"
         else
-            bad "$(basename "$a") missing; a core built for one platform only is invisible on the other"
+            ok "$(basename "$a") scoped clean, $T exported entry points"
         fi
-    done
+    else
+        bad "$(basename "$a") missing"
+    fi
 fi
 
 # Wiring, in the order a launch travels through it. Any one of these

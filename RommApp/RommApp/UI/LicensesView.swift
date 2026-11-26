@@ -4,10 +4,7 @@ import SwiftUI
 /// full. Entries are data, not views, so adding the next native core is
 /// one line here plus its bundled text file.
 ///
-/// Only what the app binary actually contains belongs in this list. The
-/// web player's emulators (MAME 2003, FB Alpha and the rest) run inside
-/// RomM's own page served by the person's server; this app does not bundle
-/// them, so they are RomM's attribution to make, not Cabinet's.
+/// Only what the app binary actually contains belongs in this list.
 struct LicensesView: View {
     struct Entry: Identifiable {
         let id: String
@@ -28,27 +25,6 @@ struct LicensesView: View {
             file: "cabinet-mit"
         ),
         Entry(
-            id: "fbneo",
-            name: "FinalBurn Neo",
-            role: "Native arcade core",
-            summary: "FBNeo permits free non-commercial use. Cabinet Go is free, is not sold, and takes no donations, which satisfies those terms. FBNeo builds on code from the MAME project and is subject to MAME's license as well.",
-            file: "fbneo"
-        ),
-        Entry(
-            id: "mame2003-plus",
-            name: "MAME 2003-Plus",
-            role: "Native arcade core",
-            summary: "The classic MAME non-commercial license, as of MAME 0.78. Cabinet Go is free and is not sold, which satisfies those terms.",
-            file: "mame2003-plus"
-        ),
-        Entry(
-            id: "beetle-saturn",
-            name: "Beetle Saturn",
-            role: "Native Saturn core",
-            summary: "GPL version 2, from the Mednafen project.",
-            file: "beetle-saturn"
-        ),
-        Entry(
             id: "gambatte",
             name: "Gambatte",
             role: "Native Game Boy and Game Boy Color core",
@@ -65,30 +41,9 @@ struct LicensesView: View {
         Entry(
             id: "genesis-plus-gx",
             name: "Genesis Plus GX",
-            role: "Native Genesis, Sega CD, Master System, Game Gear and 32X core",
+            role: "Native Game Gear core",
             summary: "Free for non-commercial use, with the same distribution terms Cabinet Go already meets for FBNeo.",
             file: "genesis-plus-gx"
-        ),
-        Entry(
-            id: "beetle-pce-fast",
-            name: "Beetle PCE Fast",
-            role: "Native TurboGrafx-16 and TurboGrafx-CD core",
-            summary: "GPL version 2, from the Mednafen project.",
-            file: "beetle-pce-fast"
-        ),
-        Entry(
-            id: "snes9x",
-            name: "Snes9x",
-            role: "Native SNES core",
-            summary: "Free for non-commercial use. Cabinet Go is free and is not sold, which satisfies those terms.",
-            file: "snes9x"
-        ),
-        Entry(
-            id: "fceumm",
-            name: "FCEUmm",
-            role: "Native NES core",
-            summary: "GPL version 2.",
-            file: "fceumm"
         ),
         Entry(
             id: "beetle-ngp",
@@ -96,13 +51,6 @@ struct LicensesView: View {
             role: "Native Neo Geo Pocket Color core",
             summary: "GPL version 2, from the Mednafen project.",
             file: "beetle-ngp"
-        ),
-        Entry(
-            id: "beetle-vb",
-            name: "Beetle VB",
-            role: "Native Virtual Boy core",
-            summary: "GPL version 2, from the Mednafen project.",
-            file: "beetle-vb"
         ),
         Entry(
             id: "melonds",
@@ -117,62 +65,6 @@ struct LicensesView: View {
             role: "DS BIOS replacement compiled into melonDS",
             summary: "BSD 2-clause, by Gilead Kutnick. This notice is the reproduction its binary redistribution terms require.",
             file: "drastic-freebios"
-        ),
-        Entry(
-            id: "prosystem",
-            name: "ProSystem",
-            role: "Native Atari 7800 core",
-            summary: "GPL version 2.",
-            file: "prosystem"
-        ),
-        Entry(
-            id: "vecx",
-            name: "vecx",
-            role: "Native Vectrex core",
-            summary: "GPL version 3. Bundles the Vectrex BIOS, which its rights holder has long permitted for non-commercial emulation use.",
-            file: "vecx"
-        ),
-        Entry(
-            id: "stella2014",
-            name: "Stella 2014",
-            role: "Native Atari 2600 core",
-            summary: "GPL version 2, the libretro snapshot of the Stella emulator.",
-            file: "stella2014"
-        ),
-        Entry(
-            id: "opera",
-            name: "Opera",
-            role: "Native 3DO core",
-            summary: "Modified LGPL with FreeDO's non-commercial terms. Cabinet Go is free and is not sold, which satisfies those terms.",
-            file: "opera"
-        ),
-        Entry(
-            id: "picodrive",
-            name: "PicoDrive",
-            role: "Native Sega 32X core",
-            summary: "Free for non-commercial use. Cabinet Go is free and is not sold, which satisfies those terms.",
-            file: "picodrive"
-        ),
-        Entry(
-            id: "pcsx-rearmed",
-            name: "PCSX ReARMed",
-            role: "Native PlayStation core",
-            summary: "GPL version 2.",
-            file: "pcsx-rearmed"
-        ),
-        Entry(
-            id: "flycast",
-            name: "Flycast",
-            role: "Native Dreamcast core",
-            summary: "GPL version 2.",
-            file: "flycast"
-        ),
-        Entry(
-            id: "mupen64plus",
-            name: "mupen64plus-libretro-nx (bundles GLideN64)",
-            role: "Native Nintendo 64 core",
-            summary: "GPL version 2. GLideN64, the RDP plugin this build uses, is bundled inside the same repository and is separately GPL version 2 as well.",
-            file: "mupen64plus"
         ),
         Entry(
             id: "libretro-common",

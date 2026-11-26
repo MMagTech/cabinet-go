@@ -1,6 +1,5 @@
 #!/bin/sh
-# Generic native core builder, the batch generalisation of
-# build-beetle-saturn.sh. Same shape of output for every core: a single
+# Generic native core builder. Same shape of output for every core: a single
 # merged relocatable object whose only exported symbols are
 # <prefix>_retro_* forwarders, so any number of cores can link into one
 # binary without their retro_* names (or bundled zlib and friends)
@@ -8,9 +7,7 @@
 #
 # The platform argument defaults to ios. tvos is opt-in per core: it only
 # works for a core whose own Makefile already has a tvos-arm64 (or
-# equivalent) platform case, checked directly rather than assumed. As of
-# this comment only pcsx_rearmed has been confirmed to have one; treat
-# every other core's tvOS support as unverified until checked the same way.
+# equivalent) platform case, checked directly rather than assumed.
 set -e
 
 cd "$(dirname "$0")/.."
@@ -53,70 +50,9 @@ mgba)
 genesis_plus_gx)
     PREFIX=gpgx; REPO=https://github.com/libretro/Genesis-Plus-GX.git
     MAKEDIR=.; MAKEFILE=Makefile.libretro; OUT=GenesisPlusGX; LIB=libgenesis_plus_gx_ios.a ;;
-beetle_pce_fast)
-    PREFIX=pce; REPO=https://github.com/libretro/beetle-pce-fast-libretro.git
-    MAKEDIR=.; MAKEFILE=Makefile; OUT=BeetlePCEFast; LIB=libbeetle_pce_fast_ios.a ;;
-snes9x)
-    PREFIX=s9x; REPO=https://github.com/libretro/snes9x.git
-    MAKEDIR=libretro; MAKEFILE=Makefile; OUT=Snes9x; LIB=libsnes9x_ios.a ;;
-fceumm)
-    PREFIX=fcm; REPO=https://github.com/libretro/libretro-fceumm.git
-    MAKEDIR=.; MAKEFILE=Makefile.libretro; OUT=FCEUmm; LIB=libfceumm_ios.a ;;
 beetle_ngp)
     PREFIX=ngp; REPO=https://github.com/libretro/beetle-ngp-libretro.git
     MAKEDIR=.; MAKEFILE=Makefile; OUT=BeetleNGP; LIB=libbeetle_ngp_ios.a ;;
-prosystem)
-    PREFIX=a78; REPO=https://github.com/libretro/prosystem-libretro.git
-    MAKEDIR=.; MAKEFILE=Makefile; OUT=ProSystem; LIB=libprosystem_ios.a ;;
-picodrive)
-    PREFIX=pico; REPO=https://github.com/libretro/picodrive.git
-    MAKEDIR=.; MAKEFILE=Makefile.libretro; OUT=PicoDrive; LIB=libpicodrive_ios.a ;;
-mame2003_plus)
-    # The arcade core for the boards FinalBurn Neo does not cover: the
-    # early-80s Atari and Midway machines whose controls were dials,
-    # spinners, trackballs, paddles and guns. Chosen over mame2010 after
-    # measuring both; see docs/mame-core-comparison-2026-08-21.md, and
-    # note in particular that the per-game analog tuning metadata comes
-    # from a newer MAME's listxml as data rather than from this core.
-    PREFIX=m2003p; REPO=https://github.com/libretro/mame2003-plus-libretro.git
-    MAKEDIR=.; MAKEFILE=Makefile; OUT=MAME2003Plus; LIB=libmame2003_plus_ios.a ;;
-vecx)
-    # Software vector renderer, forced: the Makefile defaults HAS_GPU=1
-    # everywhere but macOS, which would build the GLES2 hardware path
-    # this frontend cannot drive (it only hosts the GLES3 contexts
-    # Flycast and Mupen64Plus bring). HAS_GPU=0 is also what the macOS
-    # lab build produces, so the bench measures the code that ships.
-    # The Vectrex BIOS is compiled in (bios/system.h); no firmware.
-    PREFIX=vcx; REPO=https://github.com/libretro/libretro-vecx.git
-    MAKEDIR=.; MAKEFILE=Makefile.libretro; OUT=Vecx; LIB=libvecx_ios.a
-    MAKEARGS="HAS_GPU=0" ;;
-stella2014)
-    # The 2014 snapshot of Stella, not modern Stella: this vintage is
-    # the one libretro keeps as a light interpreter build, the same
-    # weight-class reasoning that picked ProSystem for the 7800. Its
-    # check_variables pre-seeds every global with the documented
-    # default before reading, so it has no zeroed-globals trap, but
-    # the frontend still answers its full table deliberately.
-    PREFIX=a26; REPO=https://github.com/libretro/stella2014-libretro.git
-    MAKEDIR=.; MAKEFILE=Makefile; OUT=Stella2014; LIB=libstella2014_ios.a ;;
-opera)
-    # 3DO. Interpreter-only ARM60 (the core has no dynarec at all), pure
-    # software rendering, so it sits on the right side of the JIT
-    # boundary, but it is the heaviest interpreter here after the CD
-    # consoles: treat any new platform build as a go/no-go measured on
-    # hardware, the way PS1 and Dreamcast were, not a batch build.
-    # Requires a BIOS (panafz10 family) via RomM, like Saturn.
-    PREFIX=opr; REPO=https://github.com/libretro/opera-libretro.git
-    MAKEDIR=.; MAKEFILE=Makefile; OUT=Opera; LIB=libopera_ios.a ;;
-beetle_vb)
-    # Virtual Boy. Interpreter V810, software rendered, so it clears the
-    # JIT boundary without an exception. Its whole identity is
-    # stereoscopic red monochrome, which a flat screen cannot reproduce:
-    # the core's own vb_color_mode keeps the authentic black & red as the
-    # default and vb_anaglyph_preset offers real 3D for anyone with a
-    # pair of red/blue glasses. See NativeCoreOptions.virtualBoy.
-    PREFIX=vb; REPO=https://github.com/libretro/beetle-vb-libretro.git
-    MAKEDIR=.; MAKEFILE=Makefile; OUT=BeetleVB; LIB=libbeetle_vb_ios.a ;;
 gw)
     # Game & Watch, via MADrigal's simulators compiled to Lua. Plain Lua
     # 5.3 interpreter, no LuaJIT, so it clears the JIT boundary without
@@ -158,24 +94,6 @@ melonds)
     PREFIX=mds; REPO=https://github.com/libretro/melonDS.git
     MAKEDIR=.; MAKEFILE=Makefile; OUT=MelonDS; LIB=libmelonds_ios.a
     if [ "$PLATFORM" = mac ]; then MAKEARGS="JIT_ARCH=aarch64"; fi ;;
-pcsx_rearmed)
-    # platform=ios-arm64 (or tvos-arm64) forces DYNAREC=0 in this core's
-    # own Makefile, a pure interpreter build, the same no-JIT exception
-    # Beetle Saturn already proved out for its SH-2 core. Confirm on-device
-    # speed before treating PS1 as shipped on either platform; this is a
-    # go/no-go, not a batch build like the other nine cores.
-    #
-    # On Mac only, DYNAREC=ari64 is added below, overriding that forced
-    # 0 from the command line. Unlike N64's, this recompiler is already
-    # ported to Apple: linkage_arm64.S goes through ESYM() for the
-    # Mach-O underscore prefix and guards its ELF-only directives, and
-    # new_dynarec_config.h turns on NO_WRITE_EXEC for __MACH__ so the
-    # code cache is toggled between writable and executable rather than
-    # mapped as both. iOS and tvOS pass no MAKEARGS and keep the
-    # interpreter.
-    PREFIX=psx; REPO=https://github.com/libretro/pcsx_rearmed.git
-    MAKEDIR=.; MAKEFILE=Makefile.libretro; OUT=PCSXReARMed; LIB=libpcsx_rearmed_ios.a
-    if [ "$PLATFORM" = mac ]; then MAKEARGS="DYNAREC=ari64"; fi ;;
 *)
     echo "unknown core: $NAME" >&2; exit 1 ;;
 esac
@@ -285,8 +203,7 @@ if [ "$PLATFORM" = mac ] && [ "$NAME" = melonds ]; then
     # Catalyst marks pthread_jit_write_protect_np __API_UNAVAILABLE even
     # though the symbol is live in libsystem on any Apple Silicon Mac,
     # so melonDS's direct call is a hard compile error. Resolve it
-    # through dlsym past the annotation, the same bypass
-    # tools/build-flycast.sh uses for Flycast's three recompilers.
+    # through dlsym past the annotation.
     perl -0pi -e '
         s/void JitEnableWrite\(\)/#if defined(__APPLE__) \&\& defined(__aarch64__)\n#include <dlfcn.h>\nstatic void cabinet_jit_write_protect(int enabled)\n{\n    typedef void (*cabinet_jitwp_t)(int);\n    static cabinet_jitwp_t fn = (cabinet_jitwp_t)dlsym(RTLD_DEFAULT, "pthread_jit_write_protect_np");\n    if (fn) fn(enabled);\n}\n#endif\n\nvoid JitEnableWrite()/
         unless /cabinet_jit_write_protect/;
@@ -329,35 +246,6 @@ if [ "$PLATFORM" = mac ] && [ "$NAME" = melonds ]; then
     ' "$SRC/src/ARMJIT_Memory.cpp"
     grep -q 'ARMJIT::JitEnableWrite();' "$SRC/src/ARMJIT_Memory.cpp" || {
         echo "melonds fastmem W^X patch did not apply" >&2; exit 1; }
-fi
-
-# Mac only, and only reached because DYNAREC=ari64 above put PCSX
-# ReARMed's ARM64 recompiler into the build; iOS and tvOS compile
-# new_dynarec.c not at all (no ari64, so the Makefile adds -DDRC_DISABLE
-# and leaves the object out entirely).
-if [ "$PLATFORM" = mac ] && [ "$NAME" = pcsx_rearmed ]; then
-    # mprotect_w_x rounds the start of the range it is about to reprotect
-    # down to a 4096-byte boundary. Apple Silicon pages are 16384 bytes,
-    # which this same file already knows: new_dynarec_init prints
-    # "pgsize 16384" three lines before the first call. mprotect demands
-    # a page-aligned address, so any range starting on a 4K boundary that
-    # is not also a 16K one fails with EINVAL, the code cache is left
-    # execute-only, and the recompiler wedges on its next write.
-    #
-    # It is intermittent by nature, which makes it worse than a hard
-    # failure: PCSX ReARMed logs one "mprotect(w) failed: Invalid
-    # argument" and then hangs with a running emulator, a healthy log and
-    # a passed dynarec self-test behind it. Seen exactly once per launch,
-    # a few seconds into the BIOS.
-    #
-    # The end of the range is rounded up for the same reason, so the
-    # length stays a whole number of real pages.
-    perl -0pi -e '
-        s/  u_long mstart = \(u_long\)start & ~4095ul;\n  u_long mend = \(u_long\)end;/  u_long mpsize = (u_long)sysconf(_SC_PAGESIZE);\n  if ((long)mpsize < 1) mpsize = 4096;\n  u_long mstart = (u_long)start & ~(mpsize - 1);\n  u_long mend = ((u_long)end + mpsize - 1) & ~(mpsize - 1);/
-        unless /mpsize/;
-    ' "$SRC/libpcsxcore/new_dynarec/new_dynarec.c"
-    grep -q 'u_long mpsize = (u_long)sysconf(_SC_PAGESIZE);' "$SRC/libpcsxcore/new_dynarec/new_dynarec.c" || {
-        echo "pcsx_rearmed page-size patch did not apply" >&2; exit 1; }
 fi
 
 # VeMUlator finds the loaded file's extension with strchr, the FIRST dot
@@ -484,9 +372,8 @@ fi
 # spikes/. It used to be sed-copied from
 # spikes/BeetleSaturnStatic/bsat_wrapper.c, which is hand-written and
 # gitignored, so this script could not run at all on a fresh clone of
-# the repository. tools/build-flycast.sh already carried its own copy
-# inline for the same reason; this is the same approach, with PFX_
-# substituted per core instead of a hardcoded prefix.
+# the repository. It is inline instead, with PFX_ substituted per core
+# instead of a hardcoded prefix.
 #
 # The heredoc is quoted so nothing in the C text is expanded, and the
 # prefix is applied afterwards by sed. Keep both of those: the comment
