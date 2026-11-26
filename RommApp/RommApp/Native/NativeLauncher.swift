@@ -30,13 +30,6 @@ enum NativeLauncher {
     ///
     /// A kept game skips all of that: its directory already holds the ROM
     /// and firmware, so the core boots straight from it with zero network.
-    ///
-    /// tvOS only: `LibretroFrontend` currently only carries a real static
-    /// library for PCSX ReARMed (the PS1 go/no-go performance test), the
-    /// other eleven cores have never been rebuilt for tvOS. This function
-    /// itself is generic and compiles for both platforms; a tvOS caller
-    /// asking for anything but a PS1 rom hits `LaunchError.noNativeCore`
-    /// the same way an unsupported platform does on iOS today.
     @discardableResult
     @MainActor
     static func prepare(
@@ -77,49 +70,17 @@ enum NativeLauncher {
         // holds at most the one game about to load.
         cleanUpTempDirectories()
 
-        #if os(iOS)
         if let keptDir = KeptGameStore.shared.launchDirectory(romId: rom.id) {
             return try await finishLaunch(
                 platform: platform, rom: rom, session: session,
                 romURL: keptDir.appendingPathComponent(rom.fsName), workDir: keptDir
             )
         }
-        #endif
 
-        #if os(tvOS)
-        // A soft, evictable cache, not a kept-games equivalent: tvOS's own
-        // storage tier is explicitly built for exactly this ("Caching and
-        // Purgeable Memory" / the App Programming Guide for tvOS both
-        // describe writing into the cache directory and letting the OS
-        // decide when to reclaim it, system-wide across every app, not
-        // per-app). Every tvOS launch used to redownload into a fresh
-        // temp directory deleted unconditionally on exit, so replaying a
-        // game already on Recent or Favorites cost a full download every
-        // single time even though nothing about the file had changed. A
-        // stable directory keyed by rom id, left in place instead of
-        // wiped, means a repeat play skips the network entirely (ROM and
-        // firmware both, since firmware already staged here from the
-        // first run needs no re-fetch either) until the OS actually
-        // reclaims the space, at which point this falls straight back to
-        // downloading fresh with no special handling needed.
-        let cacheDir = FileManager.default.urls(for: .cachesDirectory, in: .userDomainMask)[0]
-            .appendingPathComponent("native-rom-cache", isDirectory: true)
-            .appendingPathComponent(String(rom.id), isDirectory: true)
-        let cachedROMURL = cacheDir.appendingPathComponent(rom.fsName)
-        if FileManager.default.fileExists(atPath: cachedROMURL.path) {
-            return try await finishLaunch(
-                platform: platform, rom: rom, session: session,
-                romURL: cachedROMURL, workDir: cacheDir
-            )
-        }
-        let workDir = cacheDir
-        try FileManager.default.createDirectory(at: workDir, withIntermediateDirectories: true)
-        #else
         let workDir = FileManager.default.temporaryDirectory.appendingPathComponent(
             "native-player-\(UUID().uuidString)", isDirectory: true
         )
         try FileManager.default.createDirectory(at: workDir, withIntermediateDirectories: true)
-        #endif
 
         let romURL = workDir.appendingPathComponent(rom.fsName)
         try await download(session.romContentRequest(rom), to: romURL, onProgress: onProgress)
@@ -176,16 +137,9 @@ enum NativeLauncher {
     /// NVRAM and high scores. Persistent on purpose, the way RetroArch's
     /// save directory is: this used to be the per-launch temp directory,
     /// so everything those cores flushed was deleted with the session,
-    /// half of issue #5's stage 2. On tvOS it lives under Caches to
-    /// match that platform's transient storage model; losing it there
-    /// costs a re-download from RomM at worst, same deal as the ROM
-    /// cache itself.
+    /// half of issue #5's stage 2.
     static func coreSaveDirectory(romId: Int, core: NativeCore? = nil) -> URL {
-        #if os(tvOS)
-        let base = FileManager.default.urls(for: .cachesDirectory, in: .userDomainMask)[0]
-        #else
         let base = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
-        #endif
         var dir = base
             .appendingPathComponent("CoreSaves", isDirectory: true)
             .appendingPathComponent(String(romId), isDirectory: true)
@@ -558,23 +512,15 @@ enum NativeLauncher {
     }
 
     private static func activate(platform: NativePlatform, core: NativeCore, loadURL: URL, workDir: URL, saveDir: URL) throws -> NativeCore {
-        #if targetEnvironment(simulator) || CABINET_NO_NATIVE_CORES
+        #if targetEnvironment(simulator)
         // A simulator build links no cores: they are built for real
         // hardware and rebuilding emulator cores for a simulator proves
         // nothing, since performance there is meaningless. The block sits
         // here, at the point of actually starting a core, rather than in
         // platform resolution, so the rest of the app still knows
         // perfectly well which platforms are supported and the library
-        // does not label every one of them unplayable. A Mac build with
-        // no core libraries yet takes the same exit with its own words:
-        // native cores are the Mac's only player, and until this
-        // platform's core is compiled for the Mac the honest answer is
-        // that the game cannot start.
-        #if targetEnvironment(macCatalyst)
-        throw LaunchError.unsupportedFormat("This game's core isn't in the Mac build yet.")
-        #else
+        // does not label every one of them unplayable.
         throw LaunchError.unsupportedFormat("Games can't run in the Simulator. Use a real iPhone.")
-        #endif
         #else
         guard let coreID = core.coreID else { throw LaunchError.noNativeCore }
         LibretroFrontend.shared.activateCore(coreID)
@@ -594,10 +540,8 @@ enum NativeLauncher {
         // app bundle carries exactly that folder at its root. So for PSP
         // the bundle itself is the system directory; the core only ever
         // reads it (saves, shader cache and NAND all live under the
-        // save directory it is given separately). A symlink from the
-        // work directory was tried first and tvOS's sandbox refuses
-        // symlink creation outright (EPERM, 2026-08-24), and a 13MB
-        // copy per launch buys nothing over pointing at the original.
+        // save directory it is given separately). A 13MB copy per
+        // launch would buy nothing over pointing at the original.
         let systemDir = platform == .psp ? Bundle.main.bundlePath : workDir.path
         if let failure = LibretroFrontend.shared.loadGame(
             loadURL.path, systemDirectory: systemDir, saveDirectory: saveDir.path

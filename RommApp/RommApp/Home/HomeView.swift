@@ -23,27 +23,12 @@ struct HomeView: View {
     @State private var loaded = false
     @State private var offline = false
     @State private var resuming: Rom?
-    #if os(tvOS)
-    /// Which shelf card holds focus, keyed by shelf title + rom id so a
-    /// game appearing on two shelves slides only the focused copy's
-    /// caption. Drives coverCaptionSlide.
-    @FocusState private var focusedShelfCard: String?
-    #endif
     @State private var nativeDirectLaunch: NativeDirectLaunch?
     @State private var preparingResume = false
     @ObservedObject private var keptStore = KeptGameStore.shared
     @ObservedObject private var quickActions = QuickActionRouter.shared
     @State private var quickPushRecents = false
     @State private var quickPushFavorites = false
-    #if os(tvOS)
-    /// Ties the hero's own .prefersDefaultFocus(true, in:) to the account
-    /// chip's row above it: without a shared scope, landing on Home let
-    /// tvOS's default-focus heuristic pick the chip instead (the first
-    /// focusable thing in reading order once it moved above the hero),
-    /// which also meant the hero's own focus-driven zoom never played on
-    /// arrival, since it was never actually focused.
-    @Namespace private var homeFocus
-    #endif
 
     /// Everything the player needs to start without the launch screen in
     /// front of it. Identifiable so it can drive a `fullScreenCover` the
@@ -115,13 +100,10 @@ struct HomeView: View {
                     if let summary = session.lastSyncSummary {
                         syncBanner(summary)
                     }
-                    #if os(iOS) && !targetEnvironment(macCatalyst)
                     // A platform coming down, with its count and cancel,
-                    // on the screen everyone lands on: the phone's
-                    // answer to the Mac's sidebar foot (Marcus,
-                    // 2026-09-03, could not find the progress).
+                    // on the screen everyone lands on, so its progress is
+                    // never somewhere to go looking for.
                     DownloadAllStatusCard()
-                    #endif
                 }
             }
             .onChange(of: session.lastSyncSummary) { _, summary in
@@ -135,11 +117,6 @@ struct HomeView: View {
             // in landscape the large title overlapped the first rail's
             // header outright. Inline keeps the bar itself, which the
             // settings button needs.
-            // Both the inline title mode and this toolbar (Settings link,
-            // Offline Mode toggle) are iOS-only for now: navigationBarTitle
-            // DisplayMode doesn't exist on tvOS, and SettingsView itself is
-            // iOS-only in this pass. tvOS follow-up, not solved here.
-            #if os(iOS)
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 // Settings only. The library and search moved to the tab
@@ -147,13 +124,6 @@ struct HomeView: View {
                 // top trailing corner is the worst place for the two
                 // things reached every session. Settings earns its place
                 // here precisely because it is reached rarely.
-                // Not on the Mac. A Mac app keeps Settings in the app
-                // menu, under Cmd+comma, and nowhere else; the gear
-                // exists on the phone only because there is no menu
-                // bar. Inherited by Catalyst, it pushed Settings onto
-                // Home's stack while the menu presented a sheet, two
-                // arrivals at one screen. See MacMenus.
-                #if !targetEnvironment(macCatalyst)
                 ToolbarItem(placement: .topBarTrailing) {
                     NavigationLink {
                         SettingsView()
@@ -161,7 +131,6 @@ struct HomeView: View {
                         Image(systemName: "gearshape")
                     }
                 }
-                #endif
                 // A real Toggle, not a plain button: a toolbar icon that
                 // just triggers something is the wrong shape for a mode
                 // that stays on, nothing in iOS treats Low Power Mode or
@@ -174,9 +143,6 @@ struct HomeView: View {
                 // Invisible, not merely disabled, when there is nothing
                 // it could switch to, matching every other control this
                 // app has cut back to only where it applies.
-                // Not on the Mac, which has no airplane moment: its
-                // kept games are a source in the sidebar, Downloaded.
-                #if !targetEnvironment(macCatalyst)
                 if !KeptGameStore.shared.offlinePlatforms().isEmpty {
                     ToolbarItem(placement: .topBarLeading) {
                         // No explicit tint: the app has no custom accent
@@ -190,9 +156,7 @@ struct HomeView: View {
                         .toggleStyle(.button)
                     }
                 }
-                #endif
             }
-            #endif
             .refreshable { await load() }
             // A game reached through Library, not Home's own resume flow,
             // has its own fullScreenCover and never touches `resuming`, so
@@ -213,32 +177,15 @@ struct HomeView: View {
             // 2026-08-07).
             .onChange(of: networkMonitor.isConnected) { _, _ in Task { await load() } }
             .onChange(of: networkMonitor.manualOfflineMode) { _, _ in Task { await load() } }
-            #if targetEnvironment(macCatalyst)
-            .navigationDestination(item: $resuming) { rom in
-                GameLaunchView(rom: rom)
-            }
-            #else
             .fullScreenCover(item: $resuming) { rom in
-                #if os(iOS)
                 NavigationStack { GameLaunchView(rom: rom) }
-                #else
-                TVGameLaunchView(rom: rom)
-                #endif
             }
-            #endif
             .onChange(of: resuming == nil) { _, playerClosed in
                 if playerClosed { Task { await load() } }
             }
             .fullScreenCover(item: $nativeDirectLaunch) { launch in
-                #if os(iOS)
-                // Explicit for the same Catalyst reason as
-                // GameLaunchView's covers: inheritance of environment
-                // objects into a fullScreenCover is not reliable there.
                 NativePlayerView(rom: launch.rom, core: launch.core, initialState: launch.initialState)
                     .environmentObject(session)
-                #else
-                TVPlayerView(rom: launch.rom, core: launch.core, initialState: launch.initialState)
-                #endif
             }
             .onChange(of: nativeDirectLaunch == nil) { _, playerClosed in
                 if playerClosed { Task { await load() } }
@@ -289,143 +236,7 @@ struct HomeView: View {
 
     /// Landscape: the hero takes the left, everything else stacks to its
     /// right, so nothing is pushed off a screen that is short but wide.
-    ///
-    /// tvOS never takes this narrow-hero-beside-a-column shape at all: a
-    /// TV is always landscape, and a card boxed into 320pt on a 4K-wide
-    /// canvas read as a phone layout stretched onto the wrong screen. It
-    /// gets its own top-to-bottom shape instead, full-width banner over
-    /// full-width shelves, the same structure Home's own mockups settled
-    /// on and the shape Apple's own TV app uses.
     private func wideLayout(height: CGFloat) -> some View {
-        #if os(tvOS)
-        // The chip is an overlay, not a sibling row that pushes
-        // `tvContent` down: as a `VStack` sibling with
-        // `.ignoresSafeArea(edges: .top)`, it reserved real layout height
-        // for the safe area it was ignoring on top of its own content
-        // height (measured on device: about 225pt total), silently
-        // pushing the hero and Recent's caption down by that much. An
-        // overlay never reserves space from `tvContent`, which fixes
-        // that: `tvContent` gets the full, real `height`.
-        //
-        // This position is correct and settled; do not move the chip
-        // again chasing remote reachability. Two things were tried and
-        // reverted specifically because they displaced it from here: a
-        // global overlay on `MainTabView` (visible on every tab, but a
-        // dead end navigating back out of it into the system tab bar's
-        // own closed focus hierarchy) and a content-flow sibling on this
-        // screen positioned lower, below the tab bar (reachable, but not
-        // where it belongs visually). Account-switching reachability
-        // needs its own answer that doesn't move this.
-        return ZStack(alignment: .topTrailing) {
-            tvContent(height: height)
-
-            HStack {
-                Spacer()
-                TVAccountChip()
-            }
-            .padding(.top, 50)
-            .padding(.trailing, 60)
-            .ignoresSafeArea(edges: .top)
-        }
-        .focusScope(homeFocus)
-        #elseif targetEnvironment(macCatalyst)
-        return macContent(height: height)
-        #else
-        return legacyWideLayout(height: height)
-        #endif
-    }
-
-    #if targetEnvironment(macCatalyst)
-    /// The TV's Home composition read at a desk instead of a sofa: the
-    /// same hero band leading the same rows, with `TenFoot`'s Mac tier
-    /// carrying the scale change. `tvContent` is this layout's model;
-    /// keep the two structurally in step when either changes. The
-    /// phone-as-controller offer is deliberately absent, a Mac is the
-    /// screen end of that arrangement.
-    private func macContent(height: CGFloat) -> some View {
-        ScrollView {
-            VStack(alignment: .leading, spacing: 14) {
-                if let hero = resumeHero {
-                    heroCard(for: hero, height: min(height * 0.34, 320), wide: true)
-                        .padding(.bottom, 12)
-                }
-                if !recentBesides(resumeHero).isEmpty {
-                    rotationRow("Recent", recentBesides(resumeHero), seeAll: .recentlyPlayed)
-                } else if loaded, recent.isEmpty {
-                    emptyState.padding(.horizontal, 20)
-                }
-                if !favorites.isEmpty {
-                    rotationRow(
-                        "Favorites", favorites, seeAll: session.favoriteCollection.map { .collection($0) }
-                    )
-                }
-            }
-            .padding(.horizontal, TenFoot.contentInset)
-            .padding(.top, 24)
-        }
-        .contentMargins(.bottom, 60, for: .scrollContent)
-        .withoutScrollEdgeEffect()
-    }
-    #endif
-
-    #if os(tvOS)
-    private func tvContent(height: CGFloat) -> some View {
-        ScrollView {
-            // Sized so Recent's own cover and title fit above the fold
-            // alongside the hero on first landing. The original 0.42/460
-            // hero, plus the row's full padding, pushed Recent's caption
-            // text past the bottom edge on a 1080pt-tall screen; a first
-            // pass at 0.34/380 still cut it off on real hardware, because
-            // a physical TV's overscan safe area eats more vertical room
-            // than the simulator's raw framebuffer capture shows. 0.28/300
-            // fit with margin to spare, then 0.34/360 still left a visible
-            // gap below Recent's caption on real hardware. Grown again to
-            // close that remaining gap, with its own breathing room below
-            // the hero rather than sharing the same tight spacing Recent
-            // and Favorites use between each other.
-            VStack(alignment: .leading, spacing: 16) {
-                if let hero = resumeHero {
-                    heroCard(for: hero, height: min(height * 0.40, 420), wide: true)
-                        .padding(.bottom, 20)
-                }
-                if !recentBesides(resumeHero).isEmpty {
-                    rotationRow("Recent", recentBesides(resumeHero), seeAll: .recentlyPlayed)
-                } else if loaded, recent.isEmpty {
-                    tvEmptyState
-                }
-                if !favorites.isEmpty {
-                    rotationRow(
-                        "Favorites", favorites, seeAll: session.favoriteCollection.map { .collection($0) }
-                    )
-                }
-            }
-            .padding(.horizontal, 60)
-            .padding(.top, 0)
-            .padding(.bottom, 16)
-        }
-    }
-
-    /// The iOS `emptyState` is phone copy in phone type: "on the go" only
-    /// means anything for a device you carry, and its `.title3`/`.callout`
-    /// sizing was never meant to sit alone on a 4K canvas. This is that
-    /// same moment (a profile with nothing recent) written and sized for a
-    /// TV instead of reused verbatim from the phone.
-    private var tvEmptyState: some View {
-        VStack(alignment: .center, spacing: 12) {
-            Text("Nothing to resume yet")
-                .font(.title2.bold())
-                .multilineTextAlignment(.center)
-            Text("Pick something from Library and it'll be here next time.")
-                .font(.title3)
-                .foregroundStyle(.secondary)
-                .multilineTextAlignment(.center)
-        }
-        .frame(maxWidth: .infinity, minHeight: 300, alignment: .center)
-    }
-    #endif
-
-    #if !os(tvOS)
-    private func legacyWideLayout(height: CGFloat) -> some View {
         HStack(alignment: .top, spacing: 20) {
             if let hero = resumeHero {
                 heroCard(for: hero, height: max(200, height - 40), wide: true)
@@ -470,21 +281,13 @@ struct HomeView: View {
         // ever shows: glass over nothing just renders as a white pill.
         .ignoresSafeArea(.container, edges: .bottom)
     }
-    #endif
 
     // MARK: Pieces
 
-    /// The full list behind a rail. tvOS gets its own grid rather than
-    /// `RomListView`: that screen's title, toolbar view-mode menu and
-    /// letter scrubber are all iOS chrome, and its navigationTitle painted
-    /// itself over the artwork on a TV. See TVRomGridView's own note.
+    /// The full list behind a rail.
     @ViewBuilder
     private func romList(_ source: RomListView.Source) -> some View {
-        #if os(tvOS)
-        TVRomGridView(source: source)
-        #else
         RomListView(source: source)
-        #endif
     }
 
     /// Box art, always, the same visual language as every other card in
@@ -514,14 +317,10 @@ struct HomeView: View {
 
     /// Reserving a real row rather than overlaying text on the art (see
     /// the artwork comment below for why) only works if the row is
-    /// actually tall enough for its own text, and a fixed constant
-    /// guessed against iOS's font scale was not: tvOS renders the same
-    /// named text styles considerably larger (a 10-foot UI), so the same
-    /// two lines that fit iOS's 60pt band overflowed straight past a
-    /// tvOS card's edge (seen on device 2026-08-13). Measuring the real
-    /// line heights of the fonts actually used, rather than guessing a
-    /// second constant for tvOS, means this self-corrects on either
-    /// platform if the fonts or padding ever change again.
+    /// actually tall enough for its own text. Measuring the real line
+    /// heights of the fonts actually used, rather than guessing a
+    /// constant, means this self-corrects if the fonts, the reader's text
+    /// size or the padding ever change.
     private func heroBandHeight(wide: Bool) -> CGFloat {
         let titleStyle: UIFont.TextStyle = wide ? .headline : .title3
         let subtitleStyle: UIFont.TextStyle = wide ? .caption1 : .subheadline
@@ -611,14 +410,6 @@ struct HomeView: View {
             .shadow(radius: 10, y: 5)
         }
         .buttonStyle(.plain)
-        #if os(tvOS)
-        // Landing on Home focuses the hero, not the account chip above
-        // it, tied to homeFocus so this arbitrates against that chip
-        // specifically rather than tvOS's own default-focus heuristic
-        // guessing (which started picking the chip once it moved above
-        // the hero in reading order).
-        .prefersDefaultFocus(true, in: homeFocus)
-        #endif
         // A second, real button rather than decoration inside the first.
         // Resume means resume: it goes straight back into the game with
         // the choices already remembered for it, since the scope doc's
@@ -687,10 +478,6 @@ struct HomeView: View {
         preparingResume = true
         defer { preparingResume = false }
 
-        #if os(tvOS)
-        resuming = rom
-        return
-        #else
         let canonicalSlug = rom.canonicalPlatformSlug(platformsVersions: session.platformsVersions)
         guard PlatformSupport.isSupported(canonicalSlug: canonicalSlug, isArcade: rom.isArcade),
               let nativeCore = NativeCore.core(for: rom, canonicalSlug: canonicalSlug) else {
@@ -698,7 +485,6 @@ struct HomeView: View {
             return
         }
         await beginNativeResume(rom, core: nativeCore)
-        #endif
     }
 
     /// Loads the newest state this core wrote, regardless of which device
@@ -758,84 +544,49 @@ struct HomeView: View {
                 } label: {
                     HStack(spacing: 4) {
                         Text(title)
-                            .font(TenFoot.sectionHeaderFont)
+                            .font(.headline)
                             .foregroundStyle(.primary)
                         Image(systemName: "chevron.right")
-                            .font(TenFoot.isTV ? .title3.weight(.semibold) : .caption.weight(.semibold))
+                            .font(.caption.weight(.semibold))
                             .foregroundStyle(.tertiary)
                     }
                 }
-                // Neither .plain nor .borderless on tvOS: .plain grows a
-                // solid white card that overlapped the hero above it, and
-                // .borderless draws a rounded plate that became a grey disc
-                // sitting on top of the chevron and the title's last
-                // letter. TextFocusStyle tints and lifts the label and
-                // draws nothing behind it.
-                #if os(tvOS)
-                .buttonStyle(TextFocusStyle())
-                #else
                 .buttonStyle(.plain)
-                #endif
-                .padding(.horizontal, TenFoot.contentInset)
+                .padding(.horizontal, 20)
             } else {
                 Text(title)
-                    .font(TenFoot.sectionHeaderFont)
-                    .padding(.horizontal, TenFoot.contentInset)
+                    .font(.headline)
+                    .padding(.horizontal, 20)
             }
 
             ScrollView(.horizontal, showsIndicators: false) {
-                // Padding, not decoration: a focused card scales up past
-                // its own frame, and without headroom the top and bottom of
-                // the grown card are clipped against the row's bounds.
-                HStack(spacing: TenFoot.shelfSpacing) {
+                HStack(spacing: 12) {
                     ForEach(roms) { rom in
                         VStack(alignment: .leading, spacing: 6) {
-                            // Only the artwork goes inside the button. On
-                            // tvOS a focused .plain button draws the system
-                            // card treatment around its whole label, so a
-                            // caption inside it gets swallowed by that white
-                            // card instead of sitting under the art the way
-                            // the Apple TV app's own shelves read.
                             Button {
                                 resuming = rom
                             } label: {
                                 CoverImage(path: rom.pathCoverSmall, title: rom.displayName)
-                                    .frame(width: TenFoot.shelfCoverWidth, height: TenFoot.shelfCoverHeight)
+                                    .frame(width: 100, height: 133)
                                     .clipShape(.rect(cornerRadius: 10))
                                     .contentShape(Rectangle())
-                                    .compatibilityBadge(romId: rom.id, compact: !TenFoot.isTV)
-                                    .favoriteBadge(romId: rom.id, compact: !TenFoot.isTV)
-                                    .downloadBadge(romId: rom.id, compact: !TenFoot.isTV)
+                                    .compatibilityBadge(romId: rom.id, compact: true)
+                                    .favoriteBadge(romId: rom.id, compact: true)
+                                    .downloadBadge(romId: rom.id, compact: true)
                             }
-                            #if os(tvOS)
-                            .buttonStyle(CoverFocusStyle(cornerRadius: 10))
-                            .focused($focusedShelfCard, equals: "\(title)-\(rom.id)")
-                            #else
                             .buttonStyle(.plain)
-                            .macHoverLift()
-                            #endif
                             .gameContextMenu(rom: rom)
 
                             Text(rom.displayName)
-                                .font(TenFoot.captionFont)
+                                .font(.caption)
                                 .lineLimit(1)
-                                .frame(width: TenFoot.shelfCoverWidth, alignment: .leading)
+                                .frame(width: 100, alignment: .leading)
                                 .foregroundStyle(
                                     compatibility.isMarked(rom.id) ? .secondary : .primary
                                 )
-                                #if os(tvOS)
-                                // Rides down with the focused card's lift so
-                                // the grown art cannot bury it; see
-                                // coverCaptionSlide in TVCoverFocus.swift.
-                                .coverCaptionSlide(
-                                    active: focusedShelfCard == "\(title)-\(rom.id)",
-                                    coverHeight: TenFoot.shelfCoverHeight
-                                )
-                                #endif
                         }
                     }
                 }
-                .padding(.vertical, TenFoot.isTV ? 24 : 0)
             }
             // Covers dissolve at the rail's leading edge rather than being
             // sliced in half by it. A screen edge is a boundary the eye
@@ -857,7 +608,7 @@ struct HomeView: View {
                     endPoint: .trailing
                 )
             }
-            .contentMargins(.horizontal, TenFoot.contentInset, for: .scrollContent)
+            .contentMargins(.horizontal, 20, for: .scrollContent)
         }
     }
 
@@ -912,17 +663,8 @@ struct HomeView: View {
         // dead connection paid the timeout twice before this screen could
         // say anything, which doubled the wait for the answer that matters
         // least.
-        #if targetEnvironment(macCatalyst)
-        // Desk-width shelves: a Mac window fits far more than the
-        // phone-tuned eight, so fetch enough that both rows run past the
-        // window edge and scroll, the way the TV's rotation rows read.
-        // iOS and tvOS compile the untouched calls in the other branch.
-        async let recentTask = session.recentlyPlayed(limit: 16)
-        async let favoritesTask = session.favoriteRoms(limit: 24)
-        #else
         async let recentTask = session.recentlyPlayed()
         async let favoritesTask = session.favoriteRoms()
-        #endif
 
         do {
             recent = try await recentTask.items
@@ -956,12 +698,11 @@ struct HomeView: View {
     /// is the single place that makes a promise, so it is the only
     /// place that has to be able to keep it.
     ///
-    /// THE EXCEPTION, iPhone only: a Dreamcast game whose VMU card
-    /// carries a minigame can lead the hero, because the card itself is
-    /// playable here in the VMU core and that is the whole point of the
-    /// phone-as-VMU design. It is also the thing most worth having on
-    /// the way out of the house. tvOS gets no exception because the VMU
-    /// core is iOS only, so there is nothing there to play.
+    /// THE EXCEPTION: a Dreamcast game whose VMU card carries a minigame
+    /// can lead the hero, because the card itself is playable here in
+    /// the VMU core and that is the whole point of the phone-as-VMU
+    /// design. It is also the thing most worth having on the way out of
+    /// the house.
     private var resumeHero: Rom? {
         recent.first { PlatformSupport.canPlay($0, platformsVersions: session.platformsVersions) }
     }
@@ -979,7 +720,7 @@ private extension View {
     /// availability check in the middle of the layout.
     @ViewBuilder
     func withoutScrollEdgeEffect() -> some View {
-        if #available(iOS 26.0, tvOS 26.0, *) {
+        if #available(iOS 26.0, *) {
             self.scrollEdgeEffectHidden()
         } else {
             self

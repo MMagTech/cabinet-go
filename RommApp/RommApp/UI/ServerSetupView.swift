@@ -1,8 +1,6 @@
 import SwiftUI
 
-/// Where a RomM address gets typed. Shared by both platforms: on tvOS
-/// this is the first screen on a fresh install, on iOS it sits behind
-/// the first door of `WelcomeView`.
+/// Where a RomM address gets typed: the first screen on a fresh install.
 ///
 /// The copy is deliberately short. A field showing romm.example.com
 /// already says "enter an address", and the old footnote spent

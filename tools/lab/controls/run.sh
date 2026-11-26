@@ -12,7 +12,6 @@ xcrun --sdk iphonesimulator swiftc \
   -D DEBUG \
   RommApp/RommApp/Controls/ControllerBindings.swift \
   RommApp/RommApp/Controls/GameControllerManager.swift \
-  RommApp/RommApp/Controls/ControllerTrace.swift \
   tools/lab/controls/FrontendStub.swift \
   tools/lab/controls/main.swift \
   -o "$OUT"

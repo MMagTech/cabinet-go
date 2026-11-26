@@ -69,7 +69,6 @@ final class GameControllerManager: ObservableObject {
 
     private final class Slot {
         weak var controller: GCController?
-        weak var pad: GCExtendedGamepad?
         var name: String?
         var bindings: [String: Int] = ControllerBindings.handheld
         var pressedInputs: Set<Int> = []
@@ -82,16 +81,7 @@ final class GameControllerManager: ObservableObject {
         var stickDown: [Int: Bool] = [:]
         /// The physical d-pad's direction claims: see setDirection.
         var dpadDown: Set<Int> = []
-        /// Last polled values, Mac only: the per-frame poll reports a
-        /// change to the same state machine the callbacks feed elsewhere,
-        /// and these are what "change" is measured against.
-        var pollPressed: [String: Bool] = [:]
-        var pollValue: [String: Float] = [:]
-        var pollDpad: [Int: Bool] = [:]
-        var pollStick: (Float, Float) = (0, 0)
-        var pollStick2: (Float, Float) = (0, 0)
         var hapticEngines: [GCHapticsLocality: CHHapticEngine] = [:]
-        var availableButtons: [String] = []
         /// Raw element names currently held, tracked independent of any
         /// RetroPad binding: the hotkey combo needs to know about L3/R3
         /// even though neither is bound to a game input by default.
@@ -104,42 +94,6 @@ final class GameControllerManager: ObservableObject {
 
     private var started = false
     private var slots: [Slot?] = Array(repeating: nil, count: GameControllerManager.maxPlayers)
-
-    /// Seats held by phone controllers, phoneID to slot index. Phones
-    /// and pads share the same two seats under the same rule, first
-    /// come and sticky: a pad connecting after a phone has joined must
-    /// not silently demote the person already playing, and the other
-    /// way round. Keyed by the phone's paired identity rather than a
-    /// connection, so a phone that drops off Wi-Fi for two seconds
-    /// comes back to the same port instead of swapping players
-    /// mid-game. Empty whenever the phone-as-controller feature is not
-    /// in use, which keeps every pad-only session on the exact
-    /// behavior it always had.
-    private var phoneClaims: [Data: Int] = [:]
-
-    /// The seat this phone already holds, or the lowest one free of
-    /// both pads and phone claims; nil when the house is full, which
-    /// makes a third source simply not a player, exactly as a third
-    /// gamepad behaves today.
-    func claimPhoneSlot(for phoneID: Data) -> Int? {
-        if let existing = phoneClaims[phoneID] { return existing }
-        guard let free = slots.indices.first(where: { index in
-            slots[index] == nil && !phoneClaims.values.contains(index)
-        }) else { return nil }
-        phoneClaims[phoneID] = free
-        return free
-    }
-
-    /// A deliberate leave gives the seat back. A mere drop does not;
-    /// that is the stickiness above.
-    func releasePhoneSlot(for phoneID: Data) {
-        phoneClaims[phoneID] = nil
-    }
-
-    /// The game ended; nobody is a phone player now.
-    func releaseAllPhoneSlots() {
-        phoneClaims.removeAll()
-    }
 
     /// A controller is attached and driving the game. True when any slot is
     /// filled, so existing single-player callers keep their meaning.
@@ -207,40 +161,9 @@ final class GameControllerManager: ObservableObject {
 
     private var observers: [NSObjectProtocol] = []
 
-    #if os(tvOS)
-    /// Whether a running game owns the Menu button.
-    ///
-    /// tvOS gives Menu a system meaning (pop navigation, and at the root,
-    /// leave the app). Binding it through GameController takes it away
-    /// from the system for as long as the binding exists, and this
-    /// manager's bindings are installed once and never torn down. So
-    /// after playing a single game, Menu stopped popping anywhere in the
-    /// app and quit outright instead: selecting a platform in the library
-    /// and pressing Menu dropped you to the Apple TV home screen rather
-    /// than back to the platform list.
-    ///
-    /// A game genuinely does want Menu (it is Start on most pads), so this
-    /// is a gate rather than a removal: the player screen claims it on
-    /// appear and gives it back on disappear. Everywhere else the system
-    /// keeps it and back navigation works.
-    var capturesMenuButton = false {
-        didSet {
-            guard capturesMenuButton != oldValue else { return }
-            for (index, slot) in slots.enumerated() {
-                guard let gamepad = slot?.controller?.extendedGamepad else { continue }
-                bindMenuButton(gamepad, player: index)
-            }
-        }
-    }
-    #endif
-
     func start() {
         guard !started else { return }
         started = true
-        ControllerTrace.shared.begin()
-        #if targetEnvironment(macCatalyst)
-        startPolling()
-        #endif
 
         observers.append(NotificationCenter.default.addObserver(
             forName: .GCControllerDidConnect, object: nil, queue: .main
@@ -290,10 +213,7 @@ final class GameControllerManager: ObservableObject {
         if let existing = slots.firstIndex(where: { $0?.controller === controller }) {
             return existing
         }
-        // Free means free of phones too. With no phone joined the
-        // claims table is empty and this is the same lowest-free rule
-        // it has always been.
-        return slots.indices.first { slots[$0] == nil && !phoneClaims.values.contains($0) }
+        return slots.indices.first { slots[$0] == nil }
     }
 
     private func attach(_ controller: GCController) {
@@ -314,32 +234,13 @@ final class GameControllerManager: ObservableObject {
 
         let slot = slots[index] ?? Slot()
         slots[index] = slot
-        slot.pad = gamepad
         slot.controller = controller
         slot.name = controller.vendorName
         slot.hapticEngines = [:]
         slot.bindings = ControllerBindings.effective(
             for: controller.vendorName ?? "unknown", platform: activePlatform)
         publishConnection()
-        ControllerTrace.shared.connect(controller, slot: index)
 
-        #if targetEnvironment(macCatalyst)
-        // No callbacks on the Mac. Apple's input guide: poll "when input
-        // handling occurs at a fixed interval as part of your game's
-        // loop". The callbacks below run on the main queue, which is the
-        // queue the frame loop already occupies, and a Bluetooth pad
-        // reported 2026-09-02 stopped mid-action and recovered while the
-        // game ran on. The poll in pollAll reads the framework's own
-        // state every frame and reports changes into the same functions
-        // these callbacks would have called, so everything below the
-        // edge is shared with iOS and tvOS unchanged.
-        let candidates = Self.buttonElements(gamepad)
-        slot.pollPressed = [:]
-        slot.pollValue = [:]
-        slot.pollDpad = [:]
-        slot.pollStick = (0, 0)
-        slot.pollStick2 = (0, 0)
-        #else
         // Directions come from the d-pad and the left stick, always, with no
         // binding involved. They are never the thing that goes missing.
         gamepad.dpad.up.pressedChangedHandler = direction(RetroPad.up, player: index)
@@ -388,19 +289,16 @@ final class GameControllerManager: ObservableObject {
                 }
             }
         }
-        // Menu is bound separately, through the helper below, because on
-        // tvOS whether this app should own it at all depends on whether a
-        // game is running. Still advertised as available either way, so
-        // the remap screen can offer it.
-        bindMenuButton(gamepad, player: index)
-        #endif
-        slot.availableButtons = candidates.map(\.0) + [GCInputButtonMenu]
+        gamepad.buttonMenu.pressedChangedHandler = { [weak self] _, _, pressed in
+            MainActor.assumeIsolated {
+                self?.button(GCInputButtonMenu, pressed: pressed, player: index)
+            }
+        }
     }
 
     /// The standard buttons by their canonical names, in binding-table
-    /// order. Built from a live profile to install callbacks, and from a
-    /// snapshot to poll; the same list either way, which is what keeps
-    /// the two paths bound to the same names.
+    /// order. Menu is not among them: every pad has one, and it is bound
+    /// beside these in `attach`.
     private static func buttonElements(_ gamepad: GCExtendedGamepad) -> [(String, GCControllerButtonInput)] {
             var candidates: [(String, GCControllerButtonInput)] = [
                 (GCInputButtonA, gamepad.buttonA),
@@ -412,8 +310,8 @@ final class GameControllerManager: ObservableObject {
                 (GCInputLeftTrigger, gamepad.leftTrigger),
                 (GCInputRightTrigger, gamepad.rightTrigger),
             ]
-            // These are optional on the profile: a compact pad may have none of
-            // them, which is exactly why remapping exists.
+            // These are optional on the profile: a compact pad may have
+            // none of them.
             if let options = gamepad.buttonOptions {
                 candidates.append((GCInputButtonOptions, options))
             }
@@ -427,88 +325,6 @@ final class GameControllerManager: ObservableObject {
                 candidates.append((GCInputRightThumbstickButton, r3))
             }
         return candidates
-    }
-
-    #if targetEnvironment(macCatalyst)
-    private var pollLink: CADisplayLink?
-
-    private func startPolling() {
-        guard pollLink == nil else { return }
-        let link = CADisplayLink(target: self, selector: #selector(pollTick))
-        link.add(to: .main, forMode: .common)
-        pollLink = link
-    }
-
-    @objc private func pollTick() {
-        pollAll()
-    }
-
-    /// One frame's poll. A snapshot per pad, per Apple's guidance, so the
-    /// elements are read consistently; then every element compared with
-    /// last frame's and only a change reported, so the functions below
-    /// see exactly the edges the callbacks would have delivered.
-    private func pollAll() {
-        for (index, slot) in slots.enumerated() {
-            guard let slot, let pad = slot.pad else { continue }
-            let snap = pad.capture()
-
-            let dpad: [(Int, GCControllerButtonInput)] = [
-                (RetroPad.up, snap.dpad.up), (RetroPad.down, snap.dpad.down),
-                (RetroPad.left, snap.dpad.left), (RetroPad.right, snap.dpad.right),
-            ]
-            for (id, input) in dpad {
-                let pressed = input.isPressed
-                guard slot.pollDpad[id] != pressed else { continue }
-                slot.pollDpad[id] = pressed
-                direction(id, player: index)(input, input.value, pressed)
-            }
-
-            let left = (snap.leftThumbstick.xAxis.value, snap.leftThumbstick.yAxis.value)
-            if left != slot.pollStick {
-                slot.pollStick = left
-                stick(x: left.0, y: left.1, player: index)
-            }
-            let right = (snap.rightThumbstick.xAxis.value, snap.rightThumbstick.yAxis.value)
-            if right != slot.pollStick2 {
-                slot.pollStick2 = right
-                stick2(x: right.0, y: right.1, player: index)
-            }
-
-            for (name, input) in Self.buttonElements(snap) + [(GCInputButtonMenu, snap.buttonMenu)] {
-                if input.isAnalog {
-                    let value = input.value
-                    guard slot.pollValue[name] != value else { continue }
-                    slot.pollValue[name] = value
-                    analog(name, value: value, player: index)
-                } else {
-                    let pressed = input.isPressed
-                    guard slot.pollPressed[name] != pressed else { continue }
-                    slot.pollPressed[name] = pressed
-                    button(name, pressed: pressed, player: index)
-                }
-            }
-        }
-    }
-    #endif
-
-    /// Installs, or on tvOS deliberately withholds, the Menu button handler.
-    ///
-    /// On iOS this is unconditional and behaves exactly as it always has.
-    /// On tvOS the handler only goes on while a game is running: see
-    /// `capturesMenuButton` for why holding it the rest of the time broke
-    /// back navigation everywhere in the app.
-    private func bindMenuButton(_ gamepad: GCExtendedGamepad, player index: Int) {
-        #if os(tvOS)
-        guard capturesMenuButton else {
-            gamepad.buttonMenu.pressedChangedHandler = nil
-            return
-        }
-        #endif
-        gamepad.buttonMenu.pressedChangedHandler = { [weak self] _, _, pressed in
-            MainActor.assumeIsolated {
-                self?.button(GCInputButtonMenu, pressed: pressed, player: index)
-            }
-        }
     }
 
     /// A physical button changed: it drives whatever it is bound to.
@@ -711,7 +527,6 @@ final class GameControllerManager: ObservableObject {
         } else {
             guard slot.pressedInputs.remove(id) != nil else { return }
         }
-        ControllerTrace.shared.edge(id, down: down, player: player)
         send?(player, id, down)
     }
 
@@ -728,7 +543,6 @@ final class GameControllerManager: ObservableObject {
             return slot.controller == nil
         }) else { return }
 
-        ControllerTrace.shared.disconnect(controller, slot: index)
         releaseAll(player: index)
         slots[index] = nil
         publishConnection()
@@ -749,8 +563,7 @@ final class GameControllerManager: ObservableObject {
     /// when there is one, falling back to the phone's Taptic Engine when
     /// there is not (no controller connected, or its haptics setup fails).
     /// `GCExtendedGamepad` carries no haptics API, only the owning
-    /// `GCController` does, which is why this needs `controller` kept
-    /// alongside `pad` rather than reusing what button handling already has.
+    /// `GCController` does, which is why each slot keeps `controller`.
     /// Called from LibretroFrontend's rumble callback via the handler block
     /// wired in RommApp.swift at launch, already hopped to the main thread
     /// there since CHHapticEngine and UIImpactFeedbackGenerator both need it.
@@ -762,18 +575,6 @@ final class GameControllerManager: ObservableObject {
               let haptics = controller.haptics,
               let engine = hapticEngine(from: haptics, slot: slot)
         else {
-            // A companion phone holding this seat IS this player's
-            // controller, so its own Taptic Engine is the motor to
-            // knock. Checked here, in the branch that already means
-            // "no real controller on this port", so a pad with
-            // haptics never reaches it and nothing about the existing
-            // path changes. It matters most on tvOS, where the
-            // fallback below is compiled out entirely and a phone
-            // player therefore felt nothing at all.
-            if phoneClaims.values.contains(port) {
-                GameControllerManager.companionRumble?(port, strong, strength)
-                return
-            }
             // The phone is player 1's device, so only player 1's rumble
             // falls back to it. Buzzing the handset for player 2's pad
             // would be felt by the wrong person entirely.
@@ -795,23 +596,9 @@ final class GameControllerManager: ObservableObject {
     }
 
     /// Connects a core's rumble events to whoever should feel them, and
-    /// makes the on-by-default setting actually read as on.
-    ///
-    /// Shared, and called from both apps' launch, because it used to live in
-    /// the iOS app delegate, which tvOS does not compile. So tvOS did
-    /// neither of these, and rumble could not work there twice over: the
-    /// setting read as off, since `boolForKey:` on a key nobody registered
-    /// returns Foundation's false rather than this app's true, and even past
-    /// that the handler was nil, and the fallback for a nil handler is a
-    /// phone haptic an Apple TV does not have. Nothing on tvOS ever rumbled,
-    /// and nothing said so.
-    /// Where a companion phone's rumble goes, set by whichever screen
-    /// currently owns the phone link and cleared when it lets go.
-    /// Shaped like LibretroFrontend's own rumble handler and for the
-    /// same reason: this file knows a phone holds a seat, but not
-    /// which link is carrying it.
-    nonisolated(unsafe) static var companionRumble: ((Int, Bool, UInt16) -> Void)?
-
+    /// makes the on-by-default setting actually read as on: `boolForKey:`
+    /// on a key nobody registered returns Foundation's false rather than
+    /// this app's true.
     static func installRumbleRouting() {
         UserDefaults.standard.register(defaults: ["com.mmagtech.RommApp.rumbleEnabled": true])
         LibretroFrontend.setRumbleHandler { port, strong, strength in
@@ -831,12 +618,8 @@ final class GameControllerManager: ObservableObject {
     }
 
     private func firePhoneHaptic(strong: Bool) {
-        // No phone to fall back to on tvOS; a rumble that misses every
-        // connected controller's own haptics is simply dropped there.
-        #if !os(tvOS)
         let generator = UIImpactFeedbackGenerator(style: strong ? .heavy : .light)
         generator.impactOccurred()
-        #endif
     }
 
     /// Drops every input on disconnect, or a direction held at the moment the

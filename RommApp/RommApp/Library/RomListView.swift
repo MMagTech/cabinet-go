@@ -94,22 +94,6 @@ struct RomListView: View {
     }
 
     var body: some View {
-        #if os(tvOS)
-        // Every path that reaches a game list on tvOS lands on the grid
-        // built for a TV, rather than this screen's iOS chrome (a toolbar
-        // view-mode menu that renders as a floating pill over the artwork,
-        // a navigationTitle that paints over it, a letter scrubber meant
-        // for a thumb). Handing off here rather than at each call site
-        // means Home's rails, the library, search and the offline list all
-        // get it without any of them having to know.
-        TVRomGridView(source: source)
-        #else
-        iosBody
-        #endif
-    }
-
-    #if !os(tvOS)
-    private var iosBody: some View {
         Group {
             if error == .offline {
                 OfflineNotice { await reload() }
@@ -122,30 +106,15 @@ struct RomListView: View {
                     Button("Try again") { Task { await reload() } }
                 }
             } else {
-                #if targetEnvironment(macCatalyst)
-                // Grid only, like the television; the list mode and its
-                // letter scrubber are thumb furniture.
-                grid
-                #else
                 switch viewMode {
                 case .grid: grid
                 case .list: list
                 }
-                #endif
             }
         }
-        #if targetEnvironment(macCatalyst)
-        // The name is drawn as content inside the grid, TV-style; the
-        // bar keeps only its back affordance.
-        .navigationTitle("")
-        #else
         .navigationTitle(navigationLabel)
-        #endif
-        #if os(iOS)
         .navigationBarTitleDisplayMode(.inline)
-        #endif
         .toolbar {
-            #if !targetEnvironment(macCatalyst)
             ToolbarItem(placement: .topBarTrailing) {
                 // A menu, not a segmented picker. iOS 26 wraps every
                 // toolbar item in its own glass container, and a segmented
@@ -176,12 +145,10 @@ struct RomListView: View {
                     Image(systemName: viewMode == .grid ? "square.grid.3x3" : "list.bullet")
                 }
             }
-            #endif
         }
         .onChange(of: viewMode) { _, mode in
             UserDefaults.standard.set(mode.rawValue, forKey: Self.modeKey(for: source.modeKey))
         }
-        #if os(iOS) && !targetEnvironment(macCatalyst)
         // This platform's own queue, at the top of its screen; the rings
         // on the covers show which file is coming down right now.
         .safeAreaInset(edge: .top) {
@@ -189,7 +156,6 @@ struct RomListView: View {
                 DownloadAllStatusCard()
             }
         }
-        #endif
         .task { await reload() }
         // A kept game removed while this screen is up, from its own long
         // press: the list is the store's, so it follows the store.
@@ -217,36 +183,16 @@ struct RomListView: View {
                 await loadNextPage()
             }
         }
-        #if targetEnvironment(macCatalyst)
-        // Pushed, with the back button, not presented over the shell:
-        // a Mac shows a detail in place. The modal's X sat where the
-        // title bar owns the mouse and did nothing windowed, and the
-        // modal kept Settings from opening until it closed.
-        .navigationDestination(item: $playing) { rom in
-            GameLaunchView(rom: rom)
-        }
-        #else
         .fullScreenCover(item: $playing) { rom in
             NavigationStack { GameLaunchView(rom: rom) }
         }
-        #endif
     }
-    #endif
 
     private var grid: some View {
         ScrollView {
-            #if targetEnvironment(macCatalyst)
-            HStack {
-                Text(navigationLabel)
-                    .font(.title2.bold())
-                Spacer()
-            }
-            .padding(.horizontal, TenFoot.contentInset)
-            .padding(.top, 16)
-            #endif
             LazyVGrid(
-                columns: [GridItem(.adaptive(minimum: TenFoot.gridCoverMinimum), spacing: TenFoot.gridSpacing)],
-                spacing: TenFoot.gridSpacing
+                columns: [GridItem(.adaptive(minimum: 110), spacing: 12)],
+                spacing: 12
             ) {
                 ForEach(roms) { rom in
                     Button {
@@ -262,7 +208,7 @@ struct RomListView: View {
                                 .downloadBadge(romId: rom.id)
 
                             Text(rom.displayName)
-                                .font(TenFoot.captionFont)
+                                .font(.caption)
                                 .lineLimit(1)
                                 .frame(maxWidth: .infinity, alignment: .leading)
                                 .foregroundStyle(
@@ -271,7 +217,6 @@ struct RomListView: View {
                         }
                     }
                     .buttonStyle(.plain)
-                    .macHoverLift()
                     .gameContextMenu(rom: rom)
                     .onAppear { Task { await loadMoreIfNeeded(current: rom) } }
                 }
@@ -320,23 +265,16 @@ struct RomListView: View {
                         .contentShape(.rect)
                     }
                     .buttonStyle(.plain)
-                    .macHoverLift()
                     .gameContextMenu(rom: rom)
                     .onAppear { Task { await loadMoreIfNeeded(current: rom) } }
                 }
 
                 footer
-                    #if os(iOS)
                     .listRowSeparator(.hidden)
-                    #endif
             }
             .listStyle(.plain)
             // Room for the rail, or the longest titles run underneath it.
             .contentMargins(.trailing, letterIndex.count > 4 ? 18 : 0, for: .scrollContent)
-            // The letter scrubber is a touch drag gesture with a haptic tap,
-            // both iOS-only; tvOS's focus-engine equivalent is real future
-            // work, not attempted here.
-            #if os(iOS)
             .overlay(alignment: .trailing) {
                 // Only when there is enough alphabet to be worth jumping
                 // around in; a six game list scrolls faster than it scrubs.
@@ -348,7 +286,6 @@ struct RomListView: View {
                     }
                 }
             }
-            #endif
         }
     }
 
@@ -388,58 +325,12 @@ struct RomListView: View {
     }
 
     private func reload() async {
-        #if targetEnvironment(macCatalyst)
-        // Paint what this source had last time, then check the server
-        // rather than trust it. The Mac rebuilds this view every time
-        // the sidebar comes back to a platform, so without the cache
-        // every visit is a cold fetch, and without the check behind it
-        // a visit would show yesterday's library with no way to
-        // refresh: this screen has no pull-to-refresh.
-        if let cached = MacRomListCache.shared.entry(for: source.modeKey) {
-            roms = cached.roms
-            total = cached.total
-            error = nil
-            await revalidate()
-            return
-        }
-        #endif
         roms = []
         total = 0
         error = nil
         await loadNextPage()
     }
 
-    #if targetEnvironment(macCatalyst)
-    /// Asks the server for this source's first page and, if the count no
-    /// longer matches what was cached, throws the cache away and loads
-    /// again from the top.
-    ///
-    /// The total is the cheap signal: a game added, removed or moved on
-    /// the server changes it, and one page is a far smaller ask than
-    /// refetching a platform with hundreds of roms just to find out
-    /// nothing moved. A failure here is silent on purpose, since there
-    /// are already games on screen and this is a check, not a load.
-    private func revalidate() async {
-        let latest: Int?
-        switch source {
-        case .platform(let platform):
-            latest = try? await session.roms(platformId: platform.id, offset: 0).total
-        case .collection(let collection):
-            latest = try? await session.roms(collectionId: collection.id, offset: 0).total
-        case .recentlyPlayed, .keptPlatform:
-            // Recents reorder without changing count, and a kept list is
-            // read from the device rather than the server. Neither is
-            // reachable from the Mac sidebar today; both are left alone
-            // rather than given a check that would not mean anything.
-            return
-        }
-        guard let latest, latest != total else { return }
-        MacRomListCache.shared.drop(source.modeKey)
-        roms = []
-        total = 0
-        await loadNextPage()
-    }
-    #endif
 
     private func loadMoreIfNeeded(current rom: Rom) async {
         guard rom.id == roms.last?.id, roms.count < total else { return }
@@ -479,9 +370,6 @@ struct RomListView: View {
                 roms.append(contentsOf: page.items)
                 total = page.total
             }
-            #if targetEnvironment(macCatalyst)
-            MacRomListCache.shared.store(roms, total: total, for: source.modeKey)
-            #endif
         } catch {
             // A cancelled fetch leaves whatever is already on screen
             // alone. See isCancellation.
@@ -496,7 +384,6 @@ struct RomListView: View {
 /// title under each letter passed. Jumping is instant rather than animated,
 /// because animating through a thousand rows reads as scrolling, and the
 /// point of a scrubber is not scrolling.
-#if os(iOS)
 private struct LetterScrubber: View {
     let letters: [String]
     let onSelect: (String) -> Void
@@ -534,4 +421,3 @@ private struct LetterScrubber: View {
         .padding(.trailing, 2)
     }
 }
-#endif

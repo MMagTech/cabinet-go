@@ -15,11 +15,6 @@ import UIKit
 enum QuickAction: String {
     case resume, search, favorites, recents
 
-    // Home screen quick actions do not exist on tvOS: there is no icon to
-    // long press. The type stays shared so `QuickActionRouter` compiles
-    // and reads the same on both platforms, only `pending` just never gets
-    // set to anything on tvOS.
-    #if os(iOS)
     static func register() {
         UIApplication.shared.shortcutItems = [
             UIApplicationShortcutItem(
@@ -40,7 +35,6 @@ enum QuickAction: String {
             ),
         ]
     }
-    #endif
 }
 
 /// The pending action, observed by whichever screen can complete it.
@@ -64,7 +58,6 @@ final class QuickActionRouter: ObservableObject {
 /// this class as the scene delegate and the two callbacks below are the
 /// entire UIKit surface: one for taps while the app is running, one for
 /// taps that cold start it.
-#if os(iOS)
 final class QuickActionSceneDelegate: NSObject, UIWindowSceneDelegate {
     func scene(
         _ scene: UIScene, willConnectTo session: UISceneSession,
@@ -73,43 +66,6 @@ final class QuickActionSceneDelegate: NSObject, UIWindowSceneDelegate {
         if let item = connectionOptions.shortcutItem {
             QuickActionRouter.shared.pending = QuickAction(rawValue: item.type)
         }
-
-        // Removing the Mac's title bar, at the moment Apple documents
-        // for it: "Removing the title bar in your Mac app built with
-        // Mac Catalyst". Same two properties the app already set, but
-        // set here, while the scene is connecting, rather than later
-        // from a view's onAppear.
-        //
-        // The timing is the whole point. Done here the content area
-        // fills the entire height of the window, which is what the
-        // documentation promises. Done afterwards the window has already
-        // been laid out around a title bar, and Catalyst goes on
-        // reporting a 52 point top safe area for a bar that is no longer
-        // drawn, which leaves an empty band across the top of anything
-        // presented full screen, a running game most visibly.
-        #if targetEnvironment(macCatalyst)
-        if let titlebar = (scene as? UIWindowScene)?.titlebar {
-            titlebar.titleVisibility = .hidden
-            titlebar.separatorStyle = .none
-            // The toolbar STAYS. It carries the sidebar toggle and the
-            // settings button, and taking it away took them with it.
-            // With the title bar transparent and the content full size
-            // they float over the artwork the way Music's do, and the
-            // property below gets them out of the way in full screen.
-            // The fullscreen half, and Apple's own answer to it. Their
-            // words: set this to true "to automatically hide the toolbar
-            // when the window enters full-screen mode. While hidden, the
-            // user can view the toolbar and menu bar by moving the
-            // pointer to the top of the screen."
-            //
-            // That is the behaviour Safari and every video player has,
-            // and it is the case removing the title bar does not cover:
-            // in fullscreen AppKit moves the bar into its own floating
-            // window and Catalyst goes on reserving 52 points of top
-            // safe area for it, which is the band over a running game.
-            titlebar.autoHidesToolbarInFullScreen = true
-        }
-        #endif
     }
 
     func windowScene(
@@ -121,4 +77,3 @@ final class QuickActionSceneDelegate: NSObject, UIWindowSceneDelegate {
         completionHandler(true)
     }
 }
-#endif

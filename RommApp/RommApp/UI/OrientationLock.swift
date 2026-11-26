@@ -90,32 +90,11 @@ final class AppDelegate: UIResponder, UIApplicationDelegate {
         OrientationLock.mask
     }
 
-    #if targetEnvironment(macCatalyst)
-    // In the class rather than MacMenus.swift because Swift does not
-    // allow overriding an inherited method from an extension; the menu
-    // content itself lives with the rest of the Mac shell there.
-    override func buildMenu(with builder: UIMenuBuilder) {
-        super.buildMenu(with: builder)
-        MacMenus.apply(builder)
-    }
-
-    /// File > Download All… is enabled only while the sidebar shows a
-    /// platform and no queue is running; see MacMenus.
-    override func validate(_ command: UICommand) {
-        super.validate(command)
-        if command.action == #selector(cabinetDownloadAllSelected) {
-            let ready = MacChrome.shared.selectedPlatform != nil && KeptGameStore.shared.bulk == nil
-            command.attributes = ready ? [] : [.disabled]
-        }
-    }
-    #endif
-
     func application(
         _ application: UIApplication,
         didFinishLaunchingWithOptions launchOptions: [UIApplication.LaunchOptionsKey: Any]? = nil
     ) -> Bool {
         QuickAction.register()
-        #if os(iOS) && !targetEnvironment(macCatalyst)
         // Recreates the background download session at every launch, so
         // a queue the system carried on with while the app was gone
         // delivers its files now. Apple's page for
@@ -123,18 +102,8 @@ final class AppDelegate: UIResponder, UIApplicationDelegate {
         // told about transfers still in progress, "you must recreate the
         // session object yourself".
         BackgroundDownloads.shared.prepare()
-        #endif
-        // Both halves of this live in GameControllerManager now, so tvOS
-        // can run them too: this file is not in that target, which is
-        // exactly why rumble never worked there.
         GameControllerManager.installRumbleRouting()
-        // Cartridge motion sensors, iOS only. Installed here rather than
-        // alongside rumble in GameControllerManager precisely because
-        // this file is not in the tvOS target: a Siri Remote has had no
-        // motion sensors since the 2021 redesign, so there is nothing
-        // for this to route to there.
-        //
-        // Only wires the route. Nothing starts until a core actually
+        // Cartridge motion sensors. Only wires the route. Nothing starts until a core actually
         // enables a sensor, which today means mGBA and a handful of
         // Game Boy Advance carts.
         LibretroFrontend.setMotionSensingHandler { accelerometer, gyroscope in
@@ -147,7 +116,6 @@ final class AppDelegate: UIResponder, UIApplicationDelegate {
         return true
     }
 
-    #if os(iOS) && !targetEnvironment(macCatalyst)
     /// The system relaunched the app because its background downloads
     /// finished. The handler is called back once the session has
     /// delivered them; see BackgroundDownloads.
@@ -163,7 +131,6 @@ final class AppDelegate: UIResponder, UIApplicationDelegate {
         BackgroundDownloads.shared.eventsCompletionHandler = completionHandler
         BackgroundDownloads.shared.prepare()
     }
-    #endif
 
     /// Names the scene delegate that receives quick action taps; SwiftUI
     /// keeps driving the scene's content exactly as before, this only adds

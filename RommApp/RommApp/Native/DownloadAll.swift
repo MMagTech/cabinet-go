@@ -1,9 +1,6 @@
 //  Download All, for a platform.
 //
-//  A phone keeps a handful of games and a desk machine has the disk for
-//  a whole system, but the action is the same on both: one Download All
-//  per platform, in the places each platform puts an action on a source.
-//  It keeps every game the store can keep, playable here or not, since a
+//  One Download All per platform, on the platform's long press. It keeps every game the store can keep, playable here or not, since a
 //  file for another emulator is still a file worth having; that is the
 //  same rule a single download follows.
 //
@@ -14,19 +11,16 @@
 //  item itself, "Downloading 12 of 66…", with Cancel beneath it, and a
 //  status line where each platform keeps one. No new screen.
 //
-//  Built for the Mac on 2026-09-02 and moved here for the phone the next
-//  day. The phone's transfers run in the system's background session
+//  The transfers run in the system's background session
 //  (BackgroundDownloads) and over Wi-Fi only, so a queue started at the
 //  kitchen table finishes with the phone locked in a pocket; the queue
 //  itself is written down, so a launch after the system has quit the app
-//  picks it up where it stopped. The Mac downloads in the foreground and
-//  needs neither.
+//  picks it up where it stopped.
 
-#if !os(tvOS)
 import Combine
 import SwiftUI
 import UserNotifications
-#if canImport(ActivityKit) && !targetEnvironment(macCatalyst)
+#if canImport(ActivityKit)
 import ActivityKit
 #endif
 
@@ -80,19 +74,13 @@ final class DownloadAll: ObservableObject {
             guard let self else { return }
             if let bulk {
                 self.lastBulk = bulk
-                #if os(iOS) && !targetEnvironment(macCatalyst)
                 DownloadLiveActivity.shared.update(done: bulk.done, total: bulk.total, failed: bulk.failed)
-                #endif
                 return
             }
             guard let finished = self.lastBulk else { return }
             self.lastBulk = nil
-            #if os(iOS) && !targetEnvironment(macCatalyst)
             DownloadLiveActivity.shared.end(done: finished.done, total: finished.total, failed: finished.failed)
-            #endif
-            #if os(iOS) && !targetEnvironment(macCatalyst)
             Self.clearRecord()
-            #endif
             let label = self.runningLabel ?? "Platform"
             self.runningLabel = nil
             guard UIApplication.shared.applicationState != .active else { return }
@@ -106,7 +94,6 @@ final class DownloadAll: ObservableObject {
             let request = UNNotificationRequest(identifier: "downloadall.\(finished.platformId)", content: content, trigger: nil)
             UNUserNotificationCenter.current().add(request)
         }
-        #if os(iOS) && !targetEnvironment(macCatalyst)
         // Wi-Fi coming or going flips the activity between Downloading
         // and Waiting for Wi-Fi without waiting for the next game.
         networkWatcher = NetworkMonitor.shared.$isExpensive
@@ -115,7 +102,6 @@ final class DownloadAll: ObservableObject {
                 guard let bulk = self?.lastBulk else { return }
                 DownloadLiveActivity.shared.update(done: bulk.done, total: bulk.total, failed: bulk.failed)
             }
-        #endif
     }
 
     /// Starts the queue for a confirmed platform, asking for notification
@@ -124,15 +110,11 @@ final class DownloadAll: ObservableObject {
     func start(platform: Platform, name: String, roms: [Rom], session: Session) {
         runningLabel = name
         UNUserNotificationCenter.current().requestAuthorization(options: [.alert]) { _, _ in }
-        #if os(iOS) && !targetEnvironment(macCatalyst)
         Self.writeRecord(Record(platformId: platform.id, name: name, roms: roms))
-        #endif
         KeptGameStore.shared.keepAll(roms, platformId: platform.id, session: session)
-        #if os(iOS) && !targetEnvironment(macCatalyst)
         if let bulk = KeptGameStore.shared.bulk {
             DownloadLiveActivity.shared.start(platformName: name, total: bulk.total)
         }
-        #endif
     }
 
     /// Everything on the platform the store can keep and does not have.
@@ -180,28 +162,18 @@ final class DownloadAll: ObservableObject {
         ByteCountFormatter.string(fromByteCount: bytes, countStyle: .file)
     }
 
-    /// Whether the phone's queue is parked on cellular. Only the phone
-    /// refuses cellular; the Mac downloads over whatever it has.
+    /// Whether the queue is parked on cellular, which it refuses.
     static var waitingForWiFi: Bool {
-        #if os(iOS) && !targetEnvironment(macCatalyst)
         return NetworkMonitor.shared.isExpensive
-        #else
-        return false
-        #endif
     }
 
-    /// "this Mac", "this iPhone", "this iPad", for the alerts.
+    /// "this iPhone" or "this iPad", for the alerts.
     static var deviceWord: String {
-        #if targetEnvironment(macCatalyst)
-        return "Mac"
-        #else
         return UIDevice.current.model
-        #endif
     }
 
-    // MARK: The queue across launches, phone only
+    // MARK: The queue across launches
 
-    #if os(iOS) && !targetEnvironment(macCatalyst)
     /// What was confirmed, written when the queue starts and removed
     /// when it ends, so a launch after the system quit the app mid-queue
     /// can carry on. Transfers already handed to the background session
@@ -245,7 +217,6 @@ final class DownloadAll: ObservableObject {
         DownloadLiveActivity.shared.adopt()
         KeptGameStore.shared.keepAll(remaining, platformId: record.platformId, session: session)
     }
-    #endif
 
     // MARK: Harness
 
@@ -286,7 +257,6 @@ final class DownloadAll: ObservableObject {
     #endif
 }
 
-#if os(iOS) && !targetEnvironment(macCatalyst)
 /// The queue in the Dynamic Island and on the Lock Screen, the phone's
 /// native place for progress while the app is not in front (Marcus,
 /// 2026-09-03). One activity for the one queue the app runs at a time.
@@ -350,7 +320,6 @@ final class DownloadLiveActivity {
         }
     }
 }
-#endif
 
 /// What a platform's menu offers about downloads, wherever a platform is
 /// met: Download All and Remove All Downloads, or while its queue runs,
@@ -412,12 +381,10 @@ struct DownloadAllPrompt: ViewModifier {
             case .confirm(let platform, let name, let roms, let bytes, let free):
                 var message = "\(roms.count) games, about \(DownloadAll.size(bytes))."
                 if let free { message += " \(DownloadAll.size(free)) free." }
-                #if os(iOS) && !targetEnvironment(macCatalyst)
                 // The phone's queue never touches cellular. Said once,
                 // here, and as a wait rather than a refusal when the
                 // phone is on cellular right now.
                 message += NetworkMonitor.shared.isExpensive ? " Waits for Wi-Fi." : " Wi-Fi only."
-                #endif
                 // Two lines: the action, then the system on its own
                 // line, so a long platform name does not wrap the
                 // question mid-phrase (Marcus, 2026-09-02).
@@ -468,7 +435,7 @@ extension View {
 /// The status as a card for the phone, set into the top of Home and of
 /// the platform being downloaded, the way Home already floats its sync
 /// summary there: visible wherever a person lands, and gone with the
-/// queue. The Mac has its sidebar foot for this and does not use it.
+/// queue.
 struct DownloadAllStatusCard: View {
     @ObservedObject private var store = KeptGameStore.shared
 
@@ -486,9 +453,8 @@ struct DownloadAllStatusCard: View {
 }
 
 /// The status while a platform downloads: the platform, the count, a
-/// thin bar, and a cancel. The Mac sets it at the sidebar's foot, the
-/// way Photos reports its own transfers there; the phone shows it at
-/// the top of Storage. Gone when the queue is.
+/// thin bar, and a cancel, shown at the top of Storage. Gone when the
+/// queue is.
 struct DownloadAllStatusContent: View {
     @ObservedObject private var store = KeptGameStore.shared
     @ObservedObject private var prompt = DownloadAll.shared
@@ -526,4 +492,3 @@ struct DownloadAllStatusContent: View {
         }
     }
 }
-#endif

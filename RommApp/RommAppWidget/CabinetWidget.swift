@@ -5,7 +5,7 @@ import WidgetKit
 
 /// The home screen widget, in full.
 ///
-/// Like the Apple TV's top shelf, it reads a snapshot the app left in the
+/// It reads a snapshot the app left in the
 /// shared app group and draws it. It makes no network calls, holds no
 /// credentials, and links no part of the app beyond the two small files
 /// both processes genuinely share, `WidgetSnapshot` and `CabinetLink`.

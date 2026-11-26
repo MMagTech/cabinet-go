@@ -1,7 +1,7 @@
 #import <CommonCrypto/CommonCrypto.h>
 #import "LibretroFrontend.h"
 #include "LibretroCoreAPI.h"
-// Explicit, not inherited: TARGET_OS_MACCATALYST is used in an #if below,
+// Explicit, not inherited: TARGET_OS_SIMULATOR is used in an #if below,
 // and an undefined macro there evaluates to 0 in silence rather than
 // failing the build.
 #include <TargetConditionals.h>
@@ -13,20 +13,15 @@
 // cores at all and exists purely for UI work, which is most of what
 // anyone iterates on anyway. Everything above this line, the frontend
 // itself, still compiles, so nothing else in the app needs to know.
-// CABINET_NO_NATIVE_CORES is the same idea for a real platform: the Mac
-// target defines it while no Mac core libraries exist yet, and drops the
-// definition, not this guard, when they land.
-#if !TARGET_OS_SIMULATOR && !CABINET_NO_NATIVE_CORES
+#if !TARGET_OS_SIMULATOR
 #import "GambatteCore.h"
 #import "MGBACore.h"
 #import "GenesisPlusGXCore.h"
 #import "BeetleNGPCore.h"
 #import "MelonDSCore.h"
 #import "PPSSPPCore.h"
-#if !TARGET_OS_TV
 #import "GWCore.h"
 #import "VeMUlatorCore.h"
-#endif
 #endif
 
 #import <UIKit/UIKit.h>
@@ -1150,15 +1145,10 @@ bool rumbleSetState(unsigned port, enum retro_rumble_effect effect, uint16_t str
             }
             // Handler not wired yet (a rumble fired before app launch
             // finished setting it): fall back to a phone haptic directly
-            // rather than silently dropping the event. tvOS has no Taptic
-            // Engine to fall back to; a rumble that beats the handler wire-up
-            // there is simply dropped, same as it would be on an iPhone with
-            // haptics off.
-#if !TARGET_OS_TV
+            // rather than silently dropping the event.
             UIImpactFeedbackStyle style = strong ? UIImpactFeedbackStyleHeavy : UIImpactFeedbackStyleLight;
             UIImpactFeedbackGenerator *generator = [[UIImpactFeedbackGenerator alloc] initWithStyle:style];
             [generator impactOccurred];
-#endif
         });
     }
     return true;
@@ -1173,17 +1163,6 @@ void logCallback(enum retro_log_level level, const char *fmt, ...) {
     static const char *names[] = {"debug", "info", "warn", "error"};
     unsigned idx = level <= RETRO_LOG_ERROR ? level : RETRO_LOG_ERROR;
     NSLog(@"[core %s] %s", names[idx], buffer);
-#if TARGET_OS_MACCATALYST
-    // Mac only. NSLog is not a usable channel for reading what a core
-    // says: os_log redacts every %s as <private> unless the device has a
-    // logging profile installed, and its duplicate-to-stderr throttles
-    // itself off the moment a core logs in bulk, which is exactly when
-    // there is something to read. Between them, a core that is
-    // announcing its CPU engine, its memory map and its self-test can
-    // look completely silent. On a desktop app stderr is the console a
-    // developer already has, so send it there as well.
-    fprintf(stderr, "[core %s] %s\n", names[idx], buffer);
-#endif
 }
 
 // The two halves of libretro's sensor interface.
@@ -1323,36 +1302,6 @@ bool environmentCallback(unsigned cmd, void *data) {
             // 90-degree counter-clockwise steps.
             gRotation.store(*(const unsigned *)data, std::memory_order_relaxed);
             return true;
-#if TARGET_OS_MACCATALYST
-        case RETRO_ENVIRONMENT_GET_JIT_CAPABLE:
-            // Mac only, and compiled out everywhere else on purpose, so
-            // iOS and tvOS keep running this switch byte-identically.
-            //
-            // Three of the cores ask this: PPSSPP, Flycast and
-            // mupen64plus. It is here for PPSSPP, whose Catalyst build
-            // defines PPSSPP_PLATFORM_IOS (TARGET_OS_IPHONE is 1 under
-            // macabi) and therefore takes the iOS branch of
-            // System_GetPropertyBool(SYSPROP_CAN_JIT). Unanswered, that
-            // call fails and libretro.cpp quietly rewrites a request
-            // for CPUCore::JIT into CPUCore::IR_INTERPRETER, so the Mac
-            // asking for "JIT" in NativeCoreOptions had no effect at
-            // all: the option was set and then overruled.
-            //
-            // The other two are unaffected. Flycast only refuses to
-            // load when this call SUCCEEDS and says no, so it has been
-            // loading on the strength of the call failing; a yes is the
-            // same outcome by a better route. mupen64plus only consults
-            // it to demote the ParaLLEl RSP, and this app leaves that
-            // core on its own "hle" default, so that branch is
-            // unreachable here.
-            //
-            // Answering yes is a claim about the process, not the
-            // hardware: it is true because CabinetMac.entitlements
-            // carries com.apple.security.cs.allow-jit. If that
-            // entitlement is ever dropped, this must go with it.
-            *(bool *)data = true;
-            return true;
-#endif
         case RETRO_ENVIRONMENT_GET_LOG_INTERFACE:
             ((struct retro_log_callback *)data)->log = logCallback;
             return true;
@@ -1428,10 +1377,9 @@ bool environmentCallback(unsigned cmd, void *data) {
 // The one place a core id becomes a function table. Adding a core means
 // one wiring file and one line here.
 const LibretroCoreAPI *coreAPI(LibretroCoreID coreID) {
-#if TARGET_OS_SIMULATOR || CABINET_NO_NATIVE_CORES
-    // No cores in a simulator build, nor in a Mac build until the Mac
-    // core libraries exist; every launch path fails cleanly before it
-    // gets here (see NativePlatform.platform(bySlug:)).
+#if TARGET_OS_SIMULATOR
+    // No cores in a simulator build; every launch path fails cleanly
+    // before it gets here (see NativePlatform.platform(bySlug:)).
     (void)coreID;
     return nullptr;
 #else
@@ -1448,12 +1396,10 @@ const LibretroCoreAPI *coreAPI(LibretroCoreID coreID) {
             return MelonDSCoreAPI();
         case LibretroCoreIDPPSSPP:
             return PPSSPPCoreAPI();
-#if !TARGET_OS_TV
         case LibretroCoreIDGW:
             return GWCoreAPI();
         case LibretroCoreIDVeMUlator:
             return VeMUlatorCoreAPI();
-#endif
         default:
             // This used to fall through to the PlayStation core, so a
             // core id with no case did not fail to load: it silently ran
@@ -1566,37 +1512,11 @@ const LibretroCoreAPI *coreAPI(LibretroCoreID coreID) {
     gReadbackPBOValid[1] = false;
     gReadbackPBOCursor = 0;
     gForceSyncReadback = false;
-#if TARGET_OS_MACCATALYST
-    // The async pixel-buffer readback loses draws on this platform. With
-    // it on, N64 rendered skies and backgrounds while the depth-tested
-    // geometry went missing: Mario Kart 64 came back correct the moment
-    // the synchronous path was forced, Hydro Thunder came most of the
-    // way back (Marcus, 2026-08-30, on both an M4 and an A18 Pro).
-    // Whatever ANGLE's Metal backend does with a mapped pixel buffer
-    // here, it is not the finished frame the iPhone and Apple TV hand
-    // back, and correctness is worth more than the readback time.
-    //
-    // Deliberately Catalyst only. iOS and tvOS keep the async ladder,
-    // where it was measured taking readback from 3.5ms to 0.08ms, and
-    // compile this branch out entirely.
-    gForceSyncReadback = true;
-#endif
 #if DEBUG
-    // Either a launch argument or a stored default. The argument alone
-    // was untestable on the Mac: a Catalyst app relaunched through
-    // LaunchServices never sees the arguments `open --args` was given,
-    // so the lever could not be thrown on a machine being driven
-    // remotely. `defaults write <bundle id> cabinetSyncReadback -bool
-    // YES` reaches it either way.
+    // Either a launch argument or a stored default.
     gForceSyncReadback = gForceSyncReadback
         || [[NSProcessInfo processInfo].arguments containsObject:@"-cabinetSyncReadback"]
         || [[NSUserDefaults standardUserDefaults] boolForKey:@"cabinetSyncReadback"];
-    // The other direction, so the async path stays reachable on the
-    // platform that now defaults away from it and the next person can
-    // retest it rather than take the comment above on faith.
-    if ([[NSUserDefaults standardUserDefaults] boolForKey:@"cabinetAsyncReadback"]) {
-        gForceSyncReadback = false;
-    }
 #endif
 }
 

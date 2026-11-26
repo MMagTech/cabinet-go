@@ -2,11 +2,6 @@ import SwiftUI
 import MetalKit
 import AVFoundation
 
-// MetalGameView and NativePlayerRenderer live in their own file, shared
-// between iOS's real player (NativePlayerView) and tvOS's PS1PlayTestView,
-// rather than duplicated for tvOS: nothing in this pipeline (Metal,
-// AVFoundation, the UIKit types it touches) is iOS-only.
-
 struct MetalGameView: UIViewRepresentable {
     let renderer: NativePlayerRenderer
     /// The letterbox color. Black for every game screen, which is the
@@ -155,8 +150,8 @@ final class NativePlayerRenderer: NSObject, ObservableObject, MTKViewDelegate {
     /// already applied, 0 until the first frame has been fitted. This is
     /// the same value `aspectFitVertices` fits the picture with, published
     /// so a view layered over the Metal surface can reproduce the fitted
-    /// rect in SwiftUI coordinates (tvOS's letterbox glow today; an iOS
-    /// HDMI-out treatment would need exactly this too).
+    /// rect in SwiftUI coordinates: the touch pad reads it to keep its
+    /// gutters off the picture.
     @Published private(set) var displayAspect: Double = 0
     private var worstFrameDelta: CFTimeInterval = 0
     private var lastDrawTime: CFTimeInterval = 0
@@ -303,11 +298,10 @@ final class NativePlayerRenderer: NSObject, ObservableObject, MTKViewDelegate {
 
     func draw(in view: MTKView) {
         let now = CACurrentMediaTime()
-        // Skipped while paused: nothing on tvOS displays these, and
-        // publishing them here republishes `self` once a second even with
-        // the core sitting idle, which re-renders the whole pause menu and
-        // made the Shader/Glow dropdown flicker while it was open, found
-        // on device 2026-08-15.
+        // Skipped while paused: publishing these republishes `self` once
+        // a second even with the core sitting idle, which re-renders the
+        // whole pause menu and made its shader dropdown flicker while it
+        // was open, found on device 2026-08-15.
         if !paused {
             if fpsWindowStart == 0 { fpsWindowStart = now }
             fpsFrameCount += 1

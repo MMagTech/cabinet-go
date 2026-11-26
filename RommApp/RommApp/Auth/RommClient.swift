@@ -280,17 +280,8 @@ actor RommClient {
         var req = request(path: "/api/auth/device/init", method: "POST")
         req.setValue("application/json", forHTTPHeaderField: "Content-Type")
 
-        #if targetEnvironment(macCatalyst)
-        // UIDevice.current.name under Catalyst reports a generic "iPad",
-        // which is exactly how the first Mac pairing showed up in RomM's
-        // devices list. The host name is the Mac's actual name.
-        let host = ProcessInfo.processInfo.hostName
-        let deviceName = host.hasSuffix(".local") ? String(host.dropLast(".local".count)) : host
-        let devicePlatform = "macOS"
-        #else
         let deviceName = await UIDevice.current.name
         let devicePlatform = "iOS"
-        #endif
         let body: [String: Any] = [
             "client_device_identifier": Self.deviceIdentifier,
             "name": deviceName.isEmpty ? devicePlatform : deviceName,
@@ -336,22 +327,12 @@ actor RommClient {
         }
     }
 
-    /// tvOS account switching only, for right now: defaults a newly paired
-    /// profile's label to whoever is actually signed in rather than the
-    /// server address. `me.read` is already in `RommScopes.required`, so
-    /// every token this app ever holds can already call this.
+    /// Who this token belongs to. `Session.setLocalAddress` calls it to
+    /// prove a second address reaches the same server. `me.read` is
+    /// already in `RommScopes.required`, so every token this app ever
+    /// holds can call this.
     func currentUser() async throws -> RommUser {
         try await send(request(path: "/api/users/me"), decoding: RommUser.self)
-    }
-
-    /// tvOS account switching only: the same account's avatar photo, so a
-    /// profile can show the real picture instead of a generic person
-    /// icon, confirmed live as a direct image response (not `avatar_path`,
-    /// a relative path this same call's user object also carries but
-    /// that a plain asset fetch cannot resolve the way `assetData` does
-    /// for a cover's timestamped path).
-    func avatarData(userId: Int) async throws -> Data {
-        try await assetData(path: "/api/users/\(userId)/avatar")
     }
 
     // MARK: Library

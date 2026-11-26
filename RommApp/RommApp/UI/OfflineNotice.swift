@@ -52,11 +52,9 @@ struct OfflineNotice: View {
 ///
 /// A `.task` is cancelled whenever its view goes away or is rebuilt with
 /// a new identity, and the in-flight request throws on the way out.
-/// That is not a failure and must not be shown as one: the Mac sidebar
-/// gives every platform its own identity, so selecting one could cancel
-/// the previous one's fetch and paint "Could not load games" over a
-/// screen that was simply being replaced. Pressing Try again then
-/// "worked", because nothing had been wrong.
+/// That is not a failure and must not be shown as one: shown, it paints
+/// "Could not load games" over a screen that was simply being replaced,
+/// and pressing Try again then "works", because nothing had been wrong.
 func isCancellation(_ error: Error) -> Bool {
     if error is CancellationError { return true }
     if let urlError = error as? URLError, urlError.code == .cancelled { return true }

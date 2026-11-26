@@ -80,56 +80,14 @@ struct RommApp: App {
             if !isManualOffline { KeptGameStore.shared.healCanonicalSlugs(session: session) }
             syncIfOnline()
         }
-
-        #if targetEnvironment(macCatalyst)
-        // The Mac's Settings window, opened from the app menu; see
-        // MacSettingsWindow. A second scene, which the shared scene
-        // manifest already permits for the external display.
-        WindowGroup(id: MacSettingsWindow.windowID) {
-            MacSettingsWindow()
-                .environmentObject(session)
-        }
-        #endif
     }
 
     private var appContent: some View {
-        #if targetEnvironment(macCatalyst)
-        // The PS2 picture cannot be verified by building, and the
-        // headless smoke test deliberately draws nothing, so this is
-        // the one way to exercise the real render path without a
-        // person clicking through sign-in and the library. Inert
-        // without its launch argument.
-        if let disc = PS2BenchHarness.discPath, !disc.isEmpty {
-            return AnyView(PS2BenchView(discPath: disc))
-        }
-        if let disc = GCBenchHarness.discPath, !disc.isEmpty {
-            return AnyView(GCBenchView(discPath: disc))
-        }
-        #endif
-        return AnyView(appShell)
-    }
-
-    private var appShell: some View {
         RootView()
             .environmentObject(session)
-            #if targetEnvironment(macCatalyst)
-            .onAppear { MacWindow.styleAll() }
-            // The whole app's type, one dial: a desk sits further from
-            // the glass than a hand does, so the Mac reads every
-            // semantic font two dynamic-type notches up. Set here so it
-            // cascades through every screen and presentation.
-            //
-            // Two rather than one because Catalyst has already mapped
-            // every iOS text style down to Mac metrics before this
-            // applies, putting body at 13pt against the phone's 17, so
-            // the first notch only undoes part of that.
-            .dynamicTypeSize(.xxLarge)
-            #endif
-            #if os(iOS)
             // A widget press or a Spotlight result arrives here as a
             // cabinet:// URL. See DeepLink.swift.
             .handlesGameDeepLinks(session: session)
-            #endif
             .task {
                 // A native core crash takes the whole app, so the only
                 // moment it can be counted is the next launch.

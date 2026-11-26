@@ -1,7 +1,5 @@
 import Foundation
-#if os(iOS) && !targetEnvironment(macCatalyst)
 import UIKit
-#endif
 
 /// One game deliberately stored on this phone for offline, native play.
 /// Not a cache entry: nothing evicts it, and it exists because someone
@@ -130,8 +128,7 @@ final class KeptGameStore: ObservableObject {
     /// game whose finish fails once is tried again before it counts as
     /// failed: the app may have been put to sleep between the file
     /// landing and the manifest being written, which is not the
-    /// download's fault. The Mac and the television keep the plain
-    /// one-after-another download.
+    /// download's fault.
     func keepAll(_ roms: [Rom], platformId: Int, session: Session) {
         guard bulkTask == nil else { return }
         let queue = roms.filter { kept(romId: $0.id) == nil && tasks[$0.id] == nil }
@@ -139,12 +136,10 @@ final class KeptGameStore: ObservableObject {
         bulkQueue = queue
         bulk = BulkDownload(platformId: platformId, done: 0, total: queue.count, currentRomId: nil, failed: 0)
         bulkTask = Task { [weak self] in
-            #if os(iOS) && !targetEnvironment(macCatalyst)
             for rom in queue {
                 guard !Task.isCancelled, let request = try? await session.romContentRequest(rom) else { break }
                 await BackgroundDownloads.shared.enqueue(request, romId: rom.id, wifiOnly: true)
             }
-            #endif
             for rom in queue {
                 guard let self, !Task.isCancelled else { break }
                 self.errors[rom.id] = nil
@@ -155,13 +150,11 @@ final class KeptGameStore: ObservableObject {
                 // The same shape `keep` gives a single download, so the
                 // tasks table, cancel and the ring all see one of those.
                 let task = Task<Void, Never> {
-                    #if os(iOS) && !targetEnvironment(macCatalyst)
                     // Asks for time when the app has been woken in the
                     // background for a landed file, so the finish is
                     // not cut off halfway through writing the manifest.
                     let grace = UIApplication.shared.beginBackgroundTask(withName: "Download All")
                     defer { UIApplication.shared.endBackgroundTask(grace) }
-                    #endif
                     var attempts = 0
                     while true {
                         do {
@@ -251,7 +244,6 @@ final class KeptGameStore: ObservableObject {
             tasks[current]?.cancel()
         }
         bulkTask?.cancel()
-        #if os(iOS) && !targetEnvironment(macCatalyst)
         // The transfers the system was still holding for the rest of
         // the platform, and the rings that showed them.
         for rom in bulkQueue where kept(romId: rom.id) == nil && tasks[rom.id] == nil {
@@ -259,22 +251,14 @@ final class KeptGameStore: ObservableObject {
             downloading[rom.id] = nil
             pendingTransfers[rom.id] = nil
         }
-        #endif
     }
 
     /// Bytes free on the volume the kept games live on, by the measure
     /// the system uses for a download it considers important, which
     /// counts purgeable space as free. Nil when the volume will not say.
     func availableCapacity() -> Int64? {
-        #if os(tvOS)
-        // The "important usage" measure, which counts purgeable space as
-        // free, does not exist on tvOS; the plain figure does.
-        let values = try? root.resourceValues(forKeys: [.volumeAvailableCapacityKey])
-        return values?.volumeAvailableCapacity.map(Int64.init)
-        #else
         let values = try? root.resourceValues(forKeys: [.volumeAvailableCapacityForImportantUsageKey])
         return values?.volumeAvailableCapacityForImportantUsage
-        #endif
     }
 
     private var tasks: [Int: Task<Void, Never>] = [:]
@@ -316,17 +300,7 @@ final class KeptGameStore: ObservableObject {
         root = support.appendingPathComponent("KeptGames", isDirectory: true)
         try? fm.createDirectory(at: root, withIntermediateDirectories: true)
         Self.excludeFromBackup(root)
-        #if targetEnvironment(macCatalyst)
-        // The Mac build is unsandboxed, so .documentDirectory is the
-        // person's real ~/Documents. iOS scatters platform folders at
-        // the top of the app's own scoped Documents, which is right
-        // there and rude here: on the Mac everything gathers under one
-        // Cabinet folder, browsable in Finder like any library.
         documentsRoot = fm.urls(for: .documentDirectory, in: .userDomainMask)[0]
-            .appendingPathComponent("Cabinet", isDirectory: true)
-        #else
-        documentsRoot = fm.urls(for: .documentDirectory, in: .userDomainMask)[0]
-        #endif
         // Two builds shipped the mirror under earlier names before the
         // layout settled; anything inside was only ever hard links, so
         // deleting them loses no bytes. Platform folders are created
@@ -714,9 +688,7 @@ final class KeptGameStore: ObservableObject {
     /// either way.
     func remove(romId: Int, folder: [UInt64: URL]? = nil) {
         tasks[romId]?.cancel()
-        #if os(iOS) && !targetEnvironment(macCatalyst)
         BackgroundDownloads.shared.cancel(romId: romId)
-        #endif
         pendingTransfers[romId] = nil
         errors[romId] = nil
         if let game = kept(romId: romId) {
@@ -970,7 +942,6 @@ final class KeptGameStore: ObservableObject {
 
         do {
             let romRequest = try await session.romContentRequest(rom)
-            #if os(iOS) && !targetEnvironment(macCatalyst)
             // The system carries the transfer and lands the file; a hard
             // link brings it into staging, so a finish that fails part
             // way leaves the landed file for the retry rather than
@@ -982,17 +953,6 @@ final class KeptGameStore: ObservableObject {
                 throw NSError(domain: "KeptGames", code: 0, userInfo: [NSLocalizedDescriptionKey: "The download didn't land."])
             }
             try FileManager.default.linkItem(at: landed.file, to: staging.appendingPathComponent(rom.fsName))
-            #else
-            let contentLength = try await FileDownloader.download(
-                romRequest, to: staging.appendingPathComponent(rom.fsName)
-            ) { [weak self] received, total in
-                let expected = total > 0 ? total : rom.fsSizeBytes
-                self?.downloading[rom.id] = DownloadProgress(
-                    fraction: expected > 0 ? Double(received) / Double(expected) : 0,
-                    receivedBytes: received, totalBytes: expected
-                )
-            }
-            #endif
 
             var firmwareURLs: [URL] = []
             let firmwareList = try await session.firmware(platformId: rom.platformId)
@@ -1055,9 +1015,7 @@ final class KeptGameStore: ObservableObject {
             let final = directory(for: rom.id)
             try? FileManager.default.removeItem(at: final)
             try FileManager.default.moveItem(at: staging, to: final)
-            #if os(iOS) && !targetEnvironment(macCatalyst)
             BackgroundDownloads.shared.clearLanded(romId: rom.id)
-            #endif
             games.append(manifest)
             games.sort { $0.displayName.localizedCaseInsensitiveCompare($1.displayName) == .orderedAscending }
             ensureLinks(for: manifest, justKept: true)

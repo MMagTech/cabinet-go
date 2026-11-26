@@ -1,16 +1,10 @@
 import AVFoundation
-// Explicit rather than inherited from AVFoundation: on Mac Catalyst the
-// AVFoundation umbrella does not re-export the CoreAudio Swift overlay
-// that defines UnsafeMutableAudioBufferListPointer. No effect on iOS or
-// tvOS, where the overlay already arrives transitively.
-import CoreAudio
 import os
 
 /// Feeds the core's audio batches into CoreAudio through a small ring
 /// buffer, decoupling the core's variable per-frame sample count from the
 /// fixed render callback AVAudioEngine expects. Core-agnostic, same as
-/// LibretroFrontend itself, and shared between iOS's player
-/// (NativePlayerView) and tvOS's (TVPlayerView) rather than duplicated.
+/// LibretroFrontend itself.
 ///
 /// The render callback runs on CoreAudio's realtime thread, which must
 /// never allocate, never do work proportional to the buffer, and never

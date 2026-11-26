@@ -1,6 +1,3 @@
-// iOS-only, like the core it serves; the television never links gw
-// (docs/building.md) and tvOS has no touches to map anyway.
-#if !os(tvOS)
 import UIKit
 
 /// Where each Game & Watch simulator draws its buttons, so a tap on the
@@ -333,4 +330,3 @@ final class GWPointerSurface: UIView {
     }
 }
 
-#endif

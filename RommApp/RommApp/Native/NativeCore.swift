@@ -25,14 +25,11 @@ enum NativeCore {
     case beetleVB
     case melonDS
     case ppsspp
-    /// Game & Watch. iOS-only by decision (docs/building.md); the tvOS
-    /// build is gated out at the frontend and this case never resolves
-    /// there because the platform below never exists on tvOS.
+    /// Game & Watch.
     case gw
     /// The Dreamcast VMU as a standalone machine, playing the minigames
-    /// DC games download onto their save card. iOS-only by decision,
-    /// like GW. Deliberately NO NativePlatform case anywhere: the VMU
-    /// is not a platform and never appears in RomM or the library. The
+    /// DC games download onto their save card. Deliberately NO
+    /// NativePlatform case anywhere: the VMU is not a platform and never appears in RomM or the library. The
     /// minigame is cargo inside a DC game's save, and the only door to
     /// it is the VMU row on that game's launch screen (GameLaunchView),
     /// which boots this core on the card file directly through
@@ -428,11 +425,7 @@ enum NativePlatform: String, CaseIterable {
         // to nothing else in this app, so the extension is a stronger
         // identifier here than the slug is.
         if rom.fsName.lowercased().hasSuffix(".mgw") {
-            #if os(tvOS)
-            return nil
-            #else
             return .gameAndWatch
-            #endif
         }
         return nil
     }
@@ -508,17 +501,8 @@ enum NativePlatform: String, CaseIterable {
         // Marcus's is literally "Game & Watch", lowercased to
         // "game & watch" by canonicalPlatformSlug. Accept the tidy
         // metadata slug and the folder spellings alike.
-        //
-        // Not on tvOS, and here rather than only at the frontend: this
-        // resolver is what makes Play buttons exist, so failing it is
-        // what keeps the television from offering a core it does not
-        // link. The exception's reasoning lives in docs/building.md.
         case "game-and-watch", "game & watch", "game and watch", "gameandwatch":
-            #if os(tvOS)
-            return nil
-            #else
             return .gameAndWatch
-            #endif
         default:
             return nil
         }

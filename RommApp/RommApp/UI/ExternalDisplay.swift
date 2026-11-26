@@ -1,4 +1,3 @@
-#if os(iOS)
 import SwiftUI
 import UIKit
 
@@ -11,14 +10,6 @@ import UIKit
 /// television and nothing else does. There is no ten-foot interface here,
 /// no focus navigation, no browsing on the big screen. The phone stays the
 /// whole app and simply stops drawing the picture.
-///
-/// Everything here is iOS only. tvOS is already a television.
-///
-/// Note this is not the same feature as the phone-as-controller work in
-/// `Lab/`: there a phone reaches across the network into an Apple TV, which
-/// is why it needs pairing and authentication. Here one device does
-/// everything and there is nothing to admit, which is what makes this the
-/// cheaper half of the same idea.
 @MainActor
 final class ExternalDisplay: ObservableObject {
     static let shared = ExternalDisplay()
@@ -84,8 +75,8 @@ private struct ExternalGameScreen: View {
                     // rather than being covered up.
                     //
                     // Built from the same vocabulary the Apple TV app uses
-                    // for its own overlays, glass on tvOS 26 and a
-                    // material below it, rather than plain white text over
+                    // for its own overlays, a material, rather than plain
+                    // white text over
                     // the picture, which reads as a debug label from across
                     // a room. Restrained on purpose: at ten feet the job
                     // is to answer "did it crash" at a glance, not to
@@ -171,4 +162,3 @@ final class ExternalDisplaySceneDelegate: UIResponder, UIWindowSceneDelegate {
         MainActor.assumeIsolated { ExternalDisplay.shared.sceneDisconnected() }
     }
 }
-#endif

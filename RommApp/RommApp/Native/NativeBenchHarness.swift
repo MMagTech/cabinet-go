@@ -16,11 +16,6 @@ import SwiftUI
 /// takes exactly the path it took before. It never ships in a release
 /// build at all.
 ///
-/// Compiles for both platforms. tvOS gets it because nine platforms' worth
-/// of this pass's changes ship there on the strength of iPhone measurements
-/// alone, and the Apple TV 4K 3rd gen is a slower, fanless machine where
-/// that extrapolation is least safe.
-///
 /// Drive it with:
 ///
 ///     xcrun devicectl device process launch --terminate-existing \
@@ -165,13 +160,8 @@ struct NativeBenchRunnerView: View {
         .fullScreenCover(isPresented: $ready) {
             if let plan {
                 // Each platform's own player, the same split HomeView makes.
-                #if os(iOS)
                 NativePlayerView(rom: plan.rom, core: plan.core)
                     .environmentObject(session)
-                #else
-                TVPlayerView(rom: plan.rom, core: plan.core)
-                    .environmentObject(session)
-                #endif
             }
         }
         .task {

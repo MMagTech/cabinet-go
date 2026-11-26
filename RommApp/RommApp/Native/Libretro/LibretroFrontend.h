@@ -25,8 +25,8 @@ typedef NS_ENUM(NSInteger, LibretroCoreID) {
     LibretroCoreIDMGBA NS_SWIFT_NAME(mgba) = 3,
     LibretroCoreIDGenesisPlusGX NS_SWIFT_NAME(genesisPlusGX) = 4,
     LibretroCoreIDBeetleNGP NS_SWIFT_NAME(beetleNGP) = 8,
-    // Nintendo DS. The libretro melonDS fork, interpreter-only on both
-    // Apple platforms (its ios-arm64/tvos-arm64 builds set no JIT_ARCH),
+    // Nintendo DS. The libretro melonDS fork, interpreter-only (its
+    // ios-arm64 build sets no JIT_ARCH),
     // software rendered with the core's own threaded-3D rasterizer
     // carrying the heavy frames. Two ARM CPUs interpreted at once makes
     // this the heaviest core in the binary; its device runs are a
@@ -275,8 +275,8 @@ typedef NS_ENUM(NSInteger, LibretroCoreID) {
 
 // The frame rate the core declares it wants to be run at (its
 // retro_system_av_info timing.fps), which is not the display's refresh
-// rate: NTSC systems ask for 59.94 and an Apple TV's display link can
-// run far above that. The draw loop must pace retro_run against this,
+// rate: NTSC systems ask for 59.94 and a ProMotion display link runs
+// far above that. The draw loop must pace retro_run against this,
 // not against how often it happens to be asked to draw.
 - (double)targetFPS;
 

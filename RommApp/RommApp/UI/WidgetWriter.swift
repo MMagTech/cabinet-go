@@ -1,12 +1,10 @@
-#if os(iOS)
 import SwiftUI
 import UIKit
 import WidgetKit
 
 /// Keeps the home screen widget's data current.
 ///
-/// The same shape as the Apple TV's top shelf writer and for the same
-/// reason: the thing that draws cannot fetch, so the app has to leave it
+/// The thing that draws cannot fetch, so the app has to leave it
 /// something to draw. Recents come from the account rather than the
 /// device, so there is no local list to read; the app has to ask the
 /// server while it can and write the answer down.
@@ -206,4 +204,3 @@ enum WidgetWriter {
         WidgetCenter.shared.reloadAllTimelines()
     }
 }
-#endif

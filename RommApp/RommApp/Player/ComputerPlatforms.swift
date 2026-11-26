@@ -79,10 +79,9 @@ enum PlatformSupport {
     /// iPhone a Dreamcast game whose VMU card carries a minigame IS
     /// playable, in the VMU core, even though Dreamcast is not.
     ///
-    /// Lives here rather than in a view because THREE different places
-    /// offer a game to continue and every one of them is a promise:
-    /// Home's hero, the iPhone widget, and the Apple TV top shelf. The
-    /// first version of this filter only fixed Home, which left the
+    /// Lives here rather than in a view because two different places
+    /// offer a game to continue and each of them is a promise: Home's
+    /// hero and the widget. The first version of this filter only fixed Home, which left the
     /// widget on somebody's Home Screen still offering a GameCube game
     /// to a phone that cannot run one.
     ///
@@ -95,13 +94,11 @@ enum PlatformSupport {
     static func canPlay(_ rom: Rom, platformsVersions: [String: String]) -> Bool {
         let slug = rom.canonicalPlatformSlug(platformsVersions: platformsVersions)
         if isSupported(canonicalSlug: slug, isArcade: rom.isArcade) { return true }
-        #if os(iOS) && !targetEnvironment(macCatalyst)
         if NativePlatform.platform(for: rom, canonicalSlug: slug) == .dreamcast,
            let card = VMULauncher.currentCard(romId: rom.id),
            VMUCard.minigameName(card) != nil {
             return true
         }
-        #endif
         return false
     }
 }

@@ -18,7 +18,6 @@
 //  in-game save are small and fetched by the store as it always has,
 //  right after the ROM lands.
 
-#if os(iOS) && !targetEnvironment(macCatalyst)
 import Foundation
 import UIKit
 
@@ -254,4 +253,3 @@ final class BackgroundDownloads: NSObject, URLSessionDownloadDelegate, @unchecke
         }
     }
 }
-#endif
