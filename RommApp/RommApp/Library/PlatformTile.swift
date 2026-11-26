@@ -1,18 +1,15 @@
 import SwiftUI
 
-/// The platform tile: a name and a count over two covers. Extracted from
-/// LibraryScreen so the Mac's Downloaded screen draws the identical tile
-/// rather than a second one built to look like it. Owns everything about
-/// how the tile is drawn and nothing about where it navigates; the
-/// screen wraps it in its own NavigationLink.
+/// The library's tile for a platform or a collection: a name and a count
+/// over a row of covers. Owns everything about how the tile is drawn and
+/// nothing about where it navigates or how tall it is; the library wraps
+/// it in its own NavigationLink and works out one height for every tile
+/// from the screen it is on (`LibraryScreen.tileHeight`).
 struct PlatformTile: View {
     let title: String
     let count: Int
     let covers: [String]
-
-    static var height: CGFloat {
-        96
-    }
+    let height: CGFloat
 
     private static var titleFont: Font {
         .subheadline.weight(.semibold)
@@ -40,34 +37,35 @@ struct PlatformTile: View {
                 }
                 .padding(11)
             }
-            .frame(height: Self.height)
+            .frame(height: height)
             .frame(maxWidth: .infinity)
             .clipShape(.rect(cornerRadius: 12))
             .animation(.easeOut(duration: 0.35), value: covers)
     }
 
-    /// The tile's art: two covers filling the trailing side edge to edge,
-    /// with the label zone kept a flat opaque panel that fades out over
-    /// the art. Proportional, never fixed points: the label zone is a
-    /// fraction of the tile's own width, so the same tile works on any
-    /// phone or pad width. Fixed widths once squeezed a long platform name
-    /// until it hyphenated.
+    /// The tile's art: covers at their own 3:4 shape, edge to edge from
+    /// the trailing side, as many as the art zone holds, with the label
+    /// zone kept a flat opaque panel that fades out over the art. Covers
+    /// keep their shape because a full-width tile stretched two of them
+    /// into wide crops. Proportional, never fixed points: the label zone
+    /// is a fraction of the tile's own width and the cover width follows
+    /// its height, so the same tile works on any phone. Fixed widths once
+    /// squeezed a long platform name until it hyphenated.
     private func backdrop(covers: [String]) -> some View {
         GeometryReader { geo in
             // Where the covers start, as a fraction of the tile. The
             // label overhangs into the faded region for long names, which
             // is why the gradient's first stretch stays mostly opaque.
             let labelZone = geo.size.width * 0.42
+            let coverWidth = max(geo.size.height * 0.75, 1)
+            let slots = Int(((geo.size.width - labelZone) / coverWidth).rounded(.up))
             ZStack(alignment: .leading) {
                 Self.panel
                 if !covers.isEmpty {
                     HStack(spacing: 0) {
-                        ForEach(Array(covers.prefix(2).enumerated()), id: \.offset) { _, path in
+                        ForEach(Array(covers.prefix(slots).enumerated()), id: \.offset) { _, path in
                             CoverImage(path: path, title: "", showsPlaceholder: false)
-                                .frame(
-                                    width: (geo.size.width - labelZone) / 2,
-                                    height: geo.size.height
-                                )
+                                .frame(width: coverWidth, height: geo.size.height)
                                 .clipped()
                         }
                     }
