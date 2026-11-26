@@ -115,12 +115,6 @@ final class NativePlayerRenderer: NSObject, ObservableObject, MTKViewDelegate {
             ? min(1, dsSplitProgress + step)
             : max(0, dsSplitProgress - step)
     }
-    /// Hands each finished DS frame's bottom half to the video
-    /// encoder, bytes exactly as the core rendered them (BGRA rows).
-    /// Nil for everyone and everything except a DS game with a phone
-    /// connected; the check costs a nil test per frame.
-    var dsBottomFrameTap: ((Data, Int) -> Void)?
-
     /// The active shader, set by the pause menu's Shader row. The next
     /// `draw(in:)` picks it up immediately, which is what re-renders the
     /// frozen frame live behind the still-open menu. Published so the
@@ -155,11 +149,6 @@ final class NativePlayerRenderer: NSObject, ObservableObject, MTKViewDelegate {
     @Published private(set) var displayAspect: Double = 0
     private var worstFrameDelta: CFTimeInterval = 0
     private var lastDrawTime: CFTimeInterval = 0
-
-    /// Temporary instrumentation for issue #6: the time the Metal upload
-    /// took on this draw, milliseconds. The other three stages are timed
-    /// inside `LibretroFrontend` where they happen. See `FrameTrace`.
-    private var uploadMS: Double = 0
 
     /// Held RetroPad ids, merged from the touch overlay and any connected
     /// game controller. Both already speak the same id space (see
@@ -316,9 +305,6 @@ final class NativePlayerRenderer: NSObject, ObservableObject, MTKViewDelegate {
                 worstFrameDelta = 0
             }
         }
-        // Captured before lastDrawTime moves on, since the trace below
-        // wants the gap this draw actually followed.
-        let drawGapMS = lastDrawTime == 0 ? 0 : (now - lastDrawTime) * 1000
         lastDrawTime = now
 
         if !paused && !awaitingSaveRAM {
@@ -468,45 +454,9 @@ final class NativePlayerRenderer: NSObject, ObservableObject, MTKViewDelegate {
             }
 
             if ranThisDraw > 0 {
-                let uploadStart = CACurrentMediaTime()
                 if let frame = frontend.latestFrame() {
                     updateTexture(from: frame)
-                    uploadMS = (CACurrentMediaTime() - uploadStart) * 1000
-                    // The DS bottom screen, on its way to the phone.
-                    // The slice is the frame's lower half by row range,
-                    // one copy, only while a tap is installed.
-                    if let tap = dsBottomFrameTap, dsDualScreen,
-                       frame.height == 384, frame.pixels.count >= Int(frame.bytesPerRow) * 384 {
-                        let rowBytes = Int(frame.bytesPerRow)
-                        let bottom = frame.pixels.subdata(in: rowBytes * 192 ..< rowBytes * 384)
-                        tap(bottom, rowBytes)
-                    }
                 }
-            }
-
-            // Temporary, for issue #6. Recorded only on draws that actually
-            // advanced the core: a draw that was simply not due yet has no
-            // frame to account for and would dilute the trace with zeroes.
-            if ranThisDraw > 0 {
-                FrameTrace.shared.record(
-                    drawGap: drawGapMS,
-                    framesRun: ranThisDraw,
-                    run: frontend.debugCoreRunMS(),
-                    readback: frontend.debugReadbackMS(),
-                    swizzle: frontend.debugSwizzleMS(),
-                    upload: uploadMS,
-                    audioFrames: frontend.debugAudioFramesTotal(),
-                    hwFrames: frontend.debugHWFramesTotal(),
-                    runCalls: frontend.debugRunCallTotal(),
-                    hwDupes: frontend.debugHWDupeTotal(),
-                    targetFPS: frontend.targetFPS(),
-                    // Added 2026-08-17: the readback's cost scales with
-                    // pixel count, and N64 games switch resolution mid
-                    // game, so a trace that does not record the size
-                    // cannot tell a heavier scene from a bigger frame.
-                    frameWidth: textureWidth,
-                    frameHeight: textureHeight
-                )
             }
         }
 

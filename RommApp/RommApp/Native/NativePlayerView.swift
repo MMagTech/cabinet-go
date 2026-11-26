@@ -315,12 +315,8 @@ struct NativePlayerView: View {
             // DSScreenLayout.swift.
             renderer.dsDualScreen = core == .melonDS
             NativeSessionMarker.recordGameRunning(romId: rom.id)
-            // Temporary, for issue #6. One file per play session, so there
-            // is never a question which run the numbers came from.
-            FrameTrace.shared.begin(core: "\(core)")
         }
         .onDisappear {
-            FrameTrace.shared.end()
             UIApplication.shared.isIdleTimerDisabled = false
             // Release the artwork-orientation lock a Game & Watch took.
             if platform == .gameAndWatch { OrientationLock.unlock() }

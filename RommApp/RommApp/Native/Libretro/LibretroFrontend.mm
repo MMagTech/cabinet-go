@@ -180,19 +180,6 @@ constexpr size_t kPointerPorts = 3;
 std::atomic<int16_t> gPointerX[kPointerPorts];
 std::atomic<int16_t> gPointerY[kPointerPorts];
 std::atomic<bool> gPointerDown[kPointerPorts];
-// TEST BUILD, with cabinetInputTrace below: samples-per-frame and last
-// value of the core's own analog-X reads on port 0.
-std::atomic<uint32_t> gAnalogReads{0};
-std::atomic<float> gAnalogLastRead{0};
-// Defined in the Flycast core (Renderer_if.cpp in the spikes tree),
-// written at every render-queue enqueue. Resolved at runtime with dlsym
-// rather than linked, so an app paired with a Flycast archive that
-// predates the symbol (the iPhone's, currently) still builds and runs,
-// it just traces -1.
-static int cabinetQueueDepthNow(void) {
-    static int *p = (int *)dlsym(RTLD_DEFAULT, "cabinetPvrQueueDepth");
-    return p ? *p : -1;
-}
 
 // Cartridge sensors, for the Game Boy Advance carts that shipped with
 // hardware inside them. Only mGBA asks for any of this; every other core
@@ -424,46 +411,10 @@ std::atomic<uint32_t> gHWFrameCount{0};
 // their own hardcoded default regardless of what gOptions holds.
 std::atomic<bool> gThreadedRenderingQueried{false};
 
-// Per-stage timings for the hardware-render path, milliseconds, each
-// holding the most recent single sample rather than an average: the trace
-// that reads them (FrameTrace, NativePlayerRenderer.swift) wants raw
-// per-frame numbers so a stall shows up as a stall instead of being
-// smeared across its neighbours.
-//
-// Temporary instrumentation for issue #6: Dreamcast holds correct emulated
-// speed and correct realtime audio while the picture updates about 20
-// times a second, which says the SH4 is keeping up and something after it
-// is not. This splits "after it" into its actual parts so the answer is
-// measured rather than argued.
-std::atomic<double> gTimeCoreRunMS{0};
-std::atomic<double> gTimeReadbackMS{0};
-std::atomic<double> gTimeSwizzleMS{0};
-
-// Cumulative counters alongside them, same temporary purpose. These three
-// together answer the question the timings alone cannot: audio frames
-// against 44,100 a second says whether emulated time is advancing at
-// realtime, which is the only direct read on whether the SH4 interpreter
-// is keeping up; hardware frames says how often the core actually handed
-// over a new picture; run calls says how often we asked. Cumulative rather
-// than per-frame so no sample can be missed or double counted.
+// Audio frames the core has produced, cumulative. Against the declared
+// sample rate it says whether emulated time is advancing at realtime,
+// which is what the draw loop's audio governor reads.
 std::atomic<uint64_t> gAudioFramesTotal{0};
-std::atomic<uint64_t> gRunCallTotal{0};
-// Duplicate-frame reports from a hardware-rendered core. This is the one
-// signal that says which mode Flycast is actually running in, without
-// inferring it: its non-threaded path returns true from every
-// Emulator::render, so is_dupe is always false and a dupe can never be
-// reported. Any dupe at all means threaded rendering is genuinely on.
-std::atomic<uint64_t> gHWDupeCount{0};
-
-static double nowMS() {
-    return std::chrono::duration<double, std::milli>(
-        std::chrono::steady_clock::now().time_since_epoch()).count();
-}
-
-static void recordStage(std::atomic<double> &slot, double sample) {
-    slot.store(sample, std::memory_order_relaxed);
-}
-
 // Whether a core survives retro_deinit followed by a fresh retro_init in
 // the same process. Most do, and get the full teardown, which is the one
 // guarantee that holds across cores whose internal state does not reset
@@ -759,12 +710,6 @@ void setupHWFramebuffer(GLuint width, GLuint height) {
 }
 
 void videoRefresh(const void *data, unsigned width, unsigned height, size_t pitch) {
-    // A hardware-render core saying "same picture as last time". Counted
-    // for the mode discriminator above; the early return below already
-    // treated it as nothing-changed.
-    if (gUsesHWRender && data == nullptr) {
-        gHWDupeCount.fetch_add(1, std::memory_order_relaxed);
-    }
     if (data == RETRO_HW_FRAME_BUFFER_VALID) {
         // The frame is already sitting in gFBO on the GPU; read it back
         // once as BGRA (matching this frontend's existing XRGB8888 byte
@@ -812,7 +757,6 @@ void videoRefresh(const void *data, unsigned width, unsigned height, size_t pitc
         // implementation is required to accept.
         glBindFramebuffer(GL_FRAMEBUFFER, gFBO);
         glPixelStorei(GL_PACK_ALIGNMENT, 1);
-        double readbackStart = nowMS();
         GLenum readbackErr = GL_NO_ERROR;
         // Whether a finished picture landed in gFrameBytes this call. On
         // the async path the very first frame after activation (or after
@@ -888,15 +832,10 @@ void videoRefresh(const void *data, unsigned width, unsigned height, size_t pitc
             gFrameBytesPerRow = (uint32_t)bytesPerRow;
             published = true;
         }
-        recordStage(gTimeReadbackMS, nowMS() - readbackStart);
         if (wantWidth > gFBOWidth || wantHeight > gFBOHeight) {
             setupHWFramebuffer(std::max(wantWidth, gFBOWidth), std::max(wantHeight, gFBOHeight));
             glBindFramebuffer(GL_FRAMEBUFFER, 0);
         }
-        // Kept, reporting zero, rather than removed with its accessor:
-        // FrameTrace writes a fixed set of columns and a rebuilt trace
-        // should stay comparable against the ones already captured.
-        recordStage(gTimeSwizzleMS, 0);
         if (published) {
             gPixelFormat = LibretroPixelFormatRGBA8888;
             gFrameFlipped = true;
@@ -1030,12 +969,6 @@ int16_t inputState(unsigned port, unsigned device, unsigned index, unsigned id) 
         float value = id == RETRO_DEVICE_ID_ANALOG_X ? gAnalogLeftX[port].load(std::memory_order_relaxed)
                     : id == RETRO_DEVICE_ID_ANALOG_Y ? gAnalogLeftY[port].load(std::memory_order_relaxed)
                     : 0.0f;
-        // TEST BUILD trace: how often the core actually samples the axis,
-        // and the last value it saw. Port 0 X only, the steering axis.
-        if (port == 0 && id == RETRO_DEVICE_ID_ANALOG_X) {
-            gAnalogReads.fetch_add(1, std::memory_order_relaxed);
-            gAnalogLastRead.store(value, std::memory_order_relaxed);
-        }
         return (int16_t)(std::clamp(value, -1.0f, 1.0f) * 0x7fff);
     }
     return 0;
@@ -1776,40 +1709,7 @@ const LibretroCoreAPI *coreAPI(LibretroCoreID coreID) {
     }
 }
 
-// TEST BUILD input trace: one line per frame, what the core is actually
-// being fed. Answers, without inference: is the analog axis arriving, is
-// anything pressing d-pad directions, and on which port. Buffered, flushed
-// every 60 frames. Delete with the tvOS steering investigation.
-static void cabinetInputTrace(void) {
-    static FILE *f = nullptr;
-    static uint32_t n = 0;
-    if (!f) {
-        const char *home = getenv("HOME");
-        if (!home) return;
-        char path[512];
-        snprintf(path, sizeof(path), "%s/Library/Caches/input-trace.txt", home);
-        f = fopen(path, "w");
-        if (!f) return;
-        fprintf(f, "frame,p0_ax,p0_ay,p0_up,p0_dn,p0_lt,p0_rt,p1_ax,p1_mask,analog_reads,last_read,qdepth\n");
-    }
-    uint32_t m0 = gButtonMask[0].load(std::memory_order_relaxed);
-    uint32_t m1 = gButtonMask[1].load(std::memory_order_relaxed);
-    fprintf(f, "%u,%.3f,%.3f,%d,%d,%d,%d,%.3f,%u,%u,%.3f,%d\n", n++,
-            gAnalogLeftX[0].load(std::memory_order_relaxed),
-            gAnalogLeftY[0].load(std::memory_order_relaxed),
-            (m0 >> RETRO_DEVICE_ID_JOYPAD_UP) & 1,
-            (m0 >> RETRO_DEVICE_ID_JOYPAD_DOWN) & 1,
-            (m0 >> RETRO_DEVICE_ID_JOYPAD_LEFT) & 1,
-            (m0 >> RETRO_DEVICE_ID_JOYPAD_RIGHT) & 1,
-            gAnalogLeftX[1].load(std::memory_order_relaxed), m1,
-            gAnalogReads.exchange(0, std::memory_order_relaxed),
-            gAnalogLastRead.load(std::memory_order_relaxed),
-            cabinetQueueDepthNow());
-    if (n % 60 == 0) fflush(f);
-}
-
 - (void)runFrame {
-    cabinetInputTrace();
     if (gInitialized && gGameLoaded) {
         if (gUsesHWRender && gGLContext) {
             // Nothing else in this app touches GLES, so this should
@@ -1838,10 +1738,7 @@ static void cabinetInputTrace(void) {
             glBindFramebuffer(GL_FRAMEBUFFER, gFBO);
             glViewport(0, 0, gFBOWidth, gFBOHeight);
         }
-        double runStart = nowMS();
         gCore->run();
-        recordStage(gTimeCoreRunMS, nowMS() - runStart);
-        gRunCallTotal.fetch_add(1, std::memory_order_relaxed);
     }
 }
 
@@ -1872,32 +1769,8 @@ static void cabinetInputTrace(void) {
     return gCoreID == LibretroCoreIDPPSSPP;
 }
 
-- (double)debugCoreRunMS {
-    return gTimeCoreRunMS.load(std::memory_order_relaxed);
-}
-
 - (uint64_t)debugAudioFramesTotal {
     return gAudioFramesTotal.load(std::memory_order_relaxed);
-}
-
-- (uint64_t)debugHWFramesTotal {
-    return gHWFrameCount.load(std::memory_order_relaxed);
-}
-
-- (uint64_t)debugRunCallTotal {
-    return gRunCallTotal.load(std::memory_order_relaxed);
-}
-
-- (uint64_t)debugHWDupeTotal {
-    return gHWDupeCount.load(std::memory_order_relaxed);
-}
-
-- (double)debugReadbackMS {
-    return gTimeReadbackMS.load(std::memory_order_relaxed);
-}
-
-- (double)debugSwizzleMS {
-    return gTimeSwizzleMS.load(std::memory_order_relaxed);
 }
 
 - (nullable LibretroFrame *)latestFrame {

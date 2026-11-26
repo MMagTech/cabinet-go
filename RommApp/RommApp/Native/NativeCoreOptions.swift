@@ -1191,8 +1191,8 @@ enum NativeCoreOptionsStore {
     /// arguments. That one only has to show the core was not in the state
     /// it claimed. This one has to show the upgrade is worth what it costs,
     /// and every entry below carries the number it was judged on, measured
-    /// through `tools/bench/libretro_bench` and then confirmed against real
-    /// frame budget on an iPhone with `tools/bench/sweep.sh`.
+    /// through `tools/lab/bench/libretro_bench` and then confirmed against
+    /// real frame budget on an iPhone (the on-device bench of 2026-08).
     ///
     /// What is deliberately NOT here: anything that changes what the
     /// hardware did rather than how faithfully it is reproduced. CPU

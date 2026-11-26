@@ -291,36 +291,16 @@ typedef NS_ENUM(NSInteger, LibretroCoreID) {
 // sets it.
 - (nullable NSString *)hwRenderDiagnostics;
 
-// Debug-only per-stage timings for one emulated frame, milliseconds,
-// smoothed. Temporary instrumentation for issue #6, where Dreamcast holds
-// correct emulated speed and realtime audio while the picture arrives at
-// about 20fps: that combination rules the SH4 interpreter out and points
-// at everything between the core finishing a frame and Metal drawing it.
-// -debugCoreRunMS covers the whole retro_run, the two below are the parts
-// of it this frontend itself owns, so run minus the other two is what
-// Flycast spent emulating and submitting GL.
 // Whether this core needs the draw loop's audio governor, which holds a
 // core to realtime by skipping retro_run when its own audio output has
 // run ahead of the wall clock. True for Flycast alone; see the
 // implementation for why every other core must not get it.
 - (BOOL)needsAudioGovernor;
 
-- (double)debugCoreRunMS;
-- (double)debugReadbackMS;
-- (double)debugSwizzleMS;
-
-// Cumulative counters for the same trace. Audio frames against 44,100 a
-// second is the only direct read on whether emulated time is advancing at
-// realtime, and so on whether the interpreter is keeping up; hardware
-// frames counts the pictures the core actually produced, run calls counts
-// the times we asked for one.
+// Audio frames the core has produced, cumulative. Against the declared
+// sample rate it is the only direct read on whether emulated time is
+// advancing at realtime, which is what the audio governor holds to.
 - (uint64_t)debugAudioFramesTotal;
-- (uint64_t)debugHWFramesTotal;
-- (uint64_t)debugRunCallTotal;
-// Duplicate-frame reports from a hardware core. Nonzero proves Flycast's
-// threaded rendering is actually on: the non-threaded path can never
-// report a dupe.
-- (uint64_t)debugHWDupeTotal;
 
 // Copies bytes into the core's save RAM buffer, the standard libretro
 // frontend contract for restoring battery saves: call it after the game
