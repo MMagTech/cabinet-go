@@ -16,19 +16,6 @@
           "commit_date": "2026-06-14T20:21:49+02:00",
           "checkout": "spikes/cores/beetle_ngp/src",
           "build_args": null
-        },
-        "tvos": {
-          "commit": null,
-          "commit_date": null,
-          "checkout": null,
-          "build_args": null,
-          "commit_source": "UNRECOVERABLE. The per-platform tvOS checkout no longer exists and the archive embeds no version. Bound only: the built library was committed 2026-08-20."
-        },
-        "mac": {
-          "commit": "a50d5ac288a81f2104ddf43195a4efdd15c72227",
-          "commit_date": "2026-06-14T20:21:49+02:00",
-          "checkout": "spikes/cores/beetle_ngp-mac/src",
-          "build_args": null
         }
       },
       "submodules": null,
@@ -36,7 +23,7 @@
       "diverges_across_platforms": false,
       "notes": null,
       "pinned_commit": "a50d5ac288a81f2104ddf43195a4efdd15c72227",
-      "pinned_reason": "already identical on every platform that ships it; pinned where it stands"
+      "pinned_reason": "pinned where it stood"
     },
     "gambatte": {
       "repo": "https://github.com/libretro/gambatte-libretro.git",
@@ -52,19 +39,6 @@
           "commit_date": "2026-07-31T11:36:05Z",
           "checkout": "spikes/cores/gambatte/src",
           "build_args": null
-        },
-        "tvos": {
-          "commit": null,
-          "commit_date": null,
-          "checkout": null,
-          "build_args": null,
-          "commit_source": "UNRECOVERABLE. The per-platform tvOS checkout no longer exists and the archive embeds no version. Bound only: the built library was committed 2026-08-10."
-        },
-        "mac": {
-          "commit": "d9d6cd06382d1ced30de34d56d3609452323dab1",
-          "commit_date": "2026-08-21T10:59:08Z",
-          "checkout": "spikes/cores/gambatte-mac/src",
-          "build_args": null
         }
       },
       "submodules": null,
@@ -72,7 +46,7 @@
       "diverges_across_platforms": true,
       "notes": null,
       "pinned_commit": "d9d6cd06382d1ced30de34d56d3609452323dab1",
-      "pinned_reason": "macOS revision: the newer of the two in use, and already play-tested on that platform"
+      "pinned_reason": "the revision the macOS app shipped, newer than the one iOS shipped (platforms.ios.commit); chosen 2026-09-13 as the one every later build uses"
     },
     "genesis_plus_gx": {
       "repo": "https://github.com/libretro/Genesis-Plus-GX.git",
@@ -90,19 +64,6 @@
           "commit_date": "2026-08-07T15:27:56Z",
           "checkout": "spikes/cores/genesis_plus_gx/src",
           "build_args": null
-        },
-        "tvos": {
-          "commit": null,
-          "commit_date": null,
-          "checkout": null,
-          "build_args": null,
-          "commit_source": "UNRECOVERABLE. The per-platform tvOS checkout no longer exists and the archive embeds no version. Bound only: the built library was committed 2026-08-20."
-        },
-        "mac": {
-          "commit": "a7985a9c4278ac352f8ca7bb4d3cc6b36e9e3e7d",
-          "commit_date": "2026-08-28T19:14:38Z",
-          "checkout": "spikes/cores/genesis_plus_gx-mac/src",
-          "build_args": null
         }
       },
       "submodules": null,
@@ -110,7 +71,7 @@
       "diverges_across_platforms": true,
       "notes": null,
       "pinned_commit": "a7985a9c4278ac352f8ca7bb4d3cc6b36e9e3e7d",
-      "pinned_reason": "macOS revision: the newer of the two in use, and already play-tested on that platform"
+      "pinned_reason": "the revision the macOS app shipped, newer than the one iOS shipped (platforms.ios.commit); chosen 2026-09-13 as the one every later build uses"
     },
     "gw": {
       "repo": "https://github.com/libretro/gw-libretro.git",
@@ -126,20 +87,14 @@
           "checkout": "spikes/cores/gw/src",
           "build_args": null,
           "commit_source": "recovered by content comparison: tree is byte-identical to the mac checkout apart from build output; the checkout itself has no .git"
-        },
-        "mac": {
-          "commit": "91d599b951e7bfe7e040347f58667cba20074adc",
-          "commit_date": "2026-04-20T19:39:32+02:00",
-          "checkout": "spikes/cores/gw-mac/src",
-          "build_args": null
         }
       },
       "submodules": null,
       "patches": null,
       "diverges_across_platforms": false,
-      "notes": " iOS-only by decision, recorded in docs/building.md.",
+      "notes": null,
       "pinned_commit": "91d599b951e7bfe7e040347f58667cba20074adc",
-      "pinned_reason": "already identical on every platform that ships it; pinned where it stands"
+      "pinned_reason": "pinned where it stood"
     },
     "melonds": {
       "repo": "https://github.com/libretro/melonDS.git",
@@ -154,18 +109,6 @@
           "commit_date": "2026-07-19T20:58:38+02:00",
           "checkout": "spikes/cores/melonds/src",
           "build_args": "(none)"
-        },
-        "tvos": {
-          "commit": "66b5d2634cd0a79030562811e6e05f5532f800ba",
-          "commit_date": "2026-07-19T20:58:38+02:00",
-          "checkout": "spikes/cores/melonds-tvos/src",
-          "build_args": "(none)"
-        },
-        "mac": {
-          "commit": "66b5d2634cd0a79030562811e6e05f5532f800ba",
-          "commit_date": "2026-07-19T20:58:38+02:00",
-          "checkout": "spikes/cores/melonds-mac/src",
-          "build_args": "JIT_ARCH=aarch64"
         }
       },
       "submodules": null,
@@ -174,41 +117,15 @@
           "what": "final SRAM flush in retro_unload_game",
           "where": "tools/build-core.sh",
           "platforms": [
-            "ios",
-            "tvos",
-            "mac"
+            "ios"
           ],
           "why": "save-then-quit within 2s was silently dropped"
-        },
-        {
-          "what": "pthread_jit_write_protect_np resolved via dlsym",
-          "where": "tools/build-core.sh",
-          "platforms": [
-            "mac"
-          ],
-          "why": "Catalyst marks it __API_UNAVAILABLE though the symbol is live"
-        },
-        {
-          "what": "ARM64 recompiler runtime probe (stderr proof of MAP_JIT buffer)",
-          "where": "tools/build-core.sh",
-          "platforms": [
-            "mac"
-          ],
-          "why": "melonDS never says which CPU engine it chose; do not remove and then claim the Mac has a DS recompiler"
-        },
-        {
-          "what": "fastmem rewrite bracketed with JitEnableWrite/JitEnableExecute",
-          "where": "tools/build-core.sh",
-          "platforms": [
-            "mac"
-          ],
-          "why": "under MAP_JIT the JIT patching its own code takes SIGBUS"
         }
       ],
       "diverges_across_platforms": false,
       "notes": null,
       "pinned_commit": "66b5d2634cd0a79030562811e6e05f5532f800ba",
-      "pinned_reason": "already identical on every platform that ships it; pinned where it stands"
+      "pinned_reason": "pinned where it stood"
     },
     "mgba": {
       "repo": "https://github.com/libretro/mgba.git",
@@ -223,19 +140,6 @@
           "commit_date": "2026-08-05T23:31:07-04:00",
           "checkout": "spikes/cores/mgba/src",
           "build_args": "cmake libretro target (upstream dropped Makefile.libretro)"
-        },
-        "tvos": {
-          "commit": null,
-          "commit_date": null,
-          "checkout": null,
-          "build_args": "cmake libretro target (upstream dropped Makefile.libretro)",
-          "commit_source": "UNRECOVERABLE. The per-platform tvOS checkout no longer exists and the archive embeds no version. Bound only: the built library was committed 2026-08-10."
-        },
-        "mac": {
-          "commit": "e31759b24e7a4e3899285ff720d7b573ac328ae7",
-          "commit_date": "2026-08-05T23:31:07-04:00",
-          "checkout": "spikes/cores/mgba-mac/src",
-          "build_args": "cmake libretro target (upstream dropped Makefile.libretro)"
         }
       },
       "submodules": null,
@@ -243,7 +147,7 @@
       "diverges_across_platforms": false,
       "notes": null,
       "pinned_commit": "e31759b24e7a4e3899285ff720d7b573ac328ae7",
-      "pinned_reason": "already identical on every platform that ships it; pinned where it stands"
+      "pinned_reason": "pinned where it stood"
     },
     "ppsspp": {
       "repo": "https://github.com/hrydgard/ppsspp.git",
@@ -258,20 +162,6 @@
           "commit_date": "2026-08-24T13:30:08+02:00",
           "checkout": "spikes/cores/ppsspp/src",
           "build_args": null
-        },
-        "tvos": {
-          "commit": "c989c2553e1099730736d965c221823fe974fa55",
-          "commit_date": "2026-08-24T13:30:08+02:00",
-          "checkout": "spikes/cores/ppsspp/src",
-          "build_args": null,
-          "commit_source": "one source tree serves every platform; this builder uses separate build-<platform> directories, so all platforms were built from this revision"
-        },
-        "mac": {
-          "commit": "c989c2553e1099730736d965c221823fe974fa55",
-          "commit_date": "2026-08-24T13:30:08+02:00",
-          "checkout": "spikes/cores/ppsspp/src",
-          "build_args": null,
-          "commit_source": "one source tree serves every platform; this builder uses separate build-<platform> directories, so all platforms were built from this revision"
         }
       },
       "submodules": {
@@ -308,11 +198,20 @@
           "pspautotests/common/ext/zstd": "e47e674cd09583ff0503f0f6defd6d23d8b718d3"
         }
       },
-      "patches": null,
+      "patches": [
+        {
+          "what": "shader cache saved in GPU_GLES::DeviceLost, before the linked shader list is cleared",
+          "where": "tools/build-ppsspp.sh",
+          "platforms": [
+            "ios"
+          ],
+          "why": "the context is destroyed before the game unloads, so the save in ~GPU_GLES found an empty list and no .glshadercache was ever written"
+        }
+      ],
       "diverges_across_platforms": false,
       "notes": null,
       "pinned_commit": "c989c2553e1099730736d965c221823fe974fa55",
-      "pinned_reason": "already identical on every platform that ships it; pinned where it stands"
+      "pinned_reason": "pinned where it stood"
     },
     "vemulator": {
       "repo": "https://github.com/libretro/vemulator-libretro.git",
@@ -327,12 +226,6 @@
           "commit_date": "2026-08-23T14:00:14+02:00",
           "checkout": "spikes/cores/vemulator/src",
           "build_args": null
-        },
-        "mac": {
-          "commit": "27a062f6ae532e5028e4fb54f523cc689e78146a",
-          "commit_date": "2026-08-23T14:00:14+02:00",
-          "checkout": "spikes/cores/vemulator-mac/src",
-          "build_args": null
         }
       },
       "submodules": null,
@@ -341,16 +234,15 @@
           "what": "strchr -> strrchr for the file extension",
           "where": "tools/build-core.sh",
           "platforms": [
-            "ios",
-            "mac"
+            "ios"
           ],
           "why": "first dot in the whole path made every extension check miss, loading a blank VMU with no error"
         }
       ],
       "diverges_across_platforms": false,
-      "notes": "A third checkout exists at spikes/vmu/vemulator-libretro (the original spike) at the same revision, 27a062f6. iOS-only by decision, recorded in docs/building.md.",
+      "notes": "A third checkout exists at spikes/vmu/vemulator-libretro (the original spike) at the same revision, 27a062f6.",
       "pinned_commit": "27a062f6ae532e5028e4fb54f523cc689e78146a",
-      "pinned_reason": "already identical on every platform that ships it; pinned where it stands"
+      "pinned_reason": "pinned where it stood"
     }
   },
   "global_patches": [
