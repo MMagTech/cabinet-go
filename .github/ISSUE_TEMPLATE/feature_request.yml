@@ -1,21 +1,7 @@
 name: Feature request
-description: An idea for something Cabinet doesn't do yet
+description: An idea for something Cabinet Go doesn't do yet
 labels: ["enhancement"]
 body:
-  - type: dropdown
-    id: platform
-    attributes:
-      label: Platform
-      description: Which app is this for, if it's platform-specific?
-      options:
-        - iOS
-        - tvOS
-        - macOS
-        - More than one
-        - Not platform-specific
-    validations:
-      required: false
-
   - type: textarea
     id: description
     attributes:

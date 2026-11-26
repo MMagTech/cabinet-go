@@ -45,41 +45,24 @@ fi
 # has shipped five times, and an earlier collision between FBNeo and
 # Genesis Plus GX on an internal "snd" was a real crash.
 #
-# The iOS archives are scoped and export nothing but their entry points.
-# The tvOS archives are not, and currently leak 607 commons between them,
-# five of which genuinely collide. Rather than fail forever on debt that
-# predates this check, the known set is recorded next door and only a NEW
-# collision fails. Shrinking that file is the fix; growing it is a bug.
+# The archives are scoped and export nothing but their entry points, so
+# this should find nothing. The known set is recorded next door and only
+# a NEW collision fails. Shrinking that file is the fix; growing it is a
+# bug.
 KNOWN="$(dirname "$0")/known-collisions.txt"
 ALL=$(mktemp); trap 'rm -f "$ALL"' EXIT
-for a in RommApp/RommApp/Native/*/lib*_tvos.a; do
+for a in RommApp/RommApp/Native/*/lib*_ios.a; do
     nm -g "$a" 2>/dev/null | awk '$2=="C"{print $3}' | sort -u
 done | sort | uniq -d > "$ALL"
 new_collisions=$(comm -23 "$ALL" "$KNOWN")
 if [ -n "$new_collisions" ]; then
-    for c in $new_collisions; do bad "new symbol collision between tvOS cores: $c"; done
+    for c in $new_collisions; do bad "new symbol collision between cores: $c"; done
 else
     known_count=$(wc -l < "$KNOWN" | tr -d ' ')
     note "no new symbol collisions ($known_count known, see known-collisions.txt)"
 fi
 
-# 3. Both platforms present for every core.
-#
-# A core built for iOS and forgotten for tvOS is invisible until someone
-# opens that platform on the Apple TV and finds nothing there. Forgotten
-# is the failure; decided is not: cores that are iOS-only on purpose are
-# listed here with the decision recorded in docs/building.md, so this
-# check keeps distinguishing the two instead of failing forever on
-# choices it cannot see.
-IOS_ONLY="libgw_ios.a libvemulator_ios.a"
-for ios in RommApp/RommApp/Native/*/lib*_ios.a; do
-    base=$(basename "$ios")
-    case " $IOS_ONLY " in *" $base "*) continue ;; esac
-    tv=$(echo "$ios" | sed 's/_ios\.a$/_tvos.a/')
-    [ -f "$tv" ] || bad "$base has no tvOS counterpart"
-done
-
-# 4. Every native platform resolves to a control layout.
+# 3. Every native platform resolves to a control layout.
 #
 # A platform with no layout file of its own falls through to default.json
 # and gets a generic pad. That is a real state some platforms are
@@ -94,7 +77,7 @@ for slug in $(grep -oE '^    case [a-z0-9]+$' RommApp/RommApp/Native/NativeCore.
 done
 [ -n "$missing_layouts" ] && note "platforms using the fallback pad:$missing_layouts"
 
-# 5. Every control layout is in the Layout Editor's own target.
+# 4. Every control layout is in the Layout Editor's own target.
 #
 # A layout that ships in the app but is missing from the editor cannot be
 # tuned, and nothing says so: you open the editor, the system is simply

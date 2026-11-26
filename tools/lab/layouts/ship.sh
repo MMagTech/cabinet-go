@@ -7,7 +7,7 @@
 # keep reminding you."
 #
 # The trap is that a layout lives in FOUR places at once. The repo has
-# it; both apps BUNDLE it, so a layout change is a code change as far
+# it; the app and the editor BUNDLE it, so a layout change is a code change as far
 # as they are concerned and needs a build and an install; and the
 # editor keeps a working copy per layout on the phone which SHADOWS the
 # bundled one, so the repo can be right while every surface a person
@@ -19,7 +19,6 @@ set -e
 cd "$(dirname "$0")/../../.."
 
 PHONE=4B536CB7-E086-5C97-AA3F-6C38C6395301
-TV=539DFD4E-FAAB-56D5-A39D-34D941DA2754
 DD=/Users/mmagtech/Library/Developer/Xcode/DerivedData/RommApp-coelcbauvffcdyhahywaajactsyf/Build/Products
 
 echo "== rules =="
@@ -46,7 +45,6 @@ build() {
 }
 build LayoutEditor 'generic/platform=iOS'
 build RommApp      'generic/platform=iOS'
-build RommAppTV    'generic/platform=tvOS'
 
 [ "$1" = "--no-device" ] && { echo "(skipping devices)"; exit 0; }
 
@@ -55,8 +53,6 @@ for app in "Layout Editor" "Cabinet"; do
     xcrun devicectl device install app --device $PHONE "$DD/Debug-iphoneos/$app.app" \
         >/dev/null 2>&1 && echo "   $app -> phone" || echo "   FAILED $app"
 done
-xcrun devicectl device install app --device $TV "$DD/Debug-appletvos/Cabinet TV.app" \
-    >/dev/null 2>&1 && echo "   Cabinet TV -> Apple TV" || echo "   FAILED Cabinet TV"
 
 # The editor's working copies are HIS, and this script only ever READS
 # them. A layout comes into the repo when he marks it green and

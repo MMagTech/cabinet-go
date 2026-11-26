@@ -1,26 +1,13 @@
 name: Bug report
-description: Something in Cabinet does not work
+description: Something in Cabinet Go does not work
 labels: [bug]
 body:
   - type: markdown
     attributes:
       value: |
-        Cabinet talks to your own RomM server and runs games two different ways,
-        so the details below are usually what decides whether a problem is
-        reproducible. Please fill them in even if they seem irrelevant.
-
-  - type: dropdown
-    id: platform
-    attributes:
-      label: Platform
-      description: Which app is this in?
-      options:
-        - iOS
-        - tvOS
-        - macOS
-        - More than one
-    validations:
-      required: true
+        Cabinet Go talks to your own RomM server, so the details below are
+        usually what decides whether a problem is reproducible. Please fill
+        them in even if they seem irrelevant.
 
   - type: textarea
     id: what-happened
@@ -34,20 +21,8 @@ body:
     id: system
     attributes:
       label: Which system
-      description: The console the game is for, for example Genesis, Saturn, PlayStation, Arcade.
-      placeholder: Genesis
-    validations:
-      required: false
-
-  - type: dropdown
-    id: player
-    attributes:
-      label: Native core or web player
-      description: Cabinet tells you which one it used on the launch screen before the game starts.
-      options:
-        - Native core
-        - Web player
-        - Not sure
+      description: The handheld the game is for, for example Game Boy Advance, DS, PSP.
+      placeholder: Game Boy Advance
     validations:
       required: false
 
@@ -55,8 +30,8 @@ body:
     id: game
     attributes:
       label: Game and file format
-      description: Helpful for disc based systems, where the format often is the problem.
-      placeholder: Sonic 2, .md
+      description: Helpful for PSP, where the format (ISO, CSO, CHD) often is the problem.
+      placeholder: Pokemon Emerald, .gba
     validations:
       required: false
 
@@ -64,7 +39,7 @@ body:
     id: os-version
     attributes:
       label: OS version
-      placeholder: "iOS 26.0, tvOS 26.0, or macOS 26.0"
+      placeholder: "iOS 26.0"
     validations:
       required: true
 
@@ -72,7 +47,7 @@ body:
     id: device
     attributes:
       label: Device
-      placeholder: iPhone 15 Pro, Apple TV 4K, or MacBook Pro M2
+      placeholder: iPhone 15 Pro
     validations:
       required: true
 
@@ -88,7 +63,7 @@ body:
   - type: dropdown
     id: install
     attributes:
-      label: How you installed Cabinet
+      label: How you installed Cabinet Go
       options:
         - Sideloaded IPA from Releases
         - TestFlight
