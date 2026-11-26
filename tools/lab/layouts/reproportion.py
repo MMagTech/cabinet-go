@@ -26,11 +26,10 @@ def spread(items):
     cy = [i['frame']['y']+i['frame']['h']/2 for i in items]
     return ((max(cx)-min(cx))/max(w,1e-4), (max(cy)-min(cy))/max(h,1e-4))
 
-def run(root, key, skip_prefix='arcade'):
+def run(root, key):
     done = []
     for path in sorted(glob.glob(os.path.join(root, '**/*.json'), recursive=True)):
         name = os.path.basename(path)[:-5]
-        if skip_prefix and name.startswith(skip_prefix): continue
         d = layoutfmt.load(path)
         P = [i for i in (d.get('items') or []) if i.get('kind') == 'button']
         C = [i for i in (d.get(key) or []) if i.get('kind') == 'button']
