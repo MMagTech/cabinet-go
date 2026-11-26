@@ -62,20 +62,22 @@ else
     note "no new symbol collisions ($known_count known, see known-collisions.txt)"
 fi
 
-# 3. Every native platform resolves to a control layout.
+# 3. Every layout ControlLayout.forPlatform names is bundled.
 #
-# A platform with no layout file of its own falls through to default.json
-# and gets a generic pad. That is a real state some platforms are
-# deliberately in, so this reports rather than fails, but it should never
-# be a surprise.
+# forPlatform is the one place a platform is matched to its layout. A name
+# there with no file trips its assertion in a debug build and leaves a
+# release build drawing no pad at all, so the names are read from the
+# lookup itself rather than from a list kept beside it. (The VMU player
+# reads no layout file: its stamped skin is the touch surface.)
 missing_layouts=""
-for slug in $(grep -oE '^    case [a-z0-9]+$' RommApp/RommApp/Native/NativeCore.swift | awk '{print $2}' | sort -u); do
-    # The VMU player never reads a layout file: its stamped skin IS the
-    # touch surface (VMUPlayerView), so listing it here would be false.
-    [ "$slug" = vemulator ] && continue
-    [ -f "RommApp/RommApp/Resources/ControlLayouts/${slug}.json" ] || missing_layouts="$missing_layouts $slug"
+for name in $(grep -oE 'name = "[a-z]+"' RommApp/RommApp/Controls/ControlLayout.swift | cut -d'"' -f2 | sort -u); do
+    [ -f "RommApp/RommApp/Resources/ControlLayouts/${name}.json" ] || missing_layouts="$missing_layouts $name"
 done
-[ -n "$missing_layouts" ] && note "platforms using the fallback pad:$missing_layouts"
+if [ -n "$missing_layouts" ]; then
+    bad "named in ControlLayout.forPlatform but not bundled:$missing_layouts"
+else
+    note "every layout ControlLayout.forPlatform names is bundled"
+fi
 
 # 4. Every control layout is in the Layout Editor's own target.
 #
