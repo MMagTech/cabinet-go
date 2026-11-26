@@ -37,7 +37,7 @@ def run(root):
     touched = 0
     for path in sorted(glob.glob(os.path.join(root, '**/*.json'), recursive=True)):
         d = layoutfmt.load(path); notes = []
-        for key in ('items', 'landscapeItems', 'companionItems'):
+        for key in ('items', 'landscapeItems'):
             pills = [i for i in (d.get(key) or []) if i.get('kind') == 'pill']
             for _ in range(8):
                 worst = None

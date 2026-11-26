@@ -27,7 +27,7 @@ def run(root):
         d = layoutfmt.load(path)
         name = os.path.basename(path)[:-5]
         touched = []
-        for key in ('items', 'landscapeItems', 'companionItems'):
+        for key in ('items', 'landscapeItems'):
             items = d.get(key)
             if not items: continue
             pills = [i for i in items if i.get('kind') == 'pill']

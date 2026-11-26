@@ -49,7 +49,7 @@ def relax(path):
     # Each pass only ever reduces collisions, so this converges.
     for _ in range(6):
       before = len(changed)
-      for key in ('items', 'landscapeItems', 'companionItems'):
+      for key in ('items', 'landscapeItems'):
           items = d.get(key)
           if not items: continue
           pills = [i for i in items if i.get('kind') == 'pill']

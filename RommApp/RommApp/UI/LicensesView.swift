@@ -74,6 +74,13 @@ struct LicensesView: View {
             file: "ppsspp"
         ),
         Entry(
+            id: "ppsspp-libraries",
+            name: "Libraries inside PPSSPP",
+            role: "Built into the PSP core",
+            summary: "Twenty libraries PPSSPP compiles in, each under its own terms. Most are Apache 2.0, BSD or MIT style; the PSP crypto engine and the xBRZ scaler are GPL version 3, and the ATRAC3 decoders LGPL version 2.1.",
+            file: "ppsspp-libraries"
+        ),
+        Entry(
             id: "gw-libretro",
             name: "gw-libretro",
             role: "Native Game & Watch core",

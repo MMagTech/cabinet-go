@@ -10,7 +10,7 @@ itself, that stays a deliberate manual step on purpose, same as the rest of
 this workflow (see the layout-editor-companion-app memory).
 
 Usage:
-    tools/pull_layout_edits.py                  # physical iPhone (default)
+    tools/pull_layout_edits.py                  # the iPhone in CABINET_PHONE_UDID
     tools/pull_layout_edits.py --device UDID     # a different physical device
     tools/pull_layout_edits.py --simulator UDID  # a booted simulator instead
 
@@ -30,7 +30,9 @@ import sys
 import tempfile
 
 BUNDLE_ID = "com.mmagtech.CabinetLayoutEditor"
-DEFAULT_DEVICE_UDID = "4B536CB7-E086-5C97-AA3F-6C38C6395301"  # the maintainer's iPhone
+# The phone to pull from when no --device is given. From the environment,
+# so no device id lives in the repository; see xcrun devicectl list devices.
+DEFAULT_DEVICE_UDID = os.environ.get("CABINET_PHONE_UDID")
 REPO_LAYOUTS_DIR = os.path.join(
     os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
     "RommApp", "Resources", "ControlLayouts",
@@ -109,6 +111,8 @@ def main():
 
     if not args.simulator and not args.device:
         args.device = DEFAULT_DEVICE_UDID
+    if not args.simulator and not args.device:
+        sys.exit("No device: set CABINET_PHONE_UDID, or pass --device UDID or --simulator UDID.")
 
     with tempfile.TemporaryDirectory() as tmp:
         dest = os.path.join(tmp, "pull")
