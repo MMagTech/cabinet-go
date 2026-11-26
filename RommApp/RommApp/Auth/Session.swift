@@ -418,7 +418,7 @@ final class Session: ObservableObject {
             // at launch, and its old fallback was an empty mapping on any
             // failure, network blip included. Empty means every platform
             // falls back to its raw folder name, and for any platform
-            // whose folder name is not already cores.json's key, that
+            // whose folder name is not already a known slug, that
             // reads as no core at all, the whole library looking
             // Unsupported for the rest of the session with no retry. A
             // launch that starts genuinely offline still gets nothing
@@ -842,33 +842,5 @@ final class Session: ObservableObject {
     func firmwareContentRequest(_ firmware: Firmware) async throws -> URLRequest {
         guard let client else { throw RommError.transport("No server selected.") }
         return await client.fileRequest(path: "/api/firmware/\(firmware.id)/content/\(firmware.fileName)")
-    }
-
-    func cacheLimitBytes() async throws -> Int64? {
-        guard let client else { throw RommError.transport("No server selected.") }
-        return try await client.cacheLimitBytes()
-    }
-
-    // MARK: Player
-
-    /// Everything the player webview needs: where to go and how to prove who
-    /// we are. The token is injected into the page's requests because RomM's
-    /// backend accepts bearer authentication on every endpoint, while its web
-    /// player normally rides on a session cookie this app does not have.
-    ///
-    /// Deliberately the public address, even when the local one is in use
-    /// for everything else. The webview player's cache of games is an
-    /// IndexedDB database, and a browser keys those by origin: loading the
-    /// same page from a second address gives it a second, empty cache, so
-    /// every game somebody had kept for offline play would read as gone
-    /// while still occupying the disk. Moving the player across addresses
-    /// is a data migration, not a routing change, and it needs its own
-    /// decision rather than falling out of this one.
-    func playerContext(for rom: Rom) async -> (url: URL, token: String)? {
-        guard let serverURL, let host = serverURL.host,
-              let token = Keychain.token(forHost: host),
-              let url = URL(string: serverURL.absoluteString + "/rom/\(rom.id)/ejs")
-        else { return nil }
-        return (url, token)
     }
 }

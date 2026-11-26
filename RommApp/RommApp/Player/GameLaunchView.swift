@@ -23,16 +23,12 @@ struct GameLaunchView: View {
     @EnvironmentObject private var session: Session
     @Environment(\.dismiss) private var dismiss
 
-    @State private var cores: [String] = []
-    @State private var selectedCore: String?
     /// Whether this game has an emulator config worth offering to
     /// throw away; see resetSettingsCard.
     @State private var hasCoreSettings = false
     /// The native emulator, on the platforms where more than one exists
-    /// (arcade: FinalBurn Neo or MAME 2003-Plus). Same card, same picker
-    /// shape, same memory behavior as the web player's emulator choice.
+    /// (arcade: FinalBurn Neo or MAME 2003-Plus).
     @State private var selectedNativeCore: NativeCore?
-    @State private var selectedBackend: LaunchChoices.PlayerBackend = .webview
     @State private var playingNative = false
     #if targetEnvironment(macCatalyst)
     // PS2 is Mac only and does not go through the native player, so it
@@ -50,7 +46,6 @@ struct GameLaunchView: View {
     /// like the platform needed no BIOS at all, and the first sign of
     /// trouble was a game booting to black.
     @State private var missingFirmware: [Firmware] = []
-    @State private var selectedFirmware: Firmware?
     @State private var saves: [GameSave] = []
     @State private var states: [GameState] = []
     @State private var selectedSave: GameSave?
@@ -70,13 +65,6 @@ struct GameLaunchView: View {
     @State private var pendingStateDelete: GameState?
     @State private var pendingSaveDelete: GameSave?
     @State private var loading = true
-    @State private var playing = false
-    /// Fetched before `playing` flips true, never after: `PlayerView` does
-    /// not fetch its own state, callers resolve one first, so what it
-    /// loads is decided in one place instead of chosen deep inside the
-    /// player. Nil whenever no state is selected or continuing an
-    /// interrupted run, in which case the game just boots normally.
-    @State private var stateToLoad: PlayerView.StateToLoad?
     @State private var preparingPlay = false
     /// The native download's fraction complete, shown as a percentage on
     /// the launch button in place of an indeterminate spinner: a bare
@@ -85,14 +73,9 @@ struct GameLaunchView: View {
     /// PS1 disc.
     @State private var downloadProgress: Double = 0
     @State private var playError: String?
-    /// Set when the last session of this game died without a clean exit and
-    /// a fresh local autosave exists: iOS took the game, so getting back to
-    /// that exact moment is offered, preselected, and declinable.
-    @State private var interruptedAt: Date?
-    @State private var continueRun = false
-    /// The short name EmulatorJS's core catalogue actually indexes by,
-    /// resolved once here and threaded to everything downstream that needs
-    /// it, rather than recomputed piecemeal. See `Rom.canonicalPlatformSlug`.
+    /// The platform's canonical slug, resolved once here and threaded to
+    /// everything downstream that needs it, rather than recomputed
+    /// piecemeal. See `Rom.canonicalPlatformSlug`.
     @State private var canonicalSlug = ""
     /// A keyboard machine, not a gamepad one. See ComputerPlatforms: this
     /// app does not offer touch play for these, on purpose, not yet.
@@ -112,23 +95,6 @@ struct GameLaunchView: View {
     /// (ROM alone, ROM and BIOS, or BIOS alone) rather than only ever
     /// retrying the plain ROM case.
     @State private var retryExport: (() -> Void)?
-
-    /// Feeds the web player's cache from a kept game's local file, so a
-    /// kept game skips the big download in either player. The hidden
-    /// bridge webview only mounts while a seed is actually running, not
-    /// on every visit to this screen. This is Data Saver's machinery with
-    /// the network taken out of it: the person-facing feature folded into
-    /// Keep, the injection path unchanged.
-    @StateObject private var cacheBridge = EmulatorCacheBridge()
-    @State private var showingCacheBridge = false
-    @State private var seedPhase: SeedPhase = .idle
-
-    enum SeedPhase: Equatable {
-        case idle
-        case waitingForBridge
-        case writing
-        case failed
-    }
 
     /// The VMU row's state, Dreamcast only: a GAME-type file on this
     /// game's memory card is a minigame the game downloaded there, and
@@ -200,27 +166,6 @@ struct GameLaunchView: View {
                             // beside the title (reported 2026-08-20).
                             if loading || isPlayableHere { playButton }
 
-                            // Equal halves. Both cards carry a label and a
-                            // picker and nothing else, so they match without
-                            // being forced to.
-                            // Games with a real picker configure the web
-                            // player inside the Player card instead, so a
-                            // backend switch never restructures the stack;
-                            // these standalone cards serve the games with
-                            // no picker at all.
-                            if !showsPlayerPicker, selectedBackend == .webview {
-                                HStack(alignment: .top, spacing: 12) {
-                                    if cores.count > 1 {
-                                        coreCard.frame(maxWidth: .infinity)
-                                    }
-                                    if showsFirmwareCard {
-                                        firmwareCard.frame(maxWidth: .infinity)
-                                    }
-                                }
-                                .fixedSize(horizontal: false, vertical: true)
-                            }
-
-                            if showsPlayerPicker, !networkMonitor.isOffline { playerCard }
                             if showsKeepCard { keepCard }
 
                             // No dead button on unsupported systems (the
@@ -231,7 +176,6 @@ struct GameLaunchView: View {
                             // supported systems keep the live button.
                             if isComputerPlatform { computerPlatformCard }
                             downloadStatusCard
-                            if interruptedAt != nil { continueCard }
                             vmuCard
                             compatibilityCard
                             resetSettingsCard
@@ -266,21 +210,6 @@ struct GameLaunchView: View {
         // cover modifiers below, so presented screens keep the system
         // appearance rather than inheriting the override.
         .environment(\.colorScheme, hasAmbientArt ? .dark : systemColorScheme)
-        // The seeding bridge lives at the screen root, not on the export
-        // button it once shared: the button is now hidden on exactly the
-        // games that seed, and a webview mounted under a hidden view
-        // never loads.
-        .background {
-            if showingCacheBridge, let serverURL = session.serverURL {
-                EmulatorCacheWebView(url: serverURL, bridge: cacheBridge)
-                    .frame(width: 0, height: 0)
-                    .opacity(0)
-                    .accessibilityHidden(true)
-            }
-        }
-        .onChange(of: cacheBridge.isReady) { _, ready in
-            if ready, seedPhase == .waitingForBridge { Task { await runSeed() } }
-        }
         .navigationBarTitleDisplayMode(.inline)
         .toolbar {
             ToolbarItem(placement: .topBarLeading) {
@@ -317,12 +246,6 @@ struct GameLaunchView: View {
         }
         .task { await load() }
         .onAppear { refreshCoreSettings() }
-        .fullScreenCover(isPresented: $playing) {
-            PlayerView(
-                rom: rom, launch: launchChoices, resumeFromAutosave: continueRun, stateToLoad: stateToLoad
-            )
-            .environmentObject(session)
-        }
         .fullScreenCover(isPresented: $playingNative) {
             // The explicit injection matters: on Mac Catalyst a
             // fullScreenCover does not reliably inherit environment
@@ -374,54 +297,15 @@ struct GameLaunchView: View {
         .sheet(item: $viewingScreenshot) { target in
             ScreenshotViewer(path: target.path, title: target.title)
         }
-        // Coming back from a session the person closed themselves, the
-        // interruption is spent: leaving the card up would offer to rewind
-        // a deliberate exit. Re-ask the marker, which the clean exit
-        // cleared.
-        .onChange(of: playing) { _, isPlaying in
-            if !isPlaying {
-                refreshResumeOffer()
-            } else {
-                // A remote state can run past 100MB, and the player's
-                // coordinator copies it out the moment the cover builds.
-                // Holding this view's copy for the whole session doubles a
-                // buffer that was only needed at boot. Released after a
-                // beat, so the cover has provably built first.
-                Task { @MainActor in
-                    try? await Task.sleep(for: .seconds(5))
-                    stateToLoad = nil
-                }
-            }
-        }
-        // Only changes made after the screen has settled are the person's;
-        // the ones during load are this view choosing a default, and every
-        // launch recording whichever core or BIOS happened to be that
-        // default would conflate "what I chose" with "what I was shown",
-        // outranking a better recommendation the next time a default
-        // exists. Remembered as soon as a deliberate pick happens, not
-        // deferred to Play: leaving the screen any other way, Close among
-        // them, must not silently drop it.
+        // Only a change made after the screen has settled is the person's;
+        // the one during load is this view choosing a default. Remembered
+        // as soon as a deliberate pick happens, not deferred to Play:
+        // leaving the screen any other way, Close among them, must not
+        // silently drop it.
         .onChange(of: selectedNativeCore) { _, _ in
             if rom.isArcade { refreshArcadeBase() }
             guard let platform = NativePlatform.platform(for: rom, canonicalSlug: canonicalSlug) else { return }
             NativeCoreChoice.remember(selectedNativeCore, rom: rom, platform: platform)
-        }
-        .onChange(of: selectedCore) { _, _ in
-            guard !loading else { return }
-            LaunchChoices.remember(core: selectedCore, canonicalSlug: canonicalSlug, for: rom)
-        }
-        .onChange(of: selectedFirmware) { _, _ in
-            guard !loading, !rom.isArcade else { return }
-            LaunchChoices.remember(firmwareId: selectedFirmware?.id, platformId: rom.platformId)
-        }
-        .onChange(of: selectedBackend) { _, _ in
-            if rom.isArcade { refreshArcadeBase() }
-            guard !loading else { return }
-            LaunchChoices.remember(backend: selectedBackend, for: rom)
-            // A state picked for one player cannot load in the other, so a
-            // backend switch clears the selection rather than carrying a
-            // promise the boot cannot keep.
-            selectedState = nil
         }
         // The Mac's window carries its content full size under a
         // transparent title bar, so a presentation that stops below
@@ -468,39 +352,15 @@ struct GameLaunchView: View {
         }
     }
 
-    /// Whether pressing Play right now actually keeps its traffic on the
-    /// local network, which is not the same question as which address this
-    /// app is talking to.
-    ///
-    /// The web player is the exception, and it is the one that costs the
-    /// most. Its page is loaded from the address this device paired with,
-    /// so when it fetches a rom itself that fetch goes there, over the
-    /// internet, no matter which address Cabinet's own requests are using.
-    /// Reporting Cabinet's route in that case would show a router while the
-    /// largest transfer on the screen went the other way.
-    ///
-    /// A game already downloaded is fine either way: the web player reads
-    /// the copy seeded into its cache and fetches nothing. And the native
-    /// player always downloads through this app, so it follows the route
-    /// like everything else.
+    /// Whether pressing Play right now keeps its traffic on the local
+    /// network. The player always downloads through this app, so it
+    /// follows the address this app is using like everything else.
     ///
     /// This is also the whole of the nudge. Somebody watching a globe turn
     /// into a router the moment they switch Download on has been told what
     /// that toggle is worth, without a word of explanation on screen.
     private var playWillUseLocalNetwork: Bool {
-        guard session.isUsingLocalAddress else { return false }
-        // Ask what Play will ACTUALLY run, not whether a picker is on
-        // screen. "No picker" used to mean "webview only", and that
-        // inference broke the moment platforms began hiding their picker
-        // for the opposite reason: Saturn, Dreamcast, Vectrex and now PSP
-        // hide it because they are NATIVE only. Marcus caught it on a
-        // Dreamcast game showing a globe on his own network, traffic that
-        // by definition never leaves the house.
-        let willUseWebPlayer = LaunchChoices.defaultBackend(
-            rom: rom, canonicalSlug: canonicalSlug
-        ) == .webview && (!showsPlayerPicker || selectedBackend == .webview)
-        let alreadyDownloaded = keptStore.kept(romId: rom.id) != nil
-        return !willUseWebPlayer || alreadyDownloaded
+        session.isUsingLocalAddress
     }
 
     private var favoriteButton: some View {
@@ -564,26 +424,6 @@ struct GameLaunchView: View {
         }
     }
 
-    /// Whether a real Web player / Native picker is offered, matching
-    /// `LaunchChoices.defaultBackend`'s own rule: any platform with a
-    /// native core except Saturn, whose webview core is confirmed broken,
-    /// and Dreamcast, which has no webview core at all. Everywhere this
-    /// is true, `playerCard` replaces the standalone
-    /// `coreCard`/`firmwareCard` pair, since those two only exist to
-    /// configure the webview for games with no choice to make about
-    /// which player runs them at all.
-    /// Whether there is a real choice of player to offer. Mirrors
-    /// `LaunchChoices.defaultBackend`'s own reasoning rather than
-    /// repeating its slug list: a platform whose default is forced to
-    /// native has nothing to pick between, whether that is because RomM
-    /// maps no webview core for it (Dreamcast, Vectrex, Game & Watch) or
-    /// because the one it maps does not work (Saturn, PSP).
-    private var showsPlayerPicker: Bool {
-        guard NativeCore.core(for: rom, canonicalSlug: canonicalSlug) != nil else { return false }
-        return !cores.isEmpty
-            && LaunchChoices.defaultBackend(rom: rom, canonicalSlug: canonicalSlug) != .native
-    }
-
     /// One visible action, no exceptions: a game with the keep toggle
     /// shows no export button at all. The kept files, firmware included,
     /// are all in the Files app's Games folder, so there is nothing left
@@ -628,108 +468,6 @@ struct GameLaunchView: View {
                 }
             }
         }
-    }
-
-    private var seedBusy: Bool {
-        seedPhase == .waitingForBridge || seedPhase == .writing
-    }
-
-    /// Whether keeping this game should also pre-fill the web player's
-    /// cache: only where a web launch is actually offered. Saturn is
-    /// routed native with no picker, so a seeded copy there would be
-    /// hundreds of duplicated megabytes nothing ever reads.
-    private var seedsWebCache: Bool {
-        guard isPlatformSupported, !rom.hasMultipleFiles else { return false }
-        return NativeCore.core(for: rom, canonicalSlug: canonicalSlug) == nil || showsPlayerPicker
-    }
-
-    private func startSeeding() {
-        seedPhase = .waitingForBridge
-        showingCacheBridge = true
-        if cacheBridge.isReady {
-            Task { await runSeed() }
-        }
-    }
-
-    /// The `url` this writes has to be byte-identical to what RomM's real
-    /// player sets as `EJS_gameUrl`: EmulatorJS 4.2.3's cache key is that
-    /// URL's last path segment, query string included. Confirmed broken
-    /// on device before this fix (in this machinery's Data Saver era):
-    /// `Player.vue` always passes a `file_ids` query parameter,
-    /// `fileIDs: props.disc ? [props.disc] : []`, even for a single-file
-    /// ROM, RomM's console view still selects a "disc" (the ROM's one
-    /// file entry), so the real request is
-    /// `/api/roms/{id}/content/{name}?file_ids={fileId}`, not the plain
-    /// path. A captured player network log showed the ROM re-fetching on
-    /// every Play despite a successful, correctly-shaped cache write,
-    /// because that mismatch made every lookup a miss. The file id and
-    /// the exact Content-Length header both come from the manifest,
-    /// captured at keep time; the bytes come off local disk, no network.
-    ///
-    /// Failure here is deliberately soft: the kept copy is the promise,
-    /// the cache entry only saves the web player one organic download,
-    /// so a failed seed logs, shows a quiet caption, and never unkeeps.
-    private func runSeed() async {
-        guard seedPhase == .waitingForBridge else { return }
-        seedPhase = .writing
-        defer {
-            showingCacheBridge = false
-            cacheBridge.detach()
-        }
-        guard let kept = keptStore.kept(romId: rom.id),
-              let fileId = kept.fileId,
-              let fileName = kept.webFileName,
-              let romURL = keptStore.fileURL(romId: rom.id, fileName: kept.fsName),
-              let data = try? Data(contentsOf: romURL, options: .mappedIfSafe)
-        else {
-            seedPhase = .failed
-            return
-        }
-        // EmulatorCacheBridge.put base64-encodes the whole file into a
-        // Swift dictionary and runs it through
-        // JSONSerialization.data(withJSONObject:), which is fine for a
-        // cartridge ROM but not for a CD image: found 2026-08-08 from a
-        // real device crash on a PS1 .chd, NSJSONSerialization's internal
-        // string growth failing to allocate ~3.6GB while base64-encoding
-        // a file well under that size, not the file size itself, the
-        // serializer's own transient buffer overhead. Same soft-failure
-        // treatment as every other seed failure: the kept copy already
-        // has the game, this only ever saved the web player one organic
-        // download.
-        guard data.count <= 64 * 1024 * 1024 else {
-            seedPhase = .failed
-            DiagnosticsLog.record(
-                context: "Web player copy",
-                message: "Skipped: \(fileName) is too large to seed safely.",
-                romVersion: session.serverVersion
-            )
-            return
-        }
-        let encodedName = Self.jsEncodeURIComponent(fileName)
-        let relativeURL = "/api/roms/\(rom.id)/content/\(encodedName)?file_ids=\(fileId)"
-        let result = await cacheBridge.put(
-            url: relativeURL, type: "rom", contentLength: kept.contentLength, data: data
-        )
-        if result.success {
-            seedPhase = .idle
-        } else {
-            seedPhase = .failed
-            DiagnosticsLog.record(
-                context: "Web player copy",
-                message: result.error ?? "Couldn't write the kept game into the web player's cache.",
-                romVersion: session.serverVersion
-            )
-        }
-    }
-
-    /// Matches JavaScript's `encodeURIComponent` exactly, the unreserved
-    /// set it leaves untouched (`A-Za-z0-9-_.!~*'()`) is narrower than any
-    /// single built-in `CharacterSet`, and RomM's own `getDownloadPath`
-    /// runs the real filename through `encodeURIComponent` before this
-    /// app's cache entry has to match it byte-for-byte.
-    private static func jsEncodeURIComponent(_ string: String) -> String {
-        let unreserved = CharacterSet(charactersIn: "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-_.!~*'()")
-        return string.addingPercentEncoding(withAllowedCharacters: unreserved) ?? string
     }
 
     /// The local files that can satisfy an export without touching the
@@ -882,18 +620,9 @@ struct GameLaunchView: View {
             }
         }
         .buttonStyle(.borderedProminent)
-        // Blocked while a seed runs: letting the game boot mid-write
-        // put a whole ROM's worth of buffering next to the emulator's own
-        // memory, on a device-wide budget. The keep card explains the
-        // wait, and a local copy is quick.
-        .disabled(loading || !isPlatformSupported || preparingPlay || seedBusy)
+        .disabled(loading || !isPlatformSupported || preparingPlay)
     }
 
-    /// Resolves `stateToLoad` before presenting the player, since a state
-    /// someone explicitly picked deserves an explanation if it cannot be
-    /// fetched, not a silent boot into the wrong moment. An interrupted
-    /// run's own local recovery is untouched: that path never goes near
-    /// the server at all, by design, see `PlayerView.resumeFromAutosave`.
     private func beginPlay() async {
         #if targetEnvironment(macCatalyst)
         if PS2Launcher.isPS2(canonicalSlug: canonicalSlug) {
@@ -905,23 +634,7 @@ struct GameLaunchView: View {
             return
         }
         #endif
-        if selectedBackend == .native {
-            await beginNativePlay()
-            return
-        }
-        guard !continueRun, let selectedState else {
-            stateToLoad = nil
-            playing = true
-            return
-        }
-        preparingPlay = true
-        defer { preparingPlay = false }
-        guard let bytes = try? await session.stateContent(selectedState) else {
-            playError = "Couldn't reach the server to load that state."
-            return
-        }
-        stateToLoad = .remote(bytes)
-        playing = true
+        await beginNativePlay()
     }
 
     #if targetEnvironment(macCatalyst)
@@ -966,9 +679,8 @@ struct GameLaunchView: View {
     }
     #endif
 
-    /// The native path downloads before presenting rather than behind a
-    /// boot curtain, so a failure surfaces here as an alert instead of a
-    /// black screen with no explanation.
+    /// Downloads before presenting the player, so a failure surfaces here
+    /// as an alert instead of a black screen with no explanation.
     private func beginNativePlay() async {
         preparingPlay = true
         downloadProgress = 0
@@ -1010,7 +722,6 @@ struct GameLaunchView: View {
 
     private var playLabel: String {
         if !loading && !isPlatformSupported { return "Unsupported" }
-        if continueRun { return "Continue" }
         return selectedState != nil || selectedSave != nil ? "Resume" : "Play"
     }
 
@@ -1075,33 +786,6 @@ struct GameLaunchView: View {
         return formatter.string(from: date)
     }
 
-    /// The offer to pick an interrupted run back up. A card like the others,
-    /// preselected because iOS ending the game is the one case where "right
-    /// where I was" is almost always the answer, and declinable because
-    /// almost is not always.
-    private var continueCard: some View {
-        LaunchCard(title: "Interrupted game", systemImage: "arrow.uturn.backward.circle") {
-            choiceRow(
-                label: "Continue where you left off",
-                detail: interruptedAt.map {
-                    "the game was closed by iOS " + Self.ago.localizedString(
-                        for: $0, relativeTo: Date()
-                    )
-                } ?? "the game was closed by iOS",
-                selected: continueRun,
-                enabled: true
-            ) {
-                continueRun.toggle()
-                if continueRun {
-                    selectedState = nil
-                    selectedSave = nil
-                }
-            }
-        }
-    }
-
-    private static let ago = RelativeDateTimeFormatter()
-
     /// Landscape only: cards flow into as many columns as the width allows,
     /// so two or three of them do not become a scrolling column.
     @ViewBuilder
@@ -1124,10 +808,6 @@ struct GameLaunchView: View {
                 if isComputerPlatform { computerPlatformCard }
                 if gatedExperimental { experimentalCard }
                 downloadStatusCard
-                if interruptedAt != nil { continueCard }
-                if !gatedExperimental, !showsPlayerPicker, selectedBackend == .webview, cores.count > 1 { coreCard }
-                if !gatedExperimental, !showsPlayerPicker, selectedBackend == .webview, showsFirmwareCard { firmwareCard }
-                if showsPlayerPicker, !networkMonitor.isOffline { playerCard }
                 // Deliberately NOT hidden while gated, unlike the BIOS
                 // picker and resume list: unsupported platforms have
                 // always left a way to the file so it can be played in
@@ -1155,10 +835,6 @@ struct GameLaunchView: View {
                 if isComputerPlatform { computerPlatformCard }
                 if gatedExperimental { experimentalCard }
                 downloadStatusCard
-                if interruptedAt != nil { continueCard }
-                if !gatedExperimental, !showsPlayerPicker, selectedBackend == .webview, cores.count > 1 { coreCard }
-                if !gatedExperimental, !showsPlayerPicker, selectedBackend == .webview, showsFirmwareCard { firmwareCard }
-                if showsPlayerPicker, !networkMonitor.isOffline { playerCard }
                 // Deliberately NOT hidden while gated, unlike the BIOS
                 // picker and resume list: unsupported platforms have
                 // always left a way to the file so it can be played in
@@ -1233,7 +909,7 @@ struct GameLaunchView: View {
     /// resolves through the modern map, unchanged. Re-read on a core or
     /// player switch, because the same game genuinely has two answers.
     private func refreshArcadeBase() {
-        let usesMAME = selectedBackend == .native && selectedNativeCore == .mame2003Plus
+        let usesMAME = selectedNativeCore == .mame2003Plus
         let base = ArcadeProfileStore.shared.resolve(
             shortname: rom.fsNameNoExt, using: usesMAME ? .mame2003Plus : .modern
         )
@@ -1397,46 +1073,6 @@ struct GameLaunchView: View {
         }
     }
 
-    private var coreCard: some View {
-        LaunchCard(title: "Emulator", systemImage: "cpu") {
-            Picker("Emulator", selection: $selectedCore) {
-                ForEach(cores, id: \.self) { core in
-                    Text(CoreCatalog.displayName(core)).tag(Optional(core))
-                }
-            }
-            .pickerStyle(.menu)
-            .labelsHidden()
-            .frame(maxWidth: .infinity, alignment: .leading)
-
-            if LaunchChoices.isRecommended(core: selectedCore, rom: rom, available: cores) {
-                Text("Recommended for this game's board. The general arcade core runs it too, but not reliably.")
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-            }
-        }
-    }
-
-    /// Web player or the natively compiled core, wherever `showsPlayerPicker`
-    /// says both genuinely work. Not a temporary limit: this shows only
-    /// where there is a real choice to offer. Saturn has a native core
-    /// too (see `NativeCore`), but no working web alternative worth
-    /// picking between, so `LaunchChoices.defaultBackend` routes it to
-    /// native directly and no picker appears; the two-tier
-    /// Supported/Unsupported split stays exactly as it was rather than
-    /// growing a third state for this.
-    /// Save states do not cross the boundary (each player's core build
-    /// has its own state format), so the caption says so up front rather
-    /// than letting someone discover it after losing a run.
-    /// The web player's own configuration (emulator core, BIOS) lives
-    /// inside this card, revealed under the segment when Web player is
-    /// selected, rather than as sibling cards inserted into the stack.
-    /// Structural, not cosmetic: a segmented control that adds and
-    /// removes whole cards around itself reflows the entire screen with
-    /// springy layout animation, the bounce Marcus flagged, and iOS
-    /// segments swap content inside a stable region, they do not
-    /// restructure the page. One card changes height, everything else
-    /// holds still, and the choices that only configure the web player
-    /// now visibly belong to it.
     #if targetEnvironment(macCatalyst)
     /// TVGameLaunchView's screen, on the Mac. Not a Mac arrangement of
     /// iOS's cards: the same composition and the same contents as the
@@ -1727,108 +1363,6 @@ struct GameLaunchView: View {
     }
     #endif
 
-    private var playerCard: some View {
-        LaunchCard(title: "Player", systemImage: "play.rectangle.on.rectangle") {
-            Picker("Player", selection: $selectedBackend) {
-                Text("Web").tag(LaunchChoices.PlayerBackend.webview)
-                Text("Native").tag(LaunchChoices.PlayerBackend.native)
-            }
-            .pickerStyle(.segmented)
-
-            if selectedBackend == .native {
-                Text("Runs the game in a natively compiled core instead of the web player. Save states stay separate per player.")
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-                if let platform = NativePlatform.platform(for: rom, canonicalSlug: canonicalSlug),
-                   platform.cores.count > 1 {
-                    Divider()
-                    LabeledContent {
-                        Picker("Emulator", selection: $selectedNativeCore) {
-                            ForEach(platform.cores, id: \.storageKey) { core in
-                                Text(core.displayName).tag(Optional(core))
-                            }
-                        }
-                        .pickerStyle(.menu)
-                        .labelsHidden()
-                        // Sized to its own text: inside LabeledContent a
-                        // menu picker does not claim its natural width,
-                        // so a longer name wrapped to two lines beside a
-                        // row of empty space.
-                        .fixedSize()
-                    } label: {
-                        Text("Emulator")
-                    }
-                    if let chosen = selectedNativeCore,
-                       NativeCoreChoice.isRecommended(chosen, rom: rom, platform: platform) {
-                        Text("Recommended for this game's board. The general arcade core runs it too, but not reliably.")
-                            .font(.caption)
-                            .foregroundStyle(.secondary)
-                    }
-                }
-            } else if Compatibility.shared.crashes(romId: rom.id) >= 3 {
-                Text("The web player has crashed repeatedly on this game. The native player may hold up better.")
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-            }
-
-            if selectedBackend == .webview {
-                if cores.count > 1 {
-                    Divider()
-                    LabeledContent {
-                        Picker("Emulator", selection: $selectedCore) {
-                            ForEach(cores, id: \.self) { core in
-                                Text(CoreCatalog.displayName(core)).tag(Optional(core))
-                            }
-                        }
-                        .pickerStyle(.menu)
-                        .labelsHidden()
-                        // Sized to its own text: inside LabeledContent a
-                        // menu picker does not claim its natural width,
-                        // so a longer name wrapped to two lines beside a
-                        // row of empty space.
-                        .fixedSize()
-                    } label: {
-                        Text("Emulator")
-                    }
-                    if LaunchChoices.isRecommended(core: selectedCore, rom: rom, available: cores) {
-                        Text("Recommended for this game's board. The general arcade core runs it too, but not reliably.")
-                            .font(.caption)
-                            .foregroundStyle(.secondary)
-                    }
-                }
-                if showsFirmwareCard {
-                    Divider()
-                    if !firmware.isEmpty {
-                        LabeledContent {
-                            Picker("BIOS", selection: $selectedFirmware) {
-                                Text("None").tag(Optional<Firmware>.none)
-                                ForEach(firmware) { item in
-                                    Text(item.fileName).tag(Optional(item))
-                                }
-                            }
-                            .pickerStyle(.menu)
-                            .labelsHidden()
-                        } label: {
-                            Text("BIOS")
-                        }
-                    }
-                    if !missingFirmware.isEmpty {
-                        Label {
-                            Text("Missing from the server: \(missingFirmware.map(\.fileName).joined(separator: ", "))")
-                                .font(.caption)
-                                .foregroundStyle(.secondary)
-                        } icon: {
-                            Image(systemName: "exclamationmark.triangle.fill")
-                                .foregroundStyle(.orange)
-                                .font(.caption)
-                        }
-                    }
-                }
-            }
-        }
-        .animation(.snappy(duration: 0.22), value: selectedBackend)
-    }
-
     /// One storage toggle for every game, playable or not; only the
     /// promise in the fine print varies. Unsupported systems included
     /// on purpose: those are exactly the games whose files someone
@@ -1860,7 +1394,6 @@ struct GameLaunchView: View {
         Binding(
             get: { keptStore.kept(romId: rom.id) != nil || keptStore.downloading[rom.id] != nil },
             set: { wantKept in
-                seedPhase = .idle
                 if wantKept {
                     keptStore.keep(rom: rom, session: session)
                 } else {
@@ -1871,16 +1404,14 @@ struct GameLaunchView: View {
     }
 
     /// One toggle, one copy: keeping stores the ROM and firmware
-    /// permanently, the native player boots straight from it, the web
-    /// player's cache gets fed from it, Export copies from it. Removal
+    /// permanently, the player boots straight from it, Export copies
+    /// from it. Removal
     /// lives on the same toggle, and the Storage screen lists every kept
     /// game in one place.
     private var keepCard: some View {
-        // "Storage", not "Offline": the header has to be true for every
-        // class of game, and a downloaded web-only game still needs the
-        // server to launch. Neutral header, per-game promise in the
-        // caption, and the card now shares name and icon with
-        // Settings > Storage, two views of the same concept.
+        // "Storage": the card shares its name and icon with
+        // Settings > Storage, two views of the same concept, with the
+        // per-game promise in the caption.
         LaunchCard(title: "Storage", systemImage: "internaldrive") {
             let isKept = keptStore.kept(romId: rom.id) != nil
             // No toggle at all once a game is kept and there is no
@@ -1912,12 +1443,6 @@ struct GameLaunchView: View {
                         ProgressView()
                     }
                 }
-            } else if seedBusy {
-                HStack(spacing: 10) {
-                    ProgressView()
-                    Text("Preparing the web player's copy").foregroundStyle(.secondary)
-                }
-                .font(.caption)
             } else if isKept {
                 Text(keptCaption)
                     .font(.caption)
@@ -1947,88 +1472,23 @@ struct GameLaunchView: View {
                     .foregroundStyle(.secondary)
             }
         }
-        .onChange(of: keptStore.downloading[rom.id]) { old, new in
-            // The moment a keep finishes is the one place the web
-            // player's cache copy gets made, from the file just written,
-            // no network involved. Removal mid-download lands here too
-            // (old non-nil, new nil, nothing kept), and seeds nothing.
-            guard old != nil, new == nil,
-                  keptStore.kept(romId: rom.id) != nil, seedsWebCache
-            else { return }
-            startSeeding()
-        }
     }
 
-    /// Three promises, each stated only where it is true, under a
-    /// header neutral enough to sit over all of them. Saturn-class
-    /// games have no player choice, so no qualifier; games with a real
-    /// picker name the native player because the picker sits right above
-    /// this card and offline belongs to native alone; web-only games get
-    /// the honest weaker deal. The BIOS is never mentioned, it comes
-    /// along as plumbing, and the Files app is not mentioned either:
-    /// where the file lives is a learn-once fact the Storage screen
-    /// teaches, not a promise worth repeating on every game.
+    /// The promise, stated only where it is true: a game this phone plays
+    /// plays without a connection once kept. The BIOS is never mentioned,
+    /// it comes along as plumbing, and the Files app is not mentioned
+    /// either: where the file lives is a learn-once fact the Storage
+    /// screen teaches, not a promise worth repeating on every game.
     private var keptCaption: String {
         let size = keptStore.kept(romId: rom.id).map { byteCount($0.totalBytes) } ?? ""
-        if NativeCore.core(for: rom, canonicalSlug: canonicalSlug) != nil {
-            var caption = showsPlayerPicker
-                ? "\(size) on this iPhone. Plays offline in the native player."
-                : "\(size) on this iPhone. Plays without a connection."
-            if seedPhase == .failed, showsPlayerPicker {
-                caption += " The web player's copy couldn't be prepared; it will download once there."
-            }
-            return caption
-        }
-        // Unsupported systems say nothing beyond the cost: the library
-        // already labeled them unsupported, the person downloading one
-        // knows why they want the file.
-        guard isPlayableHere else { return "\(size) on this iPhone." }
-        if seedPhase == .failed {
-            return "\(size) on this iPhone. The quick-start copy couldn't be prepared; the first play will download once."
-        }
-        return "\(size) on this iPhone. Starts faster; launching still needs your server."
+        guard NativeCore.core(for: rom, canonicalSlug: canonicalSlug) != nil else { return "\(size) on this iPhone." }
+        return "\(size) on this iPhone. Plays without a connection."
     }
 
     private var keepCaption: String {
         let size = byteCount(rom.fsSizeBytes)
-        if NativeCore.core(for: rom, canonicalSlug: canonicalSlug) != nil {
-            return showsPlayerPicker
-                ? "About \(size). Plays offline in the native player."
-                : "About \(size). Plays without a connection."
-        }
-        guard isPlayableHere else { return "About \(size)." }
-        return "About \(size). Starts faster and saves data; launching still needs your server."
-    }
-
-    private var showsFirmwareCard: Bool {
-        !firmware.isEmpty || !missingFirmware.isEmpty
-    }
-
-    private var firmwareCard: some View {
-        LaunchCard(title: "BIOS", systemImage: "memorychip") {
-            if !firmware.isEmpty {
-                Picker("BIOS", selection: $selectedFirmware) {
-                    Text("None").tag(Optional<Firmware>.none)
-                    ForEach(firmware) { item in
-                        Text(item.fileName).tag(Optional(item))
-                    }
-                }
-                .pickerStyle(.menu)
-                .labelsHidden()
-                .frame(maxWidth: .infinity, alignment: .leading)
-            }
-            if !missingFirmware.isEmpty {
-                Label {
-                    Text("Missing from the server: \(missingFirmware.map(\.fileName).joined(separator: ", "))")
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
-                } icon: {
-                    Image(systemName: "exclamationmark.triangle.fill")
-                        .foregroundStyle(.orange)
-                        .font(.caption)
-                }
-            }
-        }
+        guard NativeCore.core(for: rom, canonicalSlug: canonicalSlug) != nil else { return "About \(size)." }
+        return "About \(size). Plays without a connection."
     }
 
     private var visibleStates: [GameState] {
@@ -2042,10 +1502,6 @@ struct GameLaunchView: View {
             // States are greyed out when written by a different core, because
             // a memory snapshot cannot be loaded by an emulator that did not
             // make it. Saves survive a core change, so they are never greyed.
-            // RomM's emulator field names the player, not the core: states
-            // made through the web player, this app's included, all say
-            // "emulatorjs", and greying those out disabled every state the
-            // pause menu ever saved.
             ForEach(visibleStates) { state in
                 stateRow(state)
             }
@@ -2094,15 +1550,9 @@ struct GameLaunchView: View {
     }
 
     private func stateEnabled(_ state: GameState) -> Bool {
-        // Each player can only restore states its own core build wrote,
-        // so the list follows the backend choice: native states for the
-        // native player, everything the webview's cores wrote otherwise.
+        // A core can only restore states its own build wrote.
         let nativeTag = NativeCore.core(for: rom, canonicalSlug: canonicalSlug)?.emulatorTag
-        if selectedBackend == .native {
-            return nativeTag != nil && state.emulator == nativeTag
-        }
-        if let nativeTag, state.emulator == nativeTag { return false }
-        return state.emulator == nil || state.emulator == selectedCore || state.emulator == "emulatorjs"
+        return nativeTag != nil && state.emulator == nativeTag
     }
 
     private func stateRow(_ state: GameState) -> some View {
@@ -2111,7 +1561,6 @@ struct GameLaunchView: View {
             Button {
                 selectedState = selectedState?.id == state.id ? nil : state
                 selectedSave = nil
-                if selectedState != nil { continueRun = false }
             } label: {
                 HStack(spacing: 10) {
                     Image(systemName: selectedState?.id == state.id ? "checkmark.circle.fill" : "circle")
@@ -2143,8 +1592,7 @@ struct GameLaunchView: View {
     /// information, not a choice: offering a radio button for something
     /// that happens regardless would be a lie.
     private func saveLoadsAutomatically(_ save: GameSave) -> Bool {
-        guard selectedBackend == .native else { return false }
-        return save.emulator == NativeCore.core(for: rom, canonicalSlug: canonicalSlug)?.emulatorTag
+        save.emulator == NativeCore.core(for: rom, canonicalSlug: canonicalSlug)?.emulatorTag
     }
 
     private func saveRow(_ save: GameSave) -> some View {
@@ -2153,7 +1601,6 @@ struct GameLaunchView: View {
             Button {
                 selectedSave = selectedSave?.id == save.id ? nil : save
                 selectedState = nil
-                if selectedSave != nil { continueRun = false }
             } label: {
                 HStack(spacing: 10) {
                     Image(
@@ -2263,27 +1710,6 @@ struct GameLaunchView: View {
 
     // MARK: Data
 
-    private var launchChoices: LaunchChoices {
-        LaunchChoices(
-            core: selectedCore,
-            firmwareId: selectedFirmware?.id,
-            // Continuing an interrupted run supersedes any server side
-            // choice: the autosave loads over whatever the page booted,
-            // so choosing a state as well would just boot into it twice.
-            saveId: continueRun ? nil : selectedSave?.id
-        )
-    }
-
-    private func refreshResumeOffer() {
-        if SessionMarker.offersResume(romId: rom.id) {
-            interruptedAt = SessionMarker.autosaveDate(romId: rom.id)
-            continueRun = true
-        } else {
-            interruptedAt = nil
-            continueRun = false
-        }
-    }
-
     private func load() async {
         keptStore.reconcileFilesFolder()
         // A no-op once `platformsVersions` already holds something; a
@@ -2291,8 +1717,7 @@ struct GameLaunchView: View {
         // comment on this method names: a launch that reaches a game's
         // screen before that mapping ever loaded computes `canonicalSlug`
         // against the empty fallback, the raw unmapped folder slug, which
-        // does not match cores.json's real keys (arcade's is "arcade",
-        // not its folder's "fbneo") and reads as Unsupported for the rest
+        // resolves to no platform and reads as Unsupported for the rest
         // of the screen's life. `LibraryView` already calls this on its
         // own load for the identical reason; this screen never did.
         // Found 2026-08-08 from a video showing a kept arcade game stuck
@@ -2301,23 +1726,11 @@ struct GameLaunchView: View {
         await session.loadPlatformConfigIfNeeded()
         canonicalSlug = rom.canonicalPlatformSlug(platformsVersions: session.platformsVersions)
         isComputerPlatform = ComputerPlatforms.contains(canonicalSlug)
-        cores = CoreCatalog.cores(for: canonicalSlug)
-        selectedCore = LaunchChoices.defaultCore(rom: rom, canonicalSlug: canonicalSlug, from: cores)
         if let platform = NativePlatform.platform(for: rom, canonicalSlug: canonicalSlug),
            platform.cores.count > 1 {
             selectedNativeCore = NativeCoreChoice.resolved(for: rom, platform: platform)
         }
-        // Offline, there is exactly one player that can work, the same
-        // situation Saturn is always in, which is why Saturn never
-        // shows a picker at all. Arcade's real choice, web or native,
-        // only exists with a connection, so it collapses to native the
-        // same way whenever there is none, rather than presenting a
-        // player that will only stall.
-        selectedBackend = networkMonitor.isOffline ? .native : LaunchChoices.defaultBackend(rom: rom, canonicalSlug: canonicalSlug)
-
         if rom.isArcade { refreshArcadeBase() }
-
-        refreshResumeOffer()
 
         // Offline, these three would only ever run out the clock on a
         // timeout: NetworkMonitor already knows the answer without
@@ -2389,14 +1802,6 @@ struct GameLaunchView: View {
             }
         }
 
-        // Deliberately no BIOS by default on arcade. Every arcade game
-        // shares one platform, so "first verified firmware" meant forcing
-        // neogeo.zip onto Cave and Capcom boards that have nothing to do
-        // with Neo Geo, and a wrong BIOS stops a game booting entirely.
-        // Everywhere else, a platform genuinely has one BIOS every game on
-        // it wants, so what was picked last is worth remembering the same
-        // way a core choice is.
-        selectedFirmware = rom.isArcade ? nil : LaunchChoices.defaultFirmware(platformId: rom.platformId, from: firmware)
         loading = false
     }
 

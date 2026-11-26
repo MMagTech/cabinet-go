@@ -32,17 +32,12 @@ enum ComputerPlatforms {
     }
 }
 
-/// Whether this app can actually put a game on screen: a real gamepad
-/// platform with at least one EmulatorJS core or a native core, everything
-/// else, keyboard machines and zero-core platforms like Flash, is
-/// unsupported and offered a download instead of a dead Play button.
-/// Dreamcast used to be the canonical zero-core example here; it stopped
-/// being one 2026-08-10 once a native core existed for it with no webview
-/// core to match, which this check didn't originally account for.
+/// Whether this app can actually put a game on screen: the handheld
+/// systems (docs/scope-handheld.md), each through its native core.
 ///
-/// The single source of truth for that split, shared by the library's
-/// Supported/Unsupported sections and the launch screen's own Play guard,
-/// so the two can never disagree about which games this covers.
+/// The single source of truth for that, shared by the library, the launch
+/// screen's Play guard, Home, the widget and Spotlight, so they can never
+/// disagree about which games this covers.
 enum PlatformSupport {
     /// RomM's ARCADE_SYSTEMS, the metadata slugs whose games run on the
     /// arcade cores. One copy, shared with `Rom.isArcade`, so the library
@@ -67,72 +62,14 @@ enum PlatformSupport {
     }
 
     static func isSupported(canonicalSlug: String, isArcade: Bool = false) -> Bool {
-        #if os(iOS) && !targetEnvironment(macCatalyst)
-        // Native cores only, and only the handhelds. The webview player,
-        // arcade, the home consoles and the keyboard machines are not
-        // offered on the phone; their games live on in RomM and play on
-        // CabinetOS. The branches below are the tvOS and Mac rules,
-        // left for the removal layers.
+        // Native cores only, and only the handhelds. Arcade, the home
+        // consoles and the keyboard machines are not offered on the
+        // phone; their games live on in RomM and play on CabinetOS.
         guard !isArcade,
               let platform = NativePlatform.platform(bySlug: canonicalSlug, isArcade: false) else {
             return false
         }
         return handheldPlatforms.contains(platform)
-        #else
-        // Arcade is supported by its native cores no matter what the
-        // folder is called. The check below used to assume every arcade
-        // folder resolves through PLATFORMS_VERSIONS to a cores.json key,
-        // which is only true for folders someone has mapped in RomM's
-        // config.yml: a fresh "MAME2003" folder resolved to a slug
-        // nothing knew and a fully playable platform read as Unsupported.
-        // RomM's own metadata slug already says it is arcade; believe it.
-        if isArcade { return true }
-        guard !ComputerPlatforms.contains(canonicalSlug) else { return false }
-        #if targetEnvironment(macCatalyst)
-        // The Mac plays native cores only, the same shape as the TV
-        // app: the webview player is dropped from this target for now
-        // (Marcus's call, 2026-08-30, revisitable), so a platform whose
-        // only cores are EmulatorJS's is not playable here and belongs
-        // in Unsupported rather than behind a broken Play button.
-        // PS2 before the NativePlatform lookup, because it has no case
-        // there and never will: PCSX2 is not a libretro core. It is
-        // still playable on this target, so the lookup failing must not
-        // be read as unsupported.
-        if PS2Launcher.isPS2(canonicalSlug: canonicalSlug) { return true }
-        // GameCube for the same reason, and it is this one source both
-        // the library section and the Play button read: patching only
-        // GameLaunchView's local copy leaves the game filed under
-        // Unsupported with a working Play path nobody can reach. That
-        // exact mistake cost a session on PS2.
-        if GCLauncher.isGameCube(canonicalSlug: canonicalSlug) { return true }
-        guard let platform = NativePlatform.platform(bySlug: canonicalSlug, isArcade: false) else {
-            return false
-        }
-        return !macPendingPlatforms.contains(platform)
-        #else
-        // Dreamcast is Mac only, and this is the same rule PS2 and
-        // GameCube were held to from the start rather than a new one.
-        //
-        // Flycast needs a recompiler. iOS and tvOS cannot have one, so
-        // the version that shipped here ran at half the SH4's clock with
-        // an audio governor built to hold it together. That was an
-        // exception to the JIT boundary, made before there was a
-        // platform that could run the system properly, and the Mac
-        // removes the reason for it. A system that is only playable in a
-        // compromised form does not belong on a platform; PS2 and
-        // GameCube were never offered here for exactly that reason.
-        //
-        // THE CORE IS STILL COMPILED IN, deliberately. This is a gate,
-        // not a removal, because the thing that would bring Dreamcast
-        // back is upstream work rather than ours: iFly's interpreter is
-        // license-clean and is the candidate that could reach full speed
-        // without a recompiler. If that lands, this guard comes out and
-        // nothing else has to be rebuilt.
-        if canonicalSlug == "dc" { return false }
-        if !CoreCatalog.cores(for: canonicalSlug).isEmpty { return true }
-        return NativeCore.core(bySlug: canonicalSlug, isArcade: false) != nil
-        #endif
-        #endif
     }
 
     /// Whether this device can actually start this game.
@@ -167,17 +104,4 @@ enum PlatformSupport {
         #endif
         return false
     }
-
-    #if targetEnvironment(macCatalyst)
-    /// Platforms whose Mac core is still a link placeholder
-    /// (tools/build-mac-core-stub.sh). Listing one here keeps the
-    /// library honest, filing it under Unsupported rather than offering
-    /// a Play button that fails at load.
-    ///
-    /// Empty since 2026-08-30: Dreamcast and N64 left the day
-    /// ANGLE-for-Mac landed, and PSP left once its ffmpeg was built for
-    /// the Catalyst target (tools/build-ppsspp-ffmpeg-mac.sh), which was
-    /// the whole of what kept it a stub.
-    static let macPendingPlatforms: Set<NativePlatform> = []
-    #endif
 }

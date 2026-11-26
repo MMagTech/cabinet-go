@@ -433,8 +433,7 @@ enum NativePlatform: String, CaseIterable {
 
     /// The platform for a rom. `canonicalSlug` must be
     /// `rom.canonicalPlatformSlug(platformsVersions:)`, the same value
-    /// `ControlLayout.forPlatform` and `CoreCatalog` are already keyed
-    /// by, never `rom.platformSlug`. That property is IGDB's metadata
+    /// `ControlLayout.forPlatform` is keyed by, never `rom.platformSlug`. That property is IGDB's metadata
     /// slug, a different, unrelated string RomM happens to also carry;
     /// matching bundled data against it worked for Saturn by pure
     /// coincidence (IGDB's own slug for Sega Saturn happens to be
@@ -463,8 +462,7 @@ enum NativePlatform: String, CaseIterable {
     }
 
     /// The platform for an already-resolved slug, matched on the same
-    /// slug families the control layout switch uses, sourced from
-    /// Resources/cores.json. Split from `platform(for:canonicalSlug:)` so
+    /// slug families the control layout switch uses. Split from `platform(for:canonicalSlug:)` so
     /// callers with no live rom or session, only a slug persisted at keep
     /// time, can still resolve correctly while fully offline.
     static func platform(bySlug slug: String, isArcade: Bool) -> NativePlatform? {

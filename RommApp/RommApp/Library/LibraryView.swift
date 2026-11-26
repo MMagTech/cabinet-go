@@ -358,11 +358,7 @@ struct LibraryScreen: View {
     }
 
 
-    /// A platform this app can actually put a Play button in front of:
-    /// not a keyboard machine, per `ComputerPlatforms`, and RomM's own core
-    /// map, `Resources/cores.json`, actually lists a core for it. Dreamcast
-    /// and Flash fail this the same way a keyboard machine does, just for a
-    /// different reason, no core exists at all rather than no touch input.
+    /// A platform this app plays, per `PlatformSupport.isSupported`.
     private var supportedPlatforms: [Platform] {
         platforms.filter { PlatformSupport.isSupported($0, platformsVersions: session.platformsVersions) }
     }

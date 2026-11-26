@@ -4,15 +4,10 @@ import UIKit
 /// Diagnostics for reporting a problem, split out of Settings on purpose:
 /// this is read-only information, not a setting anyone tunes, and it was
 /// confusing sitting in the same list as things people actually
-/// configure. The web player's emulation summary and storage repair left
-/// with the web player (docs/scope-handheld.md).
+/// configure.
 ///
-/// None of this touches the actual player: `PlayerView`'s webview is the
-/// only performance sensitive path in the app, and nothing here reads
-/// from or writes to it. `EmulationInfo`, `DiagnosticsLog` and
-/// `BridgeConsoleLog` are all plain `UserDefaults` writes made at
-/// Settings screens or download/cache completion points, never during
-/// gameplay.
+/// None of this touches the player: `DiagnosticsLog` is a plain
+/// `UserDefaults` write made at error points, never during gameplay.
 struct DebugView: View {
     @EnvironmentObject private var session: Session
     @State private var copied = false
@@ -51,16 +46,12 @@ struct DebugView: View {
                 Text("Most connection problems trace back to a pairing that's missing a scope.")
             }
 
-            // Recent errors, the cache bridge log and the player network
-            // log used to each get their own browsable Section here, with
-            // a Clear button apiece. Hidden 2026-08-11: nobody was ever
-            // using them from the UI, every real diagnosis so far went
+            // Recent errors used to get their own browsable Section here,
+            // with a Clear button. Hidden 2026-08-11: nobody was ever
+            // using it from the UI, every real diagnosis so far went
             // through a live device console instead. `diagnosticsText`
-            // below reads the same three stores directly, so Copy
-            // diagnostics and Report a bug still carry everything these
-            // sections used to show, just without a screen for browsing
-            // or clearing them individually. Bring a section back if a
-            // real need for browsing-without-copying ever shows up.
+            // below reads the same store directly, so Copy diagnostics
+            // and Report a bug still carry everything it used to show.
 
             Section {
                 Button {
@@ -93,12 +84,7 @@ struct DebugView: View {
             "Artwork cache: \(ByteCountFormatter.string(fromByteCount: artworkBytes, countStyle: .file))",
             "RomM \(session.serverVersion ?? "unknown") at \(session.serverURL?.host ?? "unknown")",
             "Pairing scopes: \(session.scopes.isEmpty ? "none" : session.scopes.joined(separator: ", "))",
-            EmulationInfo.summary,
-            "Player reloads survived: \(EmulationInfo.recoveries)",
         ]
-        if let vitals = EmulationInfo.vitalsAtDeath {
-            lines.append("Last reload: \(vitals)")
-        }
         let recentErrors = DiagnosticsLog.recent
         if !recentErrors.isEmpty {
             lines.append("")
@@ -106,18 +92,6 @@ struct DebugView: View {
             lines.append(
                 contentsOf: recentErrors.map { "- [\($0.context)] \($0.message) (RomM \($0.romVersion ?? "?"))" }
             )
-        }
-        let bridgeLog = BridgeConsoleLog.recent
-        if !bridgeLog.isEmpty {
-            lines.append("")
-            lines.append("Cache bridge log:")
-            lines.append(contentsOf: bridgeLog)
-        }
-        let playerLog = PlayerNetworkLog.recent
-        if !playerLog.isEmpty {
-            lines.append("")
-            lines.append("Player network log:")
-            lines.append(contentsOf: playerLog)
         }
         return "```\n" + lines.joined(separator: "\n") + "\n```"
     }

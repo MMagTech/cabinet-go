@@ -1,8 +1,7 @@
 import SwiftUI
 
 /// Everything this app keeps on disk: the games kept on the phone, the
-/// offline promise. The web player's cache that used to share this screen
-/// left with the web player (docs/scope-handheld.md). Formerly CacheView,
+/// offline promise. Formerly CacheView,
 /// renamed when kept games arrived, since Storage is what iOS itself calls
 /// this job.
 struct StorageView: View {
