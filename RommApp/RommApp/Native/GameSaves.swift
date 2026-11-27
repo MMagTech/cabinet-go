@@ -140,14 +140,10 @@ final class GameSaves {
         // A save a core wrote that never reached a mark: the sitting before
         // ended with the app (fault 2 of the plan's part 2).
         gatherLeftover()
-        // A start right after the app opened, before its heartbeat said
-        // whether the server has save channels.
-        if !session.serverHasChannels, !NetworkMonitor.shared.isOffline {
-            await session.refreshServerVersion()
-        }
+        let online = await Self.askOnline(session)
         let server = Self.server(session)
         await SavePush.oneAtATime(romId) {
-            await listAndPick(server: server, online: Self.online(session))
+            await listAndPick(server: server, online: online)
         }
         switch place {
         case .battery:
@@ -574,7 +570,7 @@ final class GameSaves {
     /// with a connection and channels, else the phone's own files.
     static func offeredStates(romId: Int, tag: String, session: Session) async -> [SavePush.OfferedState] {
         var rows: [RommAsset]?
-        if online(session) { rows = try? await server(session).states(romId) }
+        if await askOnline(session) { rows = try? await server(session).states(romId) }
         return SavePush.offeredStates(romId, tag: tag, rows: rows)
     }
 
@@ -590,7 +586,7 @@ final class GameSaves {
     /// the three states the game offers into its `states/`, so a kept game
     /// played with no connection starts as it would online.
     static func fetchForOffline(romId: Int, tag: String, session: Session) async {
-        guard online(session) else { return }
+        guard await askOnline(session) else { return }
         let s = server(session)
         let mirror = SaveMirror.shared
         await SavePush.oneAtATime(romId) {
@@ -637,7 +633,7 @@ final class GameSaves {
         facts.tag = tag
         var rows: [RommAsset] = []
         var known = false
-        if online(session) {
+        if await askOnline(session) {
             let s = server(session)
             var files = mirror.getFiles(romId)
             if files.files.isEmpty { files = (try? await s.files(romId, true)) ?? files }
@@ -697,6 +693,17 @@ final class GameSaves {
     /// writes saves, and says nothing.
     static func online(_ session: Session) -> Bool {
         !NetworkMonitor.shared.isOffline && session.serverHasChannels
+    }
+
+    /// The same, asking the server's heartbeat first when the phone does not
+    /// know yet whether it has save channels: right after an install, or a
+    /// new server, the first screens would otherwise read saves as offline
+    /// until the heartbeat came back.
+    static func askOnline(_ session: Session) async -> Bool {
+        if !session.serverHasChannels, !NetworkMonitor.shared.isOffline {
+            await session.refreshServerVersion()
+        }
+        return online(session)
     }
 
     /// The real one: RomM, through the session's client.

@@ -204,6 +204,10 @@ struct GameLaunchView: View {
                     .environmentObject(session)
             }
         }
+        .onChange(of: playingNative) { _, playing in
+            // The game just closed: what it left is the card's to show.
+            if !playing { Task { await loadSaves() } }
+        }
         .fullScreenCover(isPresented: $playingVMU) {
             if let vmuCardURL {
                 VMUPlayerView(rom: rom, cardURL: vmuCardURL)
@@ -974,15 +978,7 @@ struct GameLaunchView: View {
         }
 
         let platform = NativePlatform.platform(for: rom, canonicalSlug: canonicalSlug)
-
-        // The save and the three states, the TV's game page's: RomM's with a
-        // connection, else as last seen and the phone's own (GameSaves). The
-        // VMU card has its own row below.
-        if platform != .dreamcast, let core = NativeCore.core(for: rom, canonicalSlug: canonicalSlug) {
-            savedLine = await GameSaves.savedLine(romId: rom.id, tag: core.emulatorTag, session: session)
-            states = platform?.supportsSaveStates == true
-                ? await GameSaves.offeredStates(romId: rom.id, tag: core.emulatorTag, session: session) : []
-        }
+        await loadSaves()
 
         // The VMU row: the newest card brought down by the start's own rule
         // when a connection exists, then detection parses whatever card would
@@ -997,6 +993,21 @@ struct GameLaunchView: View {
         }
 
         loading = false
+    }
+
+    /// The save and the three states, the TV's game page's: RomM's with a
+    /// connection, else as last seen and the phone's own (GameSaves). Read
+    /// when the screen opens and again each time a game closes, so the card
+    /// says what the game just left. The VMU card has its own row.
+    private func loadSaves() async {
+        let platform = NativePlatform.platform(for: rom, canonicalSlug: canonicalSlug)
+        guard platform != .dreamcast, let core = NativeCore.core(for: rom, canonicalSlug: canonicalSlug) else { return }
+        let line = await GameSaves.savedLine(romId: rom.id, tag: core.emulatorTag, session: session)
+        let offered = platform?.supportsSaveStates == true
+            ? await GameSaves.offeredStates(romId: rom.id, tag: core.emulatorTag, session: session) : []
+        savedLine = line
+        states = offered
+        if let chosen = selectedState, !offered.contains(chosen) { selectedState = nil }
     }
 
     /// Hand-rolled swipe-to-dismiss: `fullScreenCover`, unlike `sheet`, has

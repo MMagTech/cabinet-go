@@ -188,6 +188,7 @@ struct NativePlayerView: View {
                         }
                         if showsControls {
                             TouchControlPad(items: layoutItems(landscape: isLandscape), send: handleInput, sendStick: handleStick, system: controlLayout.system, opacity: controlOpacity)
+                                .modifier(SetBackWhilePaused(paused: menuVisible))
                         }
                     }
                     .frame(width: geometry.size.width, height: geometry.size.height)
@@ -229,6 +230,7 @@ struct NativePlayerView: View {
                         // arcade board shrinks those gutters until they
                         // really are sitting on it.
                         TouchControlPad(items: layoutItems(landscape: false), send: handleInput, sendStick: handleStick, system: controlLayout.system, material: RaisedControls.isOn, opacity: controlOpacity)
+                            .modifier(SetBackWhilePaused(paused: menuVisible))
                             .frame(height: padHeight)
                             .frame(maxHeight: .infinity, alignment: .bottom)
                     }
@@ -241,11 +243,7 @@ struct NativePlayerView: View {
             }
             .overlay(alignment: .top) {
                 if let notice {
-                    Text(notice)
-                        .font(.footnote.weight(.semibold))
-                        .padding(.horizontal, 14)
-                        .padding(.vertical, 8)
-                        .background(.regularMaterial, in: Capsule())
+                    StartNotice(words: notice, problem: notice == GameSaves.couldNotUseNewest)
                         .padding(.top, 12)
                         .transition(.opacity)
                         .allowsHitTesting(false)
@@ -547,6 +545,48 @@ struct NativePlayerView: View {
         let seconds = min(max(1.5 + 0.06 * Double(words.count), 2.5), 4.5)
         try? await Task.sleep(for: .seconds(seconds))
         withAnimation { notice = nil }
+    }
+}
+
+/// THE TOUCH CONTROLS STEP BACK WHILE THE GAME IS PAUSED: they do nothing
+/// then, and dimmed behind the pause menu they read as part of its card
+/// (the D-pad met the card's edge in portrait). They fade out with the
+/// menu and back with Resume; nothing moves.
+private struct SetBackWhilePaused: ViewModifier {
+    let paused: Bool
+
+    func body(content: Content) -> some View {
+        content
+            .opacity(paused ? 0 : 1)
+            .allowsHitTesting(!paused)
+            .animation(.easeOut(duration: 0.2), value: paused)
+    }
+}
+
+/// WHAT A START SAYS OVER THE GAME (GameSaves.notice), the TV's pill in the
+/// phone's own look: iOS's thick glass in its dark form, so it reads the
+/// same over a Game Boy's white screen and a dark one, and the TV's dot
+/// before the words: white for news, the TV's amber for a save it could not
+/// use (CabinetOS's notice.cpp).
+private struct StartNotice: View {
+    let words: String
+    let problem: Bool
+
+    var body: some View {
+        HStack(spacing: 8) {
+            Circle()
+                .fill(problem ? Color(red: 1.0, green: 0xC4 / 255.0, blue: 0x57 / 255.0) : Color.white.opacity(0.7))
+                .frame(width: 7, height: 7)
+            Text(words)
+                .font(.footnote.weight(.semibold))
+                .foregroundStyle(.white)
+        }
+        .padding(.horizontal, 14)
+        .padding(.vertical, 9)
+        .background(.ultraThickMaterial, in: Capsule())
+        .overlay(Capsule().strokeBorder(Color.white.opacity(0.14), lineWidth: 0.5))
+        .environment(\.colorScheme, .dark)
+        .shadow(color: .black.opacity(0.35), radius: 10, y: 4)
     }
 }
 
