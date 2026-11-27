@@ -38,6 +38,10 @@ struct RommApp: App {
                     cardURL: FileManager.default.temporaryDirectory.appendingPathComponent("skin-bench-card.bin")
                 )
                 .environmentObject(session)
+            } else if ProcessInfo.processInfo.arguments.contains("-cabinetPauseMenuBench") {
+                // The pause menu's fade on its own (PauseMenuBench).
+                PauseMenuBench()
+                    .preferredColorScheme(.dark)
             } else if ProcessInfo.processInfo.arguments.contains("-cabinetNoticeGallery") {
                 // The game's notices on their own (NoticeGallery), for
                 // judging them in a simulator, where no game can start.

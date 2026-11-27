@@ -240,6 +240,7 @@ struct NativePlayerView: View {
                     PauseMenu.backdrop
                     pauseMenu
                         .transition(PauseMenu.cardArrives)
+                        .zIndex(PauseMenu.cardLayer)
                 }
             }
             .overlay(alignment: .top) {
@@ -567,17 +568,34 @@ struct NativePlayerView: View {
 /// (VMUPlayerView) uses the same, so every player's menu comes and goes
 /// alike.
 enum PauseMenu {
-    static let fade = Animation.timingCurve(0.65, 0, 0.35, 1, duration: 0.62)
+    static var fade: Animation { .timingCurve(0.65, 0, 0.35, 1, duration: 0.62 * slow) }
+    /// `-cabinetMenuSlow 10` in a debug build stretches the fade so it can be
+    /// watched in slow motion (PauseMenuBench), as the TV's `--menu-fade`.
+    private static var slow: Double {
+        #if DEBUG
+        let asked = UserDefaults.standard.double(forKey: "cabinetMenuSlow")
+        return asked > 0 ? asked : 1
+        #else
+        return 1
+        #endif
+    }
     static let dim = 0.7
     /// The TV's 24 of its 1,080 rows, near enough the same share of a
     /// phone's height.
     static let rise: CGFloat = 20
 
+    /// Each with its own place in the stack: a view leaving a ZStack with
+    /// no zIndex is dropped at once instead of animated out, so Resume
+    /// cut the menu away in one frame (photographed in PauseMenuBench,
+    /// 2026-11-26).
     static var backdrop: some View {
         Color.black.opacity(dim)
             .ignoresSafeArea()
             .transition(.opacity)
+            .zIndex(1)
     }
+
+    static let cardLayer: Double = 2
 
     static var cardArrives: AnyTransition {
         .opacity.combined(with: .offset(y: rise))
@@ -585,10 +603,17 @@ enum PauseMenu {
 }
 
 extension View {
-    /// The pause menu's card: iOS's material with a light edge and a shadow.
+    /// The pause menu's card, SOLID, NOT GLASS, as the TV's (CabinetOS's
+    /// pausemenu.cpp): a dark fill with a light edge and a shadow, drawn as
+    /// one flattened picture so the whole card fades as one. With iOS's
+    /// material and each piece fading on its own, the blue Resume button
+    /// arrived well ahead of the card and the backdrop (photographed in
+    /// PauseMenuBench, 2026-11-26). Always dark, like the game around it.
     func pauseMenuCard() -> some View {
-        background(.regularMaterial, in: .rect(cornerRadius: 20))
+        background(Color(white: 0.165), in: .rect(cornerRadius: 20))
             .overlay(RoundedRectangle(cornerRadius: 20).strokeBorder(Color.white.opacity(0.18), lineWidth: 0.5))
+            .environment(\.colorScheme, .dark)
+            .compositingGroup()
             .shadow(color: .black.opacity(0.4), radius: 16, y: 6)
     }
 }
@@ -642,6 +667,71 @@ struct GameNotice: View {
 }
 
 #if DEBUG
+/// The pause menu coming and going over a Game Boy's white screen and a
+/// stand-in D-pad, on its own (`-cabinetPauseMenuBench`, RommApp), so its
+/// fade can be watched and photographed in a simulator, where no game can
+/// start; `-cabinetMenuSlow 10` slows it. The card is built the way the
+/// player's is: the same modifiers and the same button styles.
+struct PauseMenuBench: View {
+    @State private var shown = false
+
+    var body: some View {
+        ZStack {
+            VStack(spacing: 0) {
+                Color(white: 0.97)
+                ZStack {
+                    Color.black
+                    RoundedRectangle(cornerRadius: 8)
+                        .fill(Color(white: 0.22))
+                        .frame(width: 150, height: 50)
+                    RoundedRectangle(cornerRadius: 8)
+                        .fill(Color(white: 0.22))
+                        .frame(width: 50, height: 150)
+                }
+            }
+            .ignoresSafeArea()
+            if shown {
+                PauseMenu.backdrop
+                card.transition(PauseMenu.cardArrives).zIndex(PauseMenu.cardLayer)
+            }
+        }
+        .task {
+            while !Task.isCancelled {
+                try? await Task.sleep(for: .seconds(2))
+                withAnimation(PauseMenu.fade) { shown.toggle() }
+                try? await Task.sleep(for: .seconds(12))
+            }
+        }
+    }
+
+    private var card: some View {
+        VStack(spacing: 18) {
+            VStack(spacing: 4) {
+                Text("Pokemon Red Version").font(.headline).lineLimit(1)
+                Text("Paused").font(.caption).foregroundStyle(.secondary)
+            }
+            VStack(spacing: 10) {
+                Button(role: .destructive) {} label: {
+                    Label("Quit", systemImage: "xmark").frame(maxWidth: .infinity).padding(.vertical, 6)
+                }
+                .buttonStyle(.bordered)
+                Button {} label: {
+                    Label("Save state", systemImage: "square.and.arrow.down").frame(maxWidth: .infinity).padding(.vertical, 6)
+                }
+                .buttonStyle(.bordered)
+                Button {} label: {
+                    Label("Resume", systemImage: "play.fill").frame(maxWidth: .infinity).padding(.vertical, 6)
+                }
+                .buttonStyle(.borderedProminent)
+            }
+        }
+        .frame(maxWidth: 280)
+        .padding(24)
+        .pauseMenuCard()
+        .padding(40)
+    }
+}
+
 /// The game's notices on their own, for judging them without starting a
 /// game (`-cabinetNoticeGallery`, RommApp): one of each tone over a Game
 /// Boy's white screen and over a dark one, where the player draws them.

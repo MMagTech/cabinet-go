@@ -80,7 +80,7 @@ struct VMUPlayerView: View {
                 if menuVisible {
                     PauseMenu.backdrop
                         .onTapGesture { closeMenu() }
-                    menu.transition(PauseMenu.cardArrives)
+                    menu.transition(PauseMenu.cardArrives).zIndex(PauseMenu.cardLayer)
                 }
             }
         }
