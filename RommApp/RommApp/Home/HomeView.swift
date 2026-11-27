@@ -411,11 +411,12 @@ struct HomeView: View {
                             .foregroundStyle(.secondary)
                     }
                     Spacer(minLength: 0)
+                    // Holds the Resume capsule's exact room, at any text
+                    // size, so a long title ends in an ellipsis short of
+                    // it. The real button is laid over this spot below.
+                    resumeCapsule(wide: wide).hidden()
                 }
-                .padding(.horizontal, wide ? 12 : 16)
-                // Room for the play button laid over the band's end, so a
-                // long title stops short of it.
-                .padding(.trailing, Self.resumeButtonSize + 8)
+                .padding(.horizontal, Self.bandInset(wide: wide))
                 .padding(.vertical, wide ? 10 : 12)
                 .frame(maxWidth: .infinity)
                 .frame(height: bandHeight)
@@ -456,41 +457,49 @@ struct HomeView: View {
         // still opens that screen, which is where you go to pick a
         // different state, change the core, or export.
         //
-        // A round play button at the end of the band, the way Music and
-        // Podcasts put play beside a title, not a labelled pill on the
-        // art: the pill sat over the cover it was meant to show off. Laid
-        // over the card rather than inside it, because a button inside
-        // another button's label does not reliably get its own taps.
+        // A Resume capsule at the end of the band, beside the game's name,
+        // the way the TV app offers Resume, not a pill on the art: that
+        // sat over the cover it was meant to show off. In the text's own
+        // colour, so it never fights the cover's. Laid over the card
+        // rather than inside it, because a button inside another button's
+        // label does not reliably get its own taps.
         .overlay(alignment: .bottomTrailing) {
             Button {
                 Task { await beginResume(rom) }
             } label: {
-                ZStack {
-                    Circle().fill(Color.accentColor)
-                    if preparingResume {
-                        ProgressView().tint(.white)
-                    } else {
-                        Image(systemName: "play.fill")
-                            .font(.system(size: Self.resumeButtonSize * 0.4, weight: .semibold))
-                            .foregroundStyle(.white)
-                            // The triangle's weight sits left of its box;
-                            // nudged so it reads as centred in the circle.
-                            .offset(x: Self.resumeButtonSize * 0.04)
-                    }
-                }
-                .frame(width: Self.resumeButtonSize, height: Self.resumeButtonSize)
-                .contentShape(Circle())
+                resumeCapsule(wide: wide)
+                    // A taller hit area than the capsule draws, so a thumb
+                    // need not land on it exactly.
+                    .padding(Self.resumeHitMargin)
+                    .contentShape(Rectangle())
             }
             .buttonStyle(.plain)
             .disabled(preparingResume)
-            .accessibilityLabel("Resume")
             .frame(height: heroBandHeight(wide: wide))
-            .padding(.trailing, wide ? 10 : 14)
+            .padding(.trailing, Self.bandInset(wide: wide) - Self.resumeHitMargin)
         }
     }
 
-    /// The hero's play button: the smallest comfortable touch target.
-    private static let resumeButtonSize: CGFloat = 44
+    private static func bandInset(wide: Bool) -> CGFloat { wide ? 12 : 16 }
+    private static let resumeHitMargin: CGFloat = 6
+
+    /// The Resume capsule's face, drawn twice: hidden in the band to hold
+    /// its room, and as the button over that spot. The spinner replaces
+    /// the words without changing the capsule's size.
+    private func resumeCapsule(wide: Bool) -> some View {
+        Label("Resume", systemImage: "play.fill")
+            .font((wide ? Font.footnote : .subheadline).weight(.semibold))
+            .foregroundStyle(.background)
+            .opacity(preparingResume ? 0 : 1)
+            .overlay {
+                if preparingResume {
+                    ProgressView().tint(Color(uiColor: .systemBackground))
+                }
+            }
+            .padding(.horizontal, wide ? 10 : 12)
+            .padding(.vertical, wide ? 6 : 7)
+            .background(.primary, in: .capsule)
+    }
 
     private func consumeQuickAction() {
         guard let action = quickActions.pending else { return }
