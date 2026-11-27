@@ -114,7 +114,7 @@ struct NativePlayerView: View {
 
     private func openMenu() {
         renderer.paused = true
-        menuVisible = true
+        withAnimation(PauseMenu.fade) { menuVisible = true }
         // Say so on the television, which is still showing the frozen
         // frame. Harmless with no television attached.
         ExternalDisplay.shared.isPaused = true
@@ -144,7 +144,7 @@ struct NativePlayerView: View {
     }
 
     private func closeMenu() {
-        menuVisible = false
+        withAnimation(PauseMenu.fade) { menuVisible = false }
         renderer.paused = false
         ExternalDisplay.shared.isPaused = false
     }
@@ -187,7 +187,7 @@ struct NativePlayerView: View {
                         }
                         if showsControls {
                             TouchControlPad(items: layoutItems(landscape: isLandscape), send: handleInput, sendStick: handleStick, system: controlLayout.system, opacity: controlOpacity)
-                                .modifier(SetBackWhilePaused(paused: menuVisible))
+                                .allowsHitTesting(!menuVisible)
                         }
                     }
                     .frame(width: geometry.size.width, height: geometry.size.height)
@@ -229,7 +229,7 @@ struct NativePlayerView: View {
                         // arcade board shrinks those gutters until they
                         // really are sitting on it.
                         TouchControlPad(items: layoutItems(landscape: false), send: handleInput, sendStick: handleStick, system: controlLayout.system, material: RaisedControls.isOn, opacity: controlOpacity)
-                            .modifier(SetBackWhilePaused(paused: menuVisible))
+                            .allowsHitTesting(!menuVisible)
                             .frame(height: padHeight)
                             .frame(maxHeight: .infinity, alignment: .bottom)
                     }
@@ -238,6 +238,7 @@ struct NativePlayerView: View {
 
                 if menuVisible {
                     pauseMenu
+                        .transition(.opacity)
                 }
             }
             .overlay(alignment: .top) {
@@ -405,7 +406,7 @@ struct NativePlayerView: View {
     /// trails, in the spot a reaching thumb naturally lands.
     private var pauseMenu: some View {
         ZStack {
-            Color.black.opacity(0.55)
+            Color.black.opacity(PauseMenu.dim)
                 .ignoresSafeArea()
             VStack(spacing: 18) {
                 VStack(spacing: 4) {
@@ -476,7 +477,7 @@ struct NativePlayerView: View {
             }
             .frame(maxWidth: 280)
             .padding(24)
-            .background(.regularMaterial, in: .rect(cornerRadius: 20))
+            .pauseMenuCard()
             .padding(40)
             .disabled(menuBusy)
         }
@@ -551,18 +552,27 @@ struct NativePlayerView: View {
     }
 }
 
-/// THE TOUCH CONTROLS STEP BACK WHILE THE GAME IS PAUSED: they do nothing
-/// then, and dimmed behind the pause menu they read as part of its card
-/// (the D-pad met the card's edge in portrait). They fade out with the
-/// menu and back with Resume; nothing moves.
-private struct SetBackWhilePaused: ViewModifier {
-    let paused: Bool
+/// HOW THE PAUSE MENU COMES AND GOES. Nothing else on screen moves or
+/// leaves: the touch controls stay where they are, under a backdrop dark
+/// enough that they read as background, and the card has a light edge and
+/// a shadow so it never reads as one shape with the D-pad it can sit over
+/// in portrait (seen on an iPhone Air in Pokemon Red). The backdrop and the
+/// card fade in together and out together. The controls fading out with
+/// the menu instead was tried on 2026-11-26 and looked abrupt: they left,
+/// and came back after the game was already running again. The VMU
+/// player's menu (VMUPlayerView) uses the same, so every player's menu
+/// comes and goes alike.
+enum PauseMenu {
+    static let fade = Animation.easeOut(duration: 0.2)
+    static let dim = 0.7
+}
 
-    func body(content: Content) -> some View {
-        content
-            .opacity(paused ? 0 : 1)
-            .allowsHitTesting(!paused)
-            .animation(.easeOut(duration: 0.2), value: paused)
+extension View {
+    /// The pause menu's card: iOS's material with a light edge and a shadow.
+    func pauseMenuCard() -> some View {
+        background(.regularMaterial, in: .rect(cornerRadius: 20))
+            .overlay(RoundedRectangle(cornerRadius: 20).strokeBorder(Color.white.opacity(0.18), lineWidth: 0.5))
+            .shadow(color: .black.opacity(0.4), radius: 16, y: 6)
     }
 }
 

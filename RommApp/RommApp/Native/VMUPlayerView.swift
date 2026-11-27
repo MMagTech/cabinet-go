@@ -77,7 +77,7 @@ struct VMUPlayerView: View {
                 actionButtons(m)
                 bottomRow(m)
 
-                if menuVisible { menu }
+                if menuVisible { menu.transition(.opacity) }
             }
         }
         .ignoresSafeArea()
@@ -155,11 +155,11 @@ struct VMUPlayerView: View {
     private func openMenu() {
         guard !menuVisible else { return }
         renderer.paused = true
-        menuVisible = true
+        withAnimation(PauseMenu.fade) { menuVisible = true }
     }
 
     private func closeMenu() {
-        menuVisible = false
+        withAnimation(PauseMenu.fade) { menuVisible = false }
         // One blink as the menu goes, the LED's third and last job.
         ledBlink = true
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.15) { ledBlink = false }
@@ -416,7 +416,7 @@ struct VMUPlayerView: View {
     /// Cabinet reads as one app.
     private var menu: some View {
         ZStack {
-            Color.black.opacity(0.55)
+            Color.black.opacity(PauseMenu.dim)
                 .ignoresSafeArea()
                 .onTapGesture { closeMenu() }
             VStack(spacing: 18) {
@@ -449,7 +449,7 @@ struct VMUPlayerView: View {
             }
             .frame(maxWidth: 280)
             .padding(24)
-            .background(.regularMaterial, in: .rect(cornerRadius: 20))
+            .pauseMenuCard()
             .padding(40)
         }
         .environment(\.colorScheme, .dark)
