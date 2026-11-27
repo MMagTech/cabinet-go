@@ -50,9 +50,9 @@ is changed.
 
 | Core | Systems | Licence | Upstream | Commit |
 |---|---|---|---|---|
-| Gambatte | Game Boy, Game Boy Color | GPL v2 | [libretro/gambatte-libretro](https://github.com/libretro/gambatte-libretro) | `96174369b3c3` |
+| Gambatte | Game Boy, Game Boy Color | GPL v2 | [libretro/gambatte-libretro](https://github.com/libretro/gambatte-libretro) | `d9d6cd06382d` |
 | mGBA | Game Boy Advance | MPL 2.0 | [libretro/mgba](https://github.com/libretro/mgba) | `e31759b24e7a` |
-| Genesis Plus GX | Game Gear | Free for non-commercial use | [libretro/Genesis-Plus-GX](https://github.com/libretro/Genesis-Plus-GX) | `84fcf2ec8e6b` |
+| Genesis Plus GX | Game Gear | Free for non-commercial use | [libretro/Genesis-Plus-GX](https://github.com/libretro/Genesis-Plus-GX) | `a7985a9c4278` |
 | Beetle NeoPop | Neo Geo Pocket Color | GPL v2 | [libretro/beetle-ngp-libretro](https://github.com/libretro/beetle-ngp-libretro) | `a50d5ac288a8` |
 | melonDS | Nintendo DS | GPL v3 | [libretro/melonDS](https://github.com/libretro/melonDS) | `66b5d2634cd0` |
 | DraStic FreeBIOS | DS BIOS replacement inside melonDS | BSD 2-clause | bundled in the fork above | `66b5d2634cd0` |
