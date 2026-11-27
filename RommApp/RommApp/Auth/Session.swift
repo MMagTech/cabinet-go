@@ -78,6 +78,18 @@ final class Session: ObservableObject {
 
     // MARK: Restoring a previous pairing
 
+    /// Asks RomM which version it is now. The version used to be read
+    /// only when an address was typed, so an update to the server never
+    /// reached Settings: a phone paired under 5.3.1 went on saying 5.3.1
+    /// against a 5.5 server. The stored value stays for offline. The
+    /// heartbeat needs no sign-in and fails quietly offline.
+    func refreshServerVersion() async {
+        guard let client, let beat = try? await client.heartbeat() else { return }
+        guard beat.system.version != serverVersion else { return }
+        serverVersion = beat.system.version
+        UserDefaults.standard.set(beat.system.version, forKey: versionKey)
+    }
+
     private func restore() {
         guard let stored = UserDefaults.standard.string(forKey: serverKey),
               let url = URL(string: stored)
