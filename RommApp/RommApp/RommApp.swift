@@ -102,11 +102,6 @@ struct RommApp: App {
             // A widget press or a Spotlight result arrives here as a
             // cabinet:// URL. See DeepLink.swift.
             .handlesGameDeepLinks(session: session)
-            .task {
-                // A native core crash takes the whole app, so the only
-                // moment it can be counted is the next launch.
-                NativeSessionMarker.settleAtLaunch()
-            }
     }
 
     private func syncIfOnline() {

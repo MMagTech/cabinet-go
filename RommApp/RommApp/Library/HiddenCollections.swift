@@ -2,8 +2,8 @@ import SwiftUI
 
 /// Collections hidden from this phone's Library, by id.
 ///
-/// Stored on the phone only, the way the Incompatible mark is: RomM, the
-/// console and every other device keep the collection exactly as it is.
+/// Stored on the phone only: RomM, the console and every other device keep
+/// the collection exactly as it is.
 /// The reason it exists is a collection that is right for the console and
 /// thin here, one or two games once the Library keeps only what the phone
 /// plays.

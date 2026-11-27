@@ -1,122 +1,11 @@
 import SwiftUI
 
-/// Which games do not work on this phone, and what the app has noticed.
-///
-/// Some games simply do not survive here. A core can run a game too slowly
-/// without its recompiler, which iOS forbids, and a game can be perfectly
-/// emulated and still no fun to play. None of that is knowable from RomM,
-/// which models a library rather than a device, and none of it is true of
-/// the library generally: the same ROM may be fine on a desktop. So the
-/// mark is local, per device, and per ROM.
-///
-/// Two things feed it. Someone can say so directly, which covers judgement
-/// the app cannot make, like a game being technically fine and too slow to
-/// enjoy. And the app counts how often each game took the player down
-/// mid-play (`NativeSessionMarker`), because after the third time that is
-/// evidence worth offering rather than a thing to keep quiet about.
-///
-/// An object rather than a namespace of statics so that marking a game
-/// redraws every shelf and list showing it. Defaults are not observable,
-/// and a view reading them has no way to know they changed.
-@MainActor
-final class Compatibility: ObservableObject {
-    static let shared = Compatibility()
+// What a game's cover and row carry besides the art, everywhere a game is
+// shown (Home's rails, the Library, Search): the favorite star, the
+// download ring, and the long-press menu.
 
-    private let markedKey = "com.mmagtech.RommApp.markedUnplayable"
-
-    @Published private(set) var marked: Set<Int>
-
-    private init() {
-        marked = Set(UserDefaults.standard.array(forKey: markedKey) as? [Int] ?? [])
-    }
-
-    func isMarked(_ romId: Int) -> Bool { marked.contains(romId) }
-
-    func setMarked(_ isMarked: Bool, romId: Int) {
-        if isMarked { marked.insert(romId) } else { marked.remove(romId) }
-        UserDefaults.standard.set(Array(marked), forKey: markedKey)
-    }
-
-    // MARK: What the app noticed
-
-    /// The key keeps its old "nativeCrashes" name, from when the web
-    /// player kept a count of its own, so counts already on a phone carry
-    /// over.
-    private func crashKey(_ romId: Int) -> String {
-        "com.mmagtech.RommApp.nativeCrashes.\(romId)"
-    }
-
-    func recordCrash(romId: Int) {
-        UserDefaults.standard.set(crashes(romId: romId) + 1, forKey: crashKey(romId))
-    }
-
-    func crashes(romId: Int) -> Int {
-        UserDefaults.standard.integer(forKey: crashKey(romId))
-    }
-
-    /// Enough deaths to be worth mentioning, and not already marked. Three
-    /// is the threshold because one is bad luck and two is a coincidence.
-    func shouldSuggestMark(romId: Int) -> Bool {
-        !isMarked(romId) && crashes(romId: romId) >= 3
-    }
-}
-
-/// Dims a cover and badges it when the game is marked.
-///
-/// A badge and a light opacity drop is how this reads as set aside, and it
-/// survives any cover art; a badge alone would vanish into a busy one. The
-/// badge sits on a material circle for the same reason.
-private struct CompatibilityBadge: ViewModifier {
-    @ObservedObject private var compatibility = Compatibility.shared
-    let romId: Int
-    /// Badges scale with their tile: a 100 point shelf cover and a full
-    /// width grid cell should not carry the same size glyph.
-    var compact = false
-
-    func body(content: Content) -> some View {
-        let marked = compatibility.isMarked(romId)
-        return content
-            // Receding, not disabled. Draining the colour out of cover art
-            // says the game is dead, which contradicts the only thing this
-            // mark actually means: it still plays, someone just decided it
-            // plays badly here. iOS dims controls that cannot be used; it
-            // does not desaturate content that works. The badge carries the
-            // meaning, and a light touch of opacity is enough to let a
-            // marked tile fall behind its neighbours at a glance.
-            .opacity(marked ? 0.72 : 1)
-            .overlay(alignment: .topTrailing) {
-                if marked {
-                    Image(systemName: "exclamationmark.triangle.fill")
-                        .font(compact ? .caption2 : .footnote)
-                        // Muted rather than full orange. This sits on top
-                        // of cover art, where a fully saturated warning
-                        // colour competes with the artwork instead of
-                        // annotating it, and the badge only has to be
-                        // noticed, not obeyed.
-                        .foregroundStyle(.orange.opacity(0.7))
-                        // Sit the triangle so its three corners are the
-                        // same distance from the ring, which is what the
-                        // eye is actually measuring here.
-                        //
-                        // A glyph is centred by its bounding box, but an
-                        // equilateral triangle's circumcentre, the point
-                        // its corners are equidistant from, is a sixth of
-                        // the triangle's height BELOW that box's centre.
-                        // So box centring parks the corners off by exactly
-                        // that much, and the correction is up by h/6.
-                        .offset(y: compact ? -1.5 : -2)
-                        .padding(compact ? 4 : 6)
-                        .background(.regularMaterial, in: .circle)
-                        .padding(compact ? 4 : 6)
-                }
-            }
-    }
-}
-
-/// A star in the corner opposite the compatibility badge, shown only when
-/// the game is favorited. Reads at a glance in a grid without opening
-/// anything, the same job the compatibility triangle does for the other
-/// question a cover alone cannot answer.
+/// A star in the top-leading corner, shown only when the game is
+/// favorited. Reads at a glance in a grid without opening anything.
 private struct FavoriteBadge: ViewModifier {
     @EnvironmentObject private var session: Session
     let romId: Int
@@ -198,14 +87,12 @@ private struct DownloadProgressRing: View {
 /// belongs in this one place. Download joined it the same way: deciding to
 /// keep a game used to mean opening its full launch screen for one toggle.
 private struct GameContextMenu: ViewModifier {
-    @ObservedObject private var compatibility = Compatibility.shared
     @ObservedObject private var keptStore = KeptGameStore.shared
     @EnvironmentObject private var session: Session
     let rom: Rom
 
     func body(content: Content) -> some View {
         let romId = rom.id
-        let marked = compatibility.isMarked(romId)
         let favorited = session.isFavorite(romId: romId)
         return content.contextMenu {
             Button {
@@ -214,14 +101,6 @@ private struct GameContextMenu: ViewModifier {
                 Label(
                     favorited ? "Unfavorite" : "Favorite",
                     systemImage: favorited ? "heart.slash" : "heart"
-                )
-            }
-            Button {
-                compatibility.setMarked(!marked, romId: romId)
-            } label: {
-                Label(
-                    marked ? "Compatible" : "Incompatible",
-                    systemImage: marked ? "checkmark.circle" : "exclamationmark.triangle"
                 )
             }
             // Same eligibility as the launch screen's Storage card, same
@@ -262,21 +141,14 @@ private struct GameContextMenu: ViewModifier {
 }
 
 extension View {
-    func compatibilityBadge(romId: Int, compact: Bool = false) -> some View {
-        modifier(CompatibilityBadge(romId: romId, compact: compact))
-    }
-
     func favoriteBadge(romId: Int, compact: Bool = false) -> some View {
         modifier(FavoriteBadge(romId: romId, compact: compact))
     }
 
-    /// A small ring badge, matching `compatibilityBadge`/`favoriteBadge`'s
-    /// own corner-circle styling, visible only while this game is
-    /// actively downloading. The bottom-trailing corner is free:
-    /// favorite already owns top-leading and compatibility top-trailing,
-    /// and a game can genuinely be both marked incompatible and worth
-    /// keeping for another emulator at once, so this needs its own
-    /// corner rather than risking a collision with either.
+    /// A small ring badge, matching `favoriteBadge`'s own corner-circle
+    /// styling, visible only while this game is actively downloading, in
+    /// the bottom-trailing corner, clear of the star in the top-leading
+    /// one.
     func downloadBadge(romId: Int, compact: Bool = false) -> some View {
         overlay(alignment: .bottomTrailing) {
             if KeptGameStore.shared.downloading[romId] != nil {
