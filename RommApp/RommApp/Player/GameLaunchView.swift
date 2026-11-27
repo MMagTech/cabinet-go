@@ -13,7 +13,6 @@ import SwiftUI
 /// value is ignored and its page falls back to its own defaults, which is
 /// exactly the behaviour before this screen existed.
 struct GameLaunchView: View {
-    @ObservedObject private var compatibility = Compatibility.shared
     @AppStorage(PlatformLabelSource.key) private var labelSourceRaw = PlatformLabelSource.platformName.rawValue
     private var labelSource: PlatformLabelSource {
         PlatformLabelSource(rawValue: labelSourceRaw) ?? .platformName
@@ -143,7 +142,6 @@ struct GameLaunchView: View {
                             // supported systems keep the live button.
                             downloadStatusCard
                             vmuCard
-                            compatibilityCard
                             resetSettingsCard
                             if !states.isEmpty || savedLine != nil { resumeCard }
                         }
@@ -722,39 +720,6 @@ struct GameLaunchView: View {
             }
             vmuCardURL = url
             playingVMU = true
-        }
-    }
-
-    /// Says what is known about this game running here, and never more
-    /// than one thing: either it has been marked, or the app has watched
-    /// it die enough times to raise the subject. Silent otherwise, which
-    /// is almost always.
-    @ViewBuilder
-    private var compatibilityCard: some View {
-        if compatibility.isMarked(rom.id) {
-            LaunchCard(title: "Marked as incompatible", systemImage: "exclamationmark.triangle") {
-                VStack(alignment: .leading, spacing: 10) {
-                    Text("You marked this game as incompatible on this phone. It will still play if you want to try again.")
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
-                    Button("Mark as compatible") {
-                        compatibility.setMarked(false, romId: rom.id)
-                    }
-                    .font(.callout)
-                }
-            }
-        } else if compatibility.shouldSuggestMark(romId: rom.id) {
-            LaunchCard(title: "This game keeps closing", systemImage: "exclamationmark.triangle") {
-                VStack(alignment: .leading, spacing: 10) {
-                    Text("It has closed itself \(compatibility.crashes(romId: rom.id)) times on this phone while playing. Some games do not run well here.")
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
-                    Button("Mark as incompatible") {
-                        compatibility.setMarked(true, romId: rom.id)
-                    }
-                    .font(.callout)
-                }
-            }
         }
     }
 

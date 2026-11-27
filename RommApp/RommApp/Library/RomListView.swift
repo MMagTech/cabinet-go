@@ -46,7 +46,6 @@ struct RomListView: View {
     let source: Source
 
     @EnvironmentObject private var session: Session
-    @ObservedObject private var compatibility = Compatibility.shared
     @ObservedObject private var keptStore = KeptGameStore.shared
     @AppStorage(PlatformLabelSource.key) private var labelSourceRaw = PlatformLabelSource.platformName.rawValue
     private var labelSource: PlatformLabelSource {
@@ -203,7 +202,6 @@ struct RomListView: View {
                                 .aspectRatio(3.0 / 4.0, contentMode: .fit)
                                 .clipShape(.rect(cornerRadius: 10))
                                     .contentShape(Rectangle())
-                                .compatibilityBadge(romId: rom.id)
                                 .favoriteBadge(romId: rom.id)
                                 .downloadBadge(romId: rom.id)
 
@@ -211,9 +209,6 @@ struct RomListView: View {
                                 .font(.caption)
                                 .lineLimit(1)
                                 .frame(maxWidth: .infinity, alignment: .leading)
-                                .foregroundStyle(
-                                    compatibility.isMarked(rom.id) ? .secondary : .primary
-                                )
                         }
                     }
                     .buttonStyle(.plain)
@@ -237,9 +232,6 @@ struct RomListView: View {
                         HStack(spacing: 8) {
                             Text(rom.displayName)
                                 .lineLimit(1)
-                                .foregroundStyle(
-                                    compatibility.isMarked(rom.id) ? .secondary : .primary
-                                )
                             Spacer(minLength: 0)
                             // Leftmost of the three, and before the star
                             // rather than after it: transient status reads
@@ -254,11 +246,6 @@ struct RomListView: View {
                                 Image(systemName: "heart.fill")
                                     .font(.caption)
                                     .foregroundStyle(.pink)
-                            }
-                            if compatibility.isMarked(rom.id) {
-                                Image(systemName: "exclamationmark.triangle.fill")
-                                    .font(.caption)
-                                    .foregroundStyle(.orange)
                             }
                         }
                         .frame(maxWidth: .infinity, alignment: .leading)

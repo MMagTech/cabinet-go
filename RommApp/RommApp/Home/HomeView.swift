@@ -11,7 +11,6 @@ import UIKit
 /// card and the rest sits beside it.
 struct HomeView: View {
     @EnvironmentObject private var session: Session
-    @ObservedObject private var compatibility = Compatibility.shared
     @ObservedObject private var networkMonitor = NetworkMonitor.shared
     @AppStorage(PlatformLabelSource.key) private var labelSourceRaw = PlatformLabelSource.platformName.rawValue
     private var labelSource: PlatformLabelSource {
@@ -616,7 +615,6 @@ struct HomeView: View {
                                     .frame(width: coverWidth, height: coverHeight)
                                     .clipShape(.rect(cornerRadius: 10))
                                     .contentShape(Rectangle())
-                                    .compatibilityBadge(romId: rom.id, compact: true)
                                     .favoriteBadge(romId: rom.id, compact: true)
                                     .downloadBadge(romId: rom.id, compact: true)
                             }
@@ -627,9 +625,6 @@ struct HomeView: View {
                                 .font(.caption)
                                 .lineLimit(1)
                                 .frame(width: coverWidth, alignment: .leading)
-                                .foregroundStyle(
-                                    compatibility.isMarked(rom.id) ? .secondary : .primary
-                                )
                         }
                     }
                 }
