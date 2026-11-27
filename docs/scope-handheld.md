@@ -2,9 +2,10 @@
 
 Status: decided 2026-10-15, built in part. Steps 1 and 2 of the order
 of work below are done, the gate in part (the allowlist, the platform
-name fix, the fixed controller map and the PSP save layout), and step 4
+name fix, the fixed controller map and the PSP save layout), step 4
 in part (the webview, arcade's data and the console cores themselves;
-their code paths inside the shared files remain). This document is the plan for
+their code paths inside the shared files remain), and saves through
+RomM's save channels (below). This document is the plan for
 Cabinet 2.0 and the removals around it. Where it disagrees with an older
 scope doc or with CLAUDE.md, this document is the newer decision, and
 those files are rewritten to match in the last phase below.
@@ -104,19 +105,18 @@ found under Sonic Adventure, where anyone would look for it.
   the VMU without putting a game on it, and a card with no minigame
   would open to nothing. The check already exists, as the VMU exception
   in `PlatformSupport.canPlay`.
-- To find them: one batched `/api/saves` request for the Dreamcast rom
-  ids, keep the rows tagged `flycast-native`, fetch those cards (128 KB
-  each), look in each card's directory for a game file, and cache the
-  answer against the save row's id and `updated_at`.
+- To find them: each Dreamcast game's card, the save a start would
+  continue from under `flycast-native` (`SavePick`), looked through for
+  a game file, the answer kept against that save's content hash.
 - When no card qualifies, the platform does not appear at all.
 - The label says VMU ("Dreamcast VMU", or the VMU in place of the disc
   art), so nobody opens it expecting Dreamcast gameplay.
-- CabinetOS's Flycast uploads the card as `<stem> (Cabinet).srm` under
-  `flycast-native`, the row the VMU player already reads and writes, so
-  the Chao loop crosses between the two apps with no new work. A VMU
-  holds one minigame at a time, so each game's card is whatever was on
-  the VMU when that game was last played. Newest row wins, as one
-  physical VMU did.
+- CabinetOS's Flycast keeps the card as the game's save in its save
+  channel under `flycast-native`, the save the VMU player reads and
+  writes, so the Chao loop crosses between the two apps by the one rule
+  for every save. A VMU holds one minigame at a time, so each game's
+  card is whatever was on the VMU when that game was last played. The
+  newest card wins, as one physical VMU did.
 
 ## Platform names: the RomM 5.3.0 break
 
@@ -190,16 +190,9 @@ round. CabinetOS already builds its libretro cores at the commits in
 `docs/core-manifest.json` and writes Cabinet's tags and row names, so
 most of the contract is in place. What is left:
 
-- **PSP saves do not cross today.** CabinetOS zips entries relative to
-  `SAVEDATA` (`ULUS10002LUMINES/PARAM.SFO`) into a row named
-  `<sanitised title>.zip`; Cabinet prefixes `PSP/SAVEDATA/` and names
-  the row `<stem> (Cabinet).srm`. Cabinet changes to CabinetOS's layout
-  and name, copying its `sanitisedStem` rules and title source from
-  `frontend/src/main.cpp`. The prefixed format never reached a release
-  (it is on `dev` only, since 2026-09-17), so nothing needs migrating.
-- **RomM 5.4.0 matches overwrites on emulator tag and file name
-  together.** Before, file name alone. Two apps sharing one row must
-  send both identically, which the PSP change above also settles.
+- **Saves and states go through RomM's save channels**, the way
+  CabinetOS sends them, with the same tags, the same file names and
+  the same zip layouts (below).
 - **Option values that touch state.** Compare each handheld core's
   options with CabinetOS's `cores/options/<core>.txt` and its overrides
   in `catalog.cpp`, and adopt CabinetOS's value wherever a difference
@@ -221,26 +214,42 @@ round trip.
 
 ## RomM save channels
 
-RomM is building save channels (rommapp/romm#5198, design
-rommapp/romm#5175), which convert saves between emulators with
-[argosy-sigil](https://github.com/rommapp/argosy-sigil), keep devices
-from overwriting each other (a losing push is kept as a branch for 30
-days), and carry save states in a bank per core and slot. At the time
-of writing it is an unreviewed draft with no release date, and RomM
-5.4.0 does not include it.
+Built 2026-11-26 (step 5), the same way CabinetOS uses them since its
+2026.11.22.2 build, and on the same RomM: 5.5.0-beta.1 or newer, which
+says so in its heartbeat (`SAVE_SYNC`). On an older RomM the phone
+neither reads nor writes saves, says nothing, and sends what waited once
+the server is updated. RomM's code at that tag is the line, as its
+documentation still describes 5.4's slots.
 
-CabinetOS will move to channels alone once they are in a stable RomM
-release, without keeping the old path (MMagTech/cabinetos#346). Cabinet
-moves in the same window, or saves stop crossing. Until then both apps
-keep today's model. Cabinet issue #8 (three rotating states per game)
-is what the channels' state bank replaces, so it is not built now;
-CabinetOS revisits its own save gaps around mid-January 2027 if
-channels have not shipped, and Cabinet takes the same date.
+- **Which save a game starts from:** CabinetOS's one rule, ported whole
+  (`SavePick.swift`, from its `savepick`): the newest save RomM holds for
+  the person that the phone can use, in any channel, by when it was made.
+  Nothing is asked. A save the phone still owes is sent first and then
+  weighed. Another emulator's save is asked of RomM in the phone's form
+  and checked. RomM's rows from before channels are not read.
+- **Where it saves:** into the channel it continued from, else the
+  person's "default", made when missing; "softcore" beside a hardcore
+  one; a push RomM keeps as a branch goes on top only when the phone's
+  save was made later (`SavePush.swift`, from its `savepush`).
+- **When:** at Quit, and when the app goes to the background, since iOS
+  can end a backgrounded app with no warning. The phone's own copy is
+  written first every time; nothing changed, nothing sent. What waited
+  goes at the next foreground with a connection.
+- **States:** written on the phone first and sent inside the game's
+  snapshot. The game offers the three newest under the core's tag
+  wherever they are on RomM, so a state made on the TV is among the
+  phone's three and the other way round.
+- **Each phone is its own RomM device** (client `cabinet-go`); every
+  CabinetOS console is one device of its own.
+- **Nothing is deleted on RomM.** RomM owns looking at and deleting
+  saves; going back to an older one is "Restore as current" on RomM's
+  website.
 
-Sigil's coverage of the set: Game Boy and Game Boy Color are converted,
-clock included; PSP and the Dreamcast VMU are synced; GBA, DS, Game Gear
-and Neo Geo Pocket pass through as stored, which is fine with matching
-cores. Sigil names Neo Geo Pocket `mednafen_ngp`, not Cabinet's name.
+Sigil's coverage of the set, at the commit RomM 5.5.0-beta.1 builds in:
+Game Boy and Game Boy Color are converted, clock included; PSP and the
+Dreamcast VMU are synced; GBA, DS, Game Gear and Neo Geo Pocket pass
+through as stored, so another app's save is used only when the same
+emulator made it. Sigil names Neo Geo Pocket `mednafen_ngp`.
 
 ## Removed alongside
 
@@ -267,20 +276,22 @@ minigame player stays.
 ## Data already on phones
 
 Persisted data changes need their migration decided now, not found as
-loss later. The first launch of 2.0:
+loss later.
 
-1. Uploads anything still owed to RomM for a leaving system: queued
-   offline states and pending memory card and NVRAM uploads. CabinetOS
-   reads them from there.
-2. Only then removes, per leaving platform: kept downloads and their
-   Files mirror entries, local memory cards, core save folders.
-3. Clears the webview's EmulatorJS cache and the dead settings: the
+Saves are not migrated (decided 2026-11-26: saves and states already on
+phones may be lost). The first start of the save channels build deletes
+the old slot model's stores: `MemoryCards/` with its `meta.json`, and
+each kept game's `pending-states` folder and cached `state.dat`,
+anything still owed in them included (`GameSaves.removeOldStores`). The
+per-game `CoreSaves/` folders stay: they are what the cores read.
+
+The first launch of 2.0 also:
+
+1. Removes, per leaving platform: kept downloads and their Files mirror
+   entries and core save folders.
+2. Clears the webview's EmulatorJS cache and the dead settings: the
    experimental cores switch, per-game player choice, the arcade core
    choice, saved controller bindings and hotkey buttons.
-
-A platform with anything still unsent keeps its files until the upload
-succeeds; offline, the cleanup waits for the next launch with a
-connection.
 
 ## Order of work
 
@@ -288,8 +299,9 @@ Each step builds, gets played on a phone, and is its own commit or
 small set of commits. The plan was to delete nothing until the gate had
 shipped and been lived with; on 2026-11-26 the deletions came first
 instead, since no phone can start a leaving system once the allowlist is
-in, and the code that sends their owed saves stays for the data
-migration.
+in. The save channels build (2026-11-26) removed the old save code with
+the leaving systems' save paths: saves on phones are not migrated (Data
+already on phones, below).
 
 1. Tag the current `dev` as `pre-handheld`.
 2. Take the tvOS and Mac targets out of the project, so later deletions

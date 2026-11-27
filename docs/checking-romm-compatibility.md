@@ -38,8 +38,10 @@ API itself can.
 | `/api/config` | `backend/endpoints/configs.py` | `backend/endpoints/responses/config.py` |
 | `/api/collections`, `/api/collections/{id}/roms` | `backend/endpoints/collections.py` | `backend/endpoints/responses/collection.py` |
 | `/api/roms`, `/api/roms/{id}` | `backend/endpoints/roms/` | `backend/endpoints/responses/rom.py` |
-| `/api/saves`, `/api/saves/{id}/content`, `/api/saves/delete` | `backend/endpoints/saves.py` | `backend/endpoints/responses/assets.py` |
-| `/api/states`, `/api/states/{id}/content`, `/api/states/delete` | `backend/endpoints/states.py` | `backend/endpoints/responses/assets.py` |
+| `/api/saves?rom_id=`, `/api/saves/{id}/content` (and `?core=` for a save in the phone's form) | `backend/endpoints/saves.py` | `backend/endpoints/responses/assets.py` |
+| `/api/states?rom_id=`, `/api/states/{id}/content` | `backend/endpoints/states.py` | `backend/endpoints/responses/assets.py` |
+| `/api/channels?rom_file_id=` | `backend/endpoints/channels.py` | `backend/endpoints/responses/snapshots.py` |
+| `/api/snapshots?channel_id=`, `POST /api/snapshots` | `backend/endpoints/snapshots.py` | `backend/endpoints/responses/snapshots.py` |
 | `/api/firmware` | `backend/endpoints/firmware.py` | `backend/endpoints/responses/firmware.py` |
 
 Everything else in RomM's API, music, netplay, streaming, tasks, sync,
@@ -63,8 +65,11 @@ not a Cabinet risk.
    A renamed response field, a parameter that became required, a changed
    default, or a route that moved, is.
 4. Cross-check anything that looks relevant against
-   `RommClient.swift` and `Session.swift` directly: does Cabinet read the
-   field that changed? Send the parameter that changed?
+   `RommClient.swift`, `Session.swift` and `RommSnapshots.swift` (which
+   reads and writes the save channels' bodies) directly: does Cabinet
+   read the field that changed? Send the parameter that changed? For the
+   save channels, also run `tools/lab/lab check saves`, whose fixtures
+   are RomM's own answers.
 
 Two real examples from this project's own history, to calibrate what
 "risky" actually looks like:

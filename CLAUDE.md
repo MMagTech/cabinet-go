@@ -117,7 +117,12 @@ looked harmless. Neither was.
 
 - Auth is RomM's device authorization flow. Not username and password, not
   cookie sharing, not a pasted token.
-- Save states are slot based because that is what RomM's asset model stores.
+- Saves and states travel through RomM 5.5's save channels, the way
+  CabinetOS sends them. The rule a start picks by and where a push goes
+  are ports of CabinetOS's `savepick` and `savepush`
+  (`Native/SavePick.swift`, `Native/SavePush.swift`); change them only in
+  step with CabinetOS, and run `tools/lab/lab check saves`, which runs
+  CabinetOS's case tables against them.
 - Control layouts are data, not code. One file per system or profile, trait keyed.
 - Touch input copies DeltaCore's approach: extended hit frames, overlapping d-pad
   rects, continuous d-pad reporting. Read their approach, do not copy their code.
