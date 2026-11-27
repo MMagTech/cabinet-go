@@ -31,6 +31,16 @@ struct LibraryScreen: View {
     /// Whether RomM has collections at all, so an empty list can say why
     /// it is empty.
     @State private var hasAnyCollection = false
+    /// Collections hidden from this phone's Library. See HiddenCollections.
+    @State private var hiddenIDs = HiddenCollections.load()
+
+    private var shownCollections: [Collection] {
+        collections.filter { !hiddenIDs.contains($0.id) }
+    }
+
+    private var hiddenCount: Int {
+        collections.count - shownCollections.count
+    }
     /// The visible height of the page, which every tile's height is
     /// worked out from. See `tileHeight`.
     @State private var visibleHeight: CGFloat = 0
@@ -270,6 +280,38 @@ struct LibraryScreen: View {
             coverKey: LibraryTileArt.key(collection: collection),
             source: .collection(collection)
         )
+        .contextMenu { hideButton(collection) }
+    }
+
+    /// On a long press, beside the way games are marked: hides the
+    /// collection from this phone's Library only.
+    private func hideButton(_ collection: Collection) -> some View {
+        Button("Hide", systemImage: "eye.slash") {
+            hiddenIDs.insert(collection.id)
+            HiddenCollections.save(hiddenIDs)
+        }
+    }
+
+    /// The way back to hidden collections, after the shown ones.
+    private var hiddenLink: some View {
+        NavigationLink {
+            HiddenCollectionsView(
+                collections: collections, counts: playableCounts, hiddenIDs: $hiddenIDs
+            )
+        } label: {
+            HStack {
+                Label("Hidden", systemImage: "eye.slash")
+                Spacer()
+                Text("\(hiddenCount)")
+                    .foregroundStyle(.secondary)
+                    .font(.callout.monospacedDigit())
+                Image(systemName: "chevron.right")
+                    .font(.caption.weight(.semibold))
+                    .foregroundStyle(.tertiary)
+            }
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
     }
 
     /// One column: a full-width tile shows its covers at their own
@@ -386,8 +428,11 @@ struct LibraryScreen: View {
                     Text(noCollectionsMessage)
                         .foregroundStyle(.secondary)
                 } else {
-                    ForEach(collections) { collection in
+                    ForEach(shownCollections) { collection in
                         collectionRow(collection)
+                    }
+                    if hiddenCount > 0 {
+                        Section { hiddenLink }
                     }
                 }
             }
@@ -415,8 +460,17 @@ struct LibraryScreen: View {
                         .padding(.horizontal)
                 } else {
                     LazyVGrid(columns: Self.tileColumns, spacing: Self.tileSpacing) {
-                        ForEach(collections) { collection in
+                        ForEach(shownCollections) { collection in
                             collectionTile(collection)
+                        }
+                        if hiddenCount > 0 {
+                            hiddenLink
+                                .padding(.horizontal, 16)
+                                .padding(.vertical, 12)
+                                .background(
+                                    Color(.secondarySystemGroupedBackground),
+                                    in: .rect(cornerRadius: 12)
+                                )
                         }
                     }
                     .padding(.horizontal, 16)
@@ -439,6 +493,7 @@ struct LibraryScreen: View {
                     .font(.callout.monospacedDigit())
             }
         }
+        .contextMenu { hideButton(collection) }
     }
 
     private var noCollectionsMessage: String {
