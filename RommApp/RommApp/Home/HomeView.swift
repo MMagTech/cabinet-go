@@ -400,8 +400,7 @@ struct HomeView: View {
                 // artwork. A material keeps the game's colours showing
                 // through (the blurred fill behind spans the whole card,
                 // this row included) while still giving the text a
-                // surface it can be read against, and it matches the
-                // Resume pill, which is already the same material.
+                // surface it can be read against.
                 HStack {
                     VStack(alignment: .leading, spacing: 2) {
                         Text(rom.displayName)
@@ -414,6 +413,9 @@ struct HomeView: View {
                     Spacer(minLength: 0)
                 }
                 .padding(.horizontal, wide ? 12 : 16)
+                // Room for the play button laid over the band's end, so a
+                // long title stops short of it.
+                .padding(.trailing, Self.resumeButtonSize + 8)
                 .padding(.vertical, wide ? 10 : 12)
                 .frame(maxWidth: .infinity)
                 .frame(height: bandHeight)
@@ -453,29 +455,42 @@ struct HomeView: View {
         // screen with a Play button on it is two. Tapping the artwork
         // still opens that screen, which is where you go to pick a
         // different state, change the core, or export.
-        .overlay(alignment: .topTrailing) {
+        //
+        // A round play button at the end of the band, the way Music and
+        // Podcasts put play beside a title, not a labelled pill on the
+        // art: the pill sat over the cover it was meant to show off. Laid
+        // over the card rather than inside it, because a button inside
+        // another button's label does not reliably get its own taps.
+        .overlay(alignment: .bottomTrailing) {
             Button {
                 Task { await beginResume(rom) }
             } label: {
-                Group {
+                ZStack {
+                    Circle().fill(Color.accentColor)
                     if preparingResume {
                         ProgressView().tint(.white)
                     } else {
-                        Label("Resume", systemImage: "play.fill")
-                            .font(.subheadline.weight(.semibold))
+                        Image(systemName: "play.fill")
+                            .font(.system(size: Self.resumeButtonSize * 0.4, weight: .semibold))
                             .foregroundStyle(.white)
+                            // The triangle's weight sits left of its box;
+                            // nudged so it reads as centred in the circle.
+                            .offset(x: Self.resumeButtonSize * 0.04)
                     }
                 }
-                .frame(minWidth: 92)
-                .padding(.horizontal, 14)
-                .padding(.vertical, 8)
-                .background(.ultraThinMaterial, in: .capsule)
+                .frame(width: Self.resumeButtonSize, height: Self.resumeButtonSize)
+                .contentShape(Circle())
             }
             .buttonStyle(.plain)
             .disabled(preparingResume)
-            .padding(12)
+            .accessibilityLabel("Resume")
+            .frame(height: heroBandHeight(wide: wide))
+            .padding(.trailing, wide ? 10 : 14)
         }
     }
+
+    /// The hero's play button: the smallest comfortable touch target.
+    private static let resumeButtonSize: CGFloat = 44
 
     private func consumeQuickAction() {
         guard let action = quickActions.pending else { return }
