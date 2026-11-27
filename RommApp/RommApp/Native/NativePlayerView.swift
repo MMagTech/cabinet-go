@@ -439,7 +439,7 @@ struct NativePlayerView: View {
                         }
                     }
                 } label: {
-                    Label("Shader", systemImage: "camera.filters")
+                    Label("Look", systemImage: "camera.filters")
                         .frame(maxWidth: .infinity)
                         .padding(.vertical, 6)
                 }

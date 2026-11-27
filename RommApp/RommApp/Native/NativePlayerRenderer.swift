@@ -115,7 +115,7 @@ final class NativePlayerRenderer: NSObject, ObservableObject, MTKViewDelegate {
             ? min(1, dsSplitProgress + step)
             : max(0, dsSplitProgress - step)
     }
-    /// The active shader, set by the pause menu's Shader row. The next
+    /// The active shader, set by the pause menu's Look row. The next
     /// `draw(in:)` picks it up immediately, which is what re-renders the
     /// frozen frame live behind the still-open menu. Published so the
     /// menu's checkmark tracks the pick without a separate state copy.

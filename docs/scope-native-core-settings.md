@@ -2,8 +2,9 @@
 
 Status: shipped 2026-08-07, with device-tested corrections recorded in
 each section below. The shader list shrank from nine to six on sight
-(see The shader list), the Shader row sits below Quit rather than
-above Resume, the default is labelled plain "None", and FBNeo's
+(see The shader list), the row sits below Quit rather than above
+Resume and is called "Look", the default is labelled "Plain" (both the
+TV's words since 2026-11-27), and FBNeo's
 options ship with source-exact values after guessed ones broke games.
 
 Originally: proposed, not started. Decided ahead of the next native core on
@@ -38,10 +39,10 @@ they behave differently and are judged differently.
 look at to judge, not a label you read. Lives in `NativePlayerView`'s
 pause menu only, `PlayerView`'s webview pause menu is untouched, since
 EmulatorJS already owns shader selection on that side and nothing here
-tries to unify or replace it. One row, labelled plainly "Shader", a
+tries to unify or replace it. One row, labelled plainly "Look", a
 native SwiftUI `Menu` rather than the app's existing `.pickerStyle(.menu)`
 pattern (see `coreCard`/`firmwareCard` in `GameLaunchView`): the row
-itself always reads "Shader", not the current pick, and the currently
+itself always reads "Look", not the current pick, and the currently
 active one carries a checkmark inside the opened menu instead. The game
 is already frozen on its current frame while the pause menu is up
 (`NativePlayerRenderer.paused`), so picking a shader re-renders that same

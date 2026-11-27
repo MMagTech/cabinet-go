@@ -14,6 +14,12 @@ import Foundation
 /// direction; despite the name collision, it is a new single-pass
 /// curved-screen effect built from scratch, not the multi-pass
 /// crt-geom.slang port dropped on 2026-08-07.
+///
+/// The pause menu calls it the Look, as the TV does, and the handheld
+/// looks carry the TV's names (CabinetOS's `frontend/src/looks.cpp`):
+/// Plain, LCD 3x, and the Game Boy's three dot matrix screens
+/// (LibretroShaders.metal says how each is drawn). SABR stays on the
+/// phone's handhelds, which the TV does not offer.
 enum NativeShader: String, CaseIterable, Identifiable {
     case sharp
     case sabr
@@ -24,7 +30,12 @@ enum NativeShader: String, CaseIterable, Identifiable {
     case crtCaligari
     case crtGeom
     case lcd
-    case gameBoy
+    /// The original Game Boy's green screen. Its raw value is the old
+    /// single "Game Boy" look's, so a Game Boy that had it keeps a dot
+    /// matrix (`current(for:)` moves a Game Boy Color to its own).
+    case dotMatrix = "gameBoy"
+    case dotMatrixPocket
+    case dotMatrixColor
     /// The VMU minigame player's screen, set by VMUPlayerView directly
     /// and offered in NO platform's menu: the skin is the whole
     /// presentation there and a shader picker is exactly the kind of
@@ -36,7 +47,7 @@ enum NativeShader: String, CaseIterable, Identifiable {
 
     var label: String {
         switch self {
-        case .sharp: return "None"
+        case .sharp: return "Plain"
         case .sabr: return "SABR"
         case .crtAperture: return "CRT (aperture)"
         case .crtEasymode: return "CRT (easymode)"
@@ -44,8 +55,10 @@ enum NativeShader: String, CaseIterable, Identifiable {
         case .crtBeam: return "CRT (beam)"
         case .crtCaligari: return "CRT (caligari)"
         case .crtGeom: return "CRT (curved)"
-        case .lcd: return "LCD"
-        case .gameBoy: return "Game Boy"
+        case .lcd: return "LCD 3x"
+        case .dotMatrix: return "Dot matrix"
+        case .dotMatrixPocket: return "Dot matrix Pocket"
+        case .dotMatrixColor: return "Dot matrix"
         case .vmuLCD: return "VMU"
         }
     }
@@ -64,7 +77,9 @@ enum NativeShader: String, CaseIterable, Identifiable {
         case .crtCaligari: return "shader_crt_caligari_fragment"
         case .crtGeom: return "shader_crt_geom_fragment"
         case .lcd: return "shader_lcd_fragment"
-        case .gameBoy: return "shader_gameboy_fragment"
+        case .dotMatrix: return "shader_dot_matrix_fragment"
+        case .dotMatrixPocket: return "shader_dot_matrix_pocket_fragment"
+        case .dotMatrixColor: return "shader_dot_matrix_color_fragment"
         case .vmuLCD: return "shader_vmu_lcd_fragment"
         }
     }
@@ -75,22 +90,25 @@ enum NativeShader: String, CaseIterable, Identifiable {
     /// look that never applied to this hardware.
     private static let handheldPlatforms: Set<NativePlatform> = [.gb, .gbc, .gba, .gameGear, .ngpc, .nds]
 
-    /// The shaders worth offering for a platform. Handhelds swap the five
-    /// CRT variants for whichever real-screen shader actually fits: Game
-    /// Boy/Color get the dot-matrix look built for their specific screen,
-    /// the other three (GBA, Game Gear, NGPC) get the generic LCD grid,
-    /// same shader shared across all of them the way Provenance's own
-    /// "LCD" filter is generic rather than per-console. The filter cuts
-    /// both ways: consoles drop the two handheld screens the same way
-    /// handhelds drop the CRTs, since a PS1 game offering a Game Boy
-    /// dot-matrix was the same mismatch in the other direction.
+    /// The looks worth offering for a platform, in the TV's order. Every
+    /// handheld swaps the CRT variants for LCD 3x, the TV's handheld look;
+    /// the Game Boy adds its green and Pocket dot matrix screens, and the
+    /// Game Boy Color its own, which keeps the game's colours, since a
+    /// green screen turns a colour game green (CabinetOS's looks.cpp). The
+    /// filter cuts both ways: anything else drops the handheld screens the
+    /// way handhelds drop the CRTs.
     static func available(for platform: NativePlatform) -> [NativeShader] {
         guard handheldPlatforms.contains(platform) else {
-            return allCases.filter { $0 != .lcd && $0 != .gameBoy && $0 != .vmuLCD }
+            return allCases.filter { !handheldLooks.contains($0) && $0 != .vmuLCD }
         }
-        let handheldSpecific: [NativeShader] = (platform == .gb || platform == .gbc) ? [.gameBoy] : [.lcd]
-        return [.sharp, .sabr] + handheldSpecific
+        switch platform {
+        case .gb: return [.sharp, .sabr, .lcd, .dotMatrix, .dotMatrixPocket]
+        case .gbc: return [.sharp, .sabr, .lcd, .dotMatrixColor]
+        default: return [.sharp, .sabr, .lcd]
+        }
     }
+
+    private static let handheldLooks: Set<NativeShader> = [.lcd, .dotMatrix, .dotMatrixPocket, .dotMatrixColor]
 
     private static func key(for platform: NativePlatform) -> String {
         "com.mmagtech.RommApp.nativeShader.\(platform.storageKey)"
@@ -107,10 +125,12 @@ enum NativeShader: String, CaseIterable, Identifiable {
     /// being trusted.
     static func current(for platform: NativePlatform) -> NativeShader {
         guard let stored = UserDefaults.standard.string(forKey: key(for: platform)),
-              let shader = NativeShader(rawValue: stored),
-              available(for: platform).contains(shader)
+              var shader = NativeShader(rawValue: stored)
         else { return .sharp }
-        return shader
+        // The old "Game Boy" look served both Game Boys; on the Color its
+        // successor is the dot matrix that keeps the colours.
+        if shader == .dotMatrix && platform == .gbc { shader = .dotMatrixColor }
+        return available(for: platform).contains(shader) ? shader : .sharp
     }
 
     static func setCurrent(_ shader: NativeShader, for platform: NativePlatform) {
