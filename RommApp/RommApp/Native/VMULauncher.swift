@@ -1,19 +1,20 @@
 import Foundation
+import UIKit
 
 /// The VMU minigame player's launch and sync path. Deliberately not
 /// NativeLauncher: nothing here downloads a ROM, because the "ROM" is
-/// the DC game's own save card, already synced through MemoryCardStore.
-/// This opens and writes THE SAME card file RomM stores as that game's
-/// save, one row, one sync path, per the settled design; the minigame
-/// is cargo inside the save, never a platform or a library entry.
+/// the Dreamcast game's own save card. This opens and writes THE SAME card
+/// RomM keeps as that game's save, Flycast's under `flycast-native`, so the
+/// TV's Flycast takes it as its own: one save, one rule (GameSaves, SavePick);
+/// the minigame is cargo inside the save, never a platform or a library
+/// entry.
 ///
 /// The local layer's guarantee: the phone's card is always current. The
 /// core commits every flash write into the play file in real time
 /// (VeMUlator's enable_flash_write, spike-proven), so nothing is lost
-/// locally even to an app kill, and `prepare` reconciles a play file a
-/// kill orphaned back into the store's write-first queue before every
-/// boot. The server layer uploads on quit and on backgrounding, both
-/// through the same durable pending-flag queue every other card rides.
+/// locally even to an app kill: a play file changed since it was last sent
+/// is owed at the next start, before the pick (GameSaves). The card goes up
+/// on quit and on backgrounding.
 enum VMULauncher {
     /// The live play file. Its whole directory chain is deliberately
     /// dot-free: VeMUlator identifies the file type by the dot in the
@@ -29,114 +30,50 @@ enum VMULauncher {
         return dir.appendingPathComponent("card.bin")
     }
 
-    /// The card that would boot if the VMU row were tapped right now:
-    /// the store's copy, superseded by a play file only a crash could
-    /// have left newer. This is what the launch screen parses for the
-    /// minigame row, so detection and boot read the same bytes.
+    /// The card that would boot if the VMU row were tapped right now: the
+    /// play file, which the start's pick keeps as the newest card the phone
+    /// can use. What the launch screen parses for the minigame row, so
+    /// detection and boot read the same bytes.
     static func currentCard(romId: Int) -> Data? {
-        let stored = MemoryCardStore.shared.localCard(romId: romId)
-        // A play file differing from the store holds writes the store
-        // has not absorbed yet (a crash mid-play); prefer it. Otherwise
-        // the store is the truth.
-        if let play = try? Data(contentsOf: playCardURL(romId: romId)),
-           play.count == VMUCard.cardSize, play != stored {
-            return play
-        }
-        if let stored, stored.count == VMUCard.cardSize { return stored }
-        return nil
+        guard let card = try? Data(contentsOf: playCardURL(romId: romId)), card.count == VMUCard.cardSize
+        else { return nil }
+        return card
     }
 
-    /// Decides which card plays and places it as the live play file.
-    /// Same launch decision every card platform makes, in order: a play
-    /// file orphaned by a crash feeds the store's queue first (it is
-    /// strictly newer than anything else local), then a still-pending
-    /// local card wins outright, then the server's own Flycast row when
-    /// its stamp moved, then whatever is on this device. On the go this
-    /// is Cabinet's normal remote flow: fetch latest, play, upload back
-    /// on exit; fully offline works exactly when the card was already
-    /// here. Returns nil when no card exists anywhere, which the launch
+    /// The VMU sitting under way, for its capture.
+    @MainActor private static var sitting: GameSaves?
+
+    /// Decides which card plays and places it as the live play file, by the
+    /// one rule (GameSaves.startCard): a card owed by the phone stands, else
+    /// the newest card RomM holds that the phone can use, else the phone's
+    /// own. Returns nil when no card exists anywhere, which the launch
     /// screen's detection has already ruled out on every real path.
     @MainActor
     static func prepare(rom: Rom, session: Session) async -> URL? {
-        let store = MemoryCardStore.shared
         let target = playCardURL(romId: rom.id)
-        let tag = NativeCore.flycast.emulatorTag
-
-        // The crash reconcile: a play file the last session never
-        // captured (no quit, no backgrounding, just a kill) carries the
-        // newest writes in existence. Absorb it before deciding.
-        if let orphan = try? Data(contentsOf: target),
-           orphan.count == VMUCard.cardSize,
-           orphan != store.localCard(romId: rom.id) {
-            store.storeSnapshot(romId: rom.id, data: orphan)
-            DiagnosticsLog.record(
-                context: "VMU player",
-                message: "Reconciled a play card the last session never uploaded.",
-                romVersion: session.serverVersion
-            )
-        }
-
-        func place(_ data: Data) -> URL? {
-            do {
-                try data.write(to: target, options: .atomic)
-                return target
-            } catch {
-                return nil
-            }
-        }
-
-        let local = store.localCard(romId: rom.id)
-        if store.pendingUpload(romId: rom.id), let local {
-            // Retry the owed upload while the game boots, the same
-            // retry syncIn gives every other pending card; not awaited,
-            // so a dead network cannot hold the boot.
-            Task {
-                await MemoryCardSync.uploadCard(
-                    local, romId: rom.id, fileNameStem: SaveRowNames.stem(fsName: rom.fsName),
-                    emulatorTag: tag, session: session
-                )
-            }
-            return place(local)
-        }
-
-        if let saves = try? await session.saves(romId: rom.id) {
-            let own = saves
-                .filter { $0.emulator == tag && MemoryCardStore.region(ofFileName: $0.fileName) == .saveRAM }
-                .sorted { ($0.updatedAt ?? "") > ($1.updatedAt ?? "") }
-                .first
-            if let own, own.updatedAt != store.serverStamp(romId: rom.id) || local == nil,
-               let bytes = try? await session.saveContent(own), bytes.count == VMUCard.cardSize {
-                store.storeDownloaded(romId: rom.id, data: bytes, serverStamp: own.updatedAt)
-                return place(bytes)
-            }
-        }
-
-        if let local { return place(local) }
-        return nil
+        sitting = await GameSaves.startCard(rom: rom, cardURL: target, session: session)
+        return currentCard(romId: rom.id) != nil ? target : nil
     }
 
-    /// Reads the play file back into the store's write-first queue and
-    /// uploads it, the server half of the sync policy. Called on quit
-    /// and on backgrounding, with the core paused, so the file is
-    /// quiescent when read. No mid-play uploads on purpose: churn
-    /// without benefit, and the two-writer rule already guards the TV.
+    /// The newest card brought down without playing, for the launch screen's
+    /// minigame row: the same start, which is then left at once.
+    @MainActor
+    static func refresh(rom: Rom, session: Session) async {
+        _ = await GameSaves.startCard(rom: rom, cardURL: playCardURL(romId: rom.id), session: session)
+    }
+
+    /// The play file gathered and, when it changed, marked and sent. Called
+    /// on quit and on backgrounding, with the core paused, so the file is
+    /// quiescent when read. No mid-play uploads on purpose: churn without
+    /// benefit. Finishes while iOS lets the app.
     @MainActor
     static func capture(rom: Rom, session: Session) async {
-        let store = MemoryCardStore.shared
-        guard let data = try? Data(contentsOf: playCardURL(romId: rom.id)),
-              data.count == VMUCard.cardSize,
-              data != store.localCard(romId: rom.id)
-        else { return }
-        store.storeSnapshot(romId: rom.id, data: data)
-        DiagnosticsLog.record(
-            context: "VMU player",
-            message: "Captured the card after play, \(data.count) bytes, uploading.",
-            romVersion: session.serverVersion
-        )
-        await MemoryCardSync.uploadCard(
-            data, romId: rom.id, fileNameStem: SaveRowNames.stem(fsName: rom.fsName),
-            emulatorTag: NativeCore.flycast.emulatorTag, session: session
-        )
+        guard let saves = sitting, saves.romId == rom.id else { return }
+        saves.gatherFiles()
+        guard let sending = saves.leave(session: session) else { return }
+        let id = UIApplication.shared.beginBackgroundTask(withName: "Send the VMU card")
+        await sending.value
+        UIApplication.shared.endBackgroundTask(id)
     }
 
     /// Boots the core on the placed card. The frontend side of what

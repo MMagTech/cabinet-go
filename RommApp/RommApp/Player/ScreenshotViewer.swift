@@ -15,7 +15,10 @@ import SwiftUI
 /// the way into the pause, one frame before the freeze, produces a real
 /// image of the saved moment, so there is something true to show again.
 struct ScreenshotViewer: View {
+    /// RomM's path for the picture.
     let path: String?
+    /// The phone's own copy of a state's picture, read in place of RomM's.
+    var local: URL?
     let title: String
 
     @EnvironmentObject private var session: Session
@@ -54,12 +57,16 @@ struct ScreenshotViewer: View {
     }
 
     private func load() async {
-        guard let path else {
-            failed = true
-            return
-        }
         do {
-            let data = try await session.screenshotData(path: path)
+            let data: Data
+            if let local {
+                data = try Data(contentsOf: local)
+            } else if let path {
+                data = try await session.screenshotData(path: path)
+            } else {
+                failed = true
+                return
+            }
             // Capped rather than decoded at native size unbounded: the
             // capture is already downscaled to 1000 wide before upload,
             // so this rarely engages, but a screenshot made by RomM's own

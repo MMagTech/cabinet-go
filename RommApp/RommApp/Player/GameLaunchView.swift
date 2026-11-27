@@ -34,24 +34,23 @@ struct GameLaunchView: View {
     /// like the platform needed no BIOS at all, and the first sign of
     /// trouble was a game booting to black.
     @State private var missingFirmware: [Firmware] = []
-    @State private var saves: [GameSave] = []
-    @State private var states: [GameState] = []
-    @State private var selectedSave: GameSave?
-    @State private var selectedState: GameState?
-    /// Only the three most recent states show without asking, since a
-    /// filename told nobody anything and a long list of them was the
-    /// actual reason this card needed thumbnails and dates at all.
-    @State private var showAllStates = false
-    @State private var deletingAssetIds: Set<Int> = []
+    /// The sitting's saves from the launch, handed to the player.
+    @State private var nativeSaves: GameSaves?
+    /// "Saved today, 8:17 PM": the save a start would continue from, by the
+    /// start's own rule (GameSaves.savedLine). Nil when there is none.
+    @State private var savedLine: String?
+    /// The three newest states the game offers (GameSaves.offeredStates).
+    @State private var states: [SavePush.OfferedState] = []
+    @State private var selectedState: SavePush.OfferedState?
     @State private var viewingScreenshot: ScreenshotTarget?
 
     private struct ScreenshotTarget: Identifiable {
         let id = UUID()
+        /// RomM's path, or the phone's own copy.
         let path: String?
+        let local: URL?
         let title: String
     }
-    @State private var pendingStateDelete: GameState?
-    @State private var pendingSaveDelete: GameSave?
     @State private var loading = true
     @State private var preparingPlay = false
     /// The native download's fraction complete, shown as a percentage on
@@ -146,7 +145,7 @@ struct GameLaunchView: View {
                             vmuCard
                             compatibilityCard
                             resetSettingsCard
-                            if !states.isEmpty || !saves.isEmpty { resumeCard }
+                            if !states.isEmpty || savedLine != nil { resumeCard }
                         }
                         .frame(maxWidth: .infinity, alignment: .top)
                     }
@@ -201,7 +200,7 @@ struct GameLaunchView: View {
         .onAppear { refreshCoreSettings() }
         .fullScreenCover(isPresented: $playingNative) {
             if let core = NativeCore.core(for: rom, canonicalSlug: canonicalSlug) {
-                NativePlayerView(rom: rom, core: core, initialState: nativeInitialState)
+                NativePlayerView(rom: rom, core: core, saves: nativeSaves, initialState: nativeInitialState)
                     .environmentObject(session)
             }
         }
@@ -225,7 +224,7 @@ struct GameLaunchView: View {
             Text(playError ?? "")
         }
         .sheet(item: $viewingScreenshot) { target in
-            ScreenshotViewer(path: target.path, title: target.title)
+            ScreenshotViewer(path: target.path, local: target.local, title: target.title)
         }
     }
 
@@ -521,31 +520,17 @@ struct GameLaunchView: View {
         downloadProgress = 0
         defer { preparingPlay = false }
         do {
-            try await NativeLauncher.prepare(rom: rom, session: session) { fraction in
+            let launch = try await NativeLauncher.prepare(rom: rom, session: session) { fraction in
                 downloadProgress = fraction
             }
+            nativeSaves = launch.saves
             if let selectedState {
-                // The local copy first, not as an offline fallback but
-                // as the normal path: when it is the same state, reading
-                // it costs nothing and a network round trip would only
-                // slow down a game that is already sitting on the phone.
-                // A network fetch only happens for a state Keep never
-                // cached, which needs a connection either way.
-                if let local = keptStore.localState(for: rom.id), local.stateId == selectedState.id {
-                    nativeInitialState = local.data
-                } else if let pending = keptStore.pendingStates(for: rom.id)
-                    .first(where: { $0.stem.hashValue == selectedState.id }),
-                    let data = try? Data(contentsOf: pending.stateURL) {
-                    // A save still waiting to upload: the only copy of
-                    // it is the one on this phone, network or not.
-                    nativeInitialState = data
-                } else {
-                    guard let bytes = try? await session.stateContent(selectedState) else {
-                        playError = "Couldn't reach the server to load that state."
-                        return
-                    }
-                    nativeInitialState = bytes
+                // The phone's copy first, else RomM's.
+                guard let bytes = await GameSaves.stateBytes(selectedState, session: session) else {
+                    playError = "Couldn't reach the server to load that state."
+                    return
                 }
+                nativeInitialState = bytes
             } else {
                 nativeInitialState = nil
             }
@@ -557,7 +542,7 @@ struct GameLaunchView: View {
 
     private var playLabel: String {
         if !loading && !isPlatformSupported { return "Unsupported" }
-        return selectedState != nil || selectedSave != nil ? "Resume" : "Play"
+        return selectedState != nil ? "Resume" : "Play"
     }
 
     @ViewBuilder
@@ -598,15 +583,6 @@ struct GameLaunchView: View {
         ByteCountFormatter.string(fromByteCount: bytes, countStyle: .file)
     }
 
-    /// A queued save's file date, in the same format a server
-    /// `updatedAt` string arrives in, so `RommDate.relativeLabel` reads
-    /// it identically either way.
-    private static func isoStamp(_ date: Date) -> String {
-        let formatter = ISO8601DateFormatter()
-        formatter.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
-        return formatter.string(from: date)
-    }
-
     /// Landscape only: cards flow into as many columns as the width allows,
     /// so two or three of them do not become a scrolling column.
     @ViewBuilder
@@ -634,7 +610,7 @@ struct GameLaunchView: View {
                 if showsKeepCard { keepCard }
                 vmuCard
                 resetSettingsCard
-                if !states.isEmpty || !saves.isEmpty { resumeCard }
+                if !states.isEmpty || savedLine != nil { resumeCard }
             }
         }
     }
@@ -657,7 +633,7 @@ struct GameLaunchView: View {
                 if showsKeepCard { keepCard }
                 vmuCard
                 resetSettingsCard
-                if !states.isEmpty || !saves.isEmpty { resumeCard }
+                if !states.isEmpty || savedLine != nil { resumeCard }
             }
         }
     }
@@ -861,17 +837,6 @@ struct GameLaunchView: View {
                 Text(keptCaption)
                     .font(.caption)
                     .foregroundStyle(.secondary)
-                let pending = keptStore.pendingStateCount(for: rom.id)
-                if pending > 0 {
-                    Text("\(pending) save\(pending == 1 ? "" : "s") waiting to upload")
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
-                }
-                if MemoryCardStore.shared.anyPendingUpload(romId: rom.id) {
-                    Text("In-game save waiting to upload")
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
-                }
             } else if let error = keptStore.errors[rom.id] {
                 Text(error)
                     .font(.caption)
@@ -905,200 +870,57 @@ struct GameLaunchView: View {
         return "About \(size). Plays without a connection."
     }
 
-    private var visibleStates: [GameState] {
-        // Already newest first, see `load()`, so this is exactly the
-        // recent handful the card promises.
-        showAllStates ? states : Array(states.prefix(3))
-    }
-
+    /// THE GAME'S SAVE AND ITS STATES, as the TV's game page shows them
+    /// (CabinetOS's detail.cpp): one line for the save a start continues
+    /// from, and the three newest states to pick from. No save rows and no
+    /// Delete: RomM owns looking at, sorting and deleting saves, and going
+    /// back to an older save is "Restore as current" on RomM's website.
     private var resumeCard: some View {
         LaunchCard(title: "Resume from", systemImage: "clock.arrow.circlepath") {
-            // States are greyed out when written by a different core, because
-            // a memory snapshot cannot be loaded by an emulator that did not
-            // make it. Saves survive a core change, so they are never greyed.
-            ForEach(visibleStates) { state in
+            if let savedLine {
+                Text(savedLine)
+                    .font(.callout)
+                    .foregroundStyle(.secondary)
+            }
+            ForEach(states) { state in
                 stateRow(state)
             }
-            if states.count > 3, !showAllStates {
-                Button("Show all \(states.count) states") { showAllStates = true }
-                    .font(.footnote)
-                    .padding(.leading, 30)
-            }
-            ForEach(saves) { save in
-                saveRow(save)
-            }
-        }
-        .confirmationDialog(
-            "Delete this state?",
-            isPresented: Binding(
-                get: { pendingStateDelete != nil }, set: { if !$0 { pendingStateDelete = nil } }
-            ),
-            titleVisibility: .visible
-        ) {
-            Button("Delete", role: .destructive) {
-                if let state = pendingStateDelete { Task { await deleteState(state) } }
-            }
-        } message: {
-            // The one real consequence, spelled out, rather than a generic
-            // warning: deleting the newest state changes what Resume does
-            // next time, every other one is just cleanup.
-            Text(
-                pendingStateDelete?.id == states.first?.id
-                    ? "This is what Resume currently loads. Deleting it means Resume will use your next most recent save instead."
-                    : "This can't be undone."
-            )
-        }
-        .confirmationDialog(
-            "Delete this save?",
-            isPresented: Binding(
-                get: { pendingSaveDelete != nil }, set: { if !$0 { pendingSaveDelete = nil } }
-            ),
-            titleVisibility: .visible
-        ) {
-            Button("Delete", role: .destructive) {
-                if let save = pendingSaveDelete { Task { await deleteSave(save) } }
-            }
-        } message: {
-            Text("This can't be undone.")
         }
     }
 
-    private func stateEnabled(_ state: GameState) -> Bool {
-        // A core can only restore states its own build wrote.
-        let nativeTag = NativeCore.core(for: rom, canonicalSlug: canonicalSlug)?.emulatorTag
-        return nativeTag != nil && state.emulator == nativeTag
-    }
-
-    private func stateRow(_ state: GameState) -> some View {
-        let enabled = stateEnabled(state)
+    private func stateRow(_ state: SavePush.OfferedState) -> some View {
+        let when = state.madeMs > 0
+            ? GameSaves.when(Date(timeIntervalSince1970: TimeInterval(state.madeMs) / 1000)) : "State"
+        let selected = selectedState?.id == state.id
         return HStack(spacing: 10) {
             Button {
-                selectedState = selectedState?.id == state.id ? nil : state
-                selectedSave = nil
+                selectedState = selected ? nil : state
             } label: {
                 HStack(spacing: 10) {
-                    Image(systemName: selectedState?.id == state.id ? "checkmark.circle.fill" : "circle")
-                        .foregroundStyle(
-                            selectedState?.id == state.id ? AnyShapeStyle(.tint) : AnyShapeStyle(.tertiary)
-                        )
-                    VStack(alignment: .leading, spacing: 1) {
-                        Text(RommDate.relativeLabel(state.updatedAt)).lineLimit(1)
-                        Text(state.emulator.map { "state, \($0)" } ?? "state")
-                            .font(.caption).foregroundStyle(.secondary)
-                    }
+                    Image(systemName: selected ? "checkmark.circle.fill" : "circle")
+                        .foregroundStyle(selected ? AnyShapeStyle(.tint) : AnyShapeStyle(.tertiary))
+                    Text(when).lineLimit(1)
                     Spacer(minLength: 0)
                 }
                 .contentShape(.rect)
             }
             .buttonStyle(.plain)
-            .disabled(!enabled)
-            .opacity(enabled ? 1 : 0.4)
-            rowMenu(
-                screenshotPath: state.screenshotPath, title: RommDate.relativeLabel(state.updatedAt),
-                delete: { pendingStateDelete = state }
-            )
-        }
-        .opacity(deletingAssetIds.contains(state.id) ? 0.4 : 1)
-    }
-
-    /// A save the native player loads on its own every launch (a PS1
-    /// memory card), rather than one the person picks here. Shown as
-    /// information, not a choice: offering a radio button for something
-    /// that happens regardless would be a lie.
-    private func saveLoadsAutomatically(_ save: GameSave) -> Bool {
-        save.emulator == NativeCore.core(for: rom, canonicalSlug: canonicalSlug)?.emulatorTag
-    }
-
-    private func saveRow(_ save: GameSave) -> some View {
-        let automatic = saveLoadsAutomatically(save)
-        return HStack(spacing: 10) {
-            Button {
-                selectedSave = selectedSave?.id == save.id ? nil : save
-                selectedState = nil
-            } label: {
-                HStack(spacing: 10) {
-                    Image(
-                        systemName: automatic
-                            ? "checkmark.circle"
-                            : selectedSave?.id == save.id ? "checkmark.circle.fill" : "circle"
-                    )
-                    .foregroundStyle(
-                        automatic || selectedSave?.id == save.id
-                            ? AnyShapeStyle(.tint) : AnyShapeStyle(.tertiary)
-                    )
-                    VStack(alignment: .leading, spacing: 1) {
-                        Text(RommDate.relativeLabel(save.updatedAt)).lineLimit(1)
-                        Text(automatic ? "memory card, loads automatically" : "save")
-                            .font(.caption).foregroundStyle(.secondary)
+            // Screenshot only, and no menu at all when there is none to
+            // show: nothing to act on, nothing to grey out.
+            if !state.picture.isEmpty {
+                Menu {
+                    Button("Screenshot", systemImage: "photo") {
+                        viewingScreenshot = ScreenshotTarget(
+                            path: state.pictureIsLocal ? nil : state.picture,
+                            local: state.pictureIsLocal ? URL(fileURLWithPath: state.picture) : nil,
+                            title: when)
                     }
-                    Spacer(minLength: 0)
-                }
-                .contentShape(.rect)
-            }
-            .buttonStyle(.plain)
-            .disabled(automatic)
-            rowMenu(
-                screenshotPath: save.screenshotPath, title: RommDate.relativeLabel(save.updatedAt),
-                delete: { pendingSaveDelete = save }
-            )
-        }
-        .opacity(deletingAssetIds.contains(save.id) ? 0.4 : 1)
-    }
-
-    /// A menu button, not `.swipeActions`: this card is a plain stack, not
-    /// a `List`, and swipe actions only exist inside one, the pattern iOS
-    /// itself reserves for genuine lists of comparable rows, Mail and
-    /// Messages among them, not a form of distinct configuration cards like
-    /// this screen. A menu is the native answer for a form row, matching
-    /// how Settings itself handles a destructive action inline.
-    ///
-    /// Screenshot is left off the menu entirely when there is none to
-    /// show, rather than shown disabled: nothing to act on, nothing to
-    /// grey out. The option exists again at all because captures at save
-    /// time work now, the frame grabbed on the way into the pause; every
-    /// state saved before that fix simply has no screenshot to offer.
-    private func rowMenu(
-        screenshotPath: String?, title: String, delete: @escaping () -> Void
-    ) -> some View {
-        Menu {
-            if screenshotPath != nil {
-                Button("Screenshot", systemImage: "photo") {
-                    viewingScreenshot = ScreenshotTarget(path: screenshotPath, title: title)
+                } label: {
+                    Image(systemName: "ellipsis.circle")
+                        .foregroundStyle(.secondary)
+                        .frame(width: 30, height: 30)
                 }
             }
-            Button("Delete", systemImage: "trash", role: .destructive, action: delete)
-        } label: {
-            Image(systemName: "ellipsis.circle")
-                .foregroundStyle(.secondary)
-                .frame(width: 30, height: 30)
-        }
-    }
-
-    private func deleteState(_ state: GameState) async {
-        deletingAssetIds.insert(state.id)
-        defer { deletingAssetIds.remove(state.id) }
-        do {
-            try await session.deleteStates(ids: [state.id])
-            states.removeAll { $0.id == state.id }
-            if selectedState?.id == state.id { selectedState = nil }
-        } catch {
-            DiagnosticsLog.record(
-                context: "Delete state", message: error.localizedDescription, romVersion: session.serverVersion
-            )
-        }
-    }
-
-    private func deleteSave(_ save: GameSave) async {
-        deletingAssetIds.insert(save.id)
-        defer { deletingAssetIds.remove(save.id) }
-        do {
-            try await session.deleteSaves(ids: [save.id])
-            saves.removeAll { $0.id == save.id }
-            if selectedSave?.id == save.id { selectedSave = nil }
-        } catch {
-            DiagnosticsLog.record(
-                context: "Delete save", message: error.localizedDescription, romVersion: session.serverVersion
-            )
         }
     }
 
@@ -1140,68 +962,34 @@ struct GameLaunchView: View {
         await session.loadPlatformConfigIfNeeded()
         canonicalSlug = rom.canonicalPlatformSlug(platformsVersions: session.platformsVersions)
 
-        // Offline, these three would only ever run out the clock on a
-        // timeout: NetworkMonitor already knows the answer without
-        // waiting to be told. A kept game still gets a Resume-from row
-        // either way, synthesized below from what Keep already
-        // downloaded, so skipping the fetch costs it nothing.
+        // Offline, this would only ever run out the clock on a timeout:
+        // NetworkMonitor already knows the answer without waiting to be told.
         if !NetworkMonitor.shared.isOffline {
-            async let firmwareTask = try? session.firmware(platformId: rom.platformId)
-            async let savesTask = try? session.saves(romId: rom.id)
-            async let statesTask = try? session.states(romId: rom.id)
-
-            let allFirmware = await firmwareTask ?? []
+            let allFirmware = (try? await session.firmware(platformId: rom.platformId)) ?? []
             firmware = allFirmware.filter { !$0.missingFromFS }
             missingFirmware = allFirmware.filter { $0.missingFromFS }
-            saves = await savesTask ?? []
-            states = (await statesTask ?? []).sorted { ($0.updatedAt ?? "") > ($1.updatedAt ?? "") }
-
-            // Free, quiet upkeep: this game's local snapshot, if it has
-            // one, stays current whenever there happens to be a
-            // connection, so an offline session later reflects the
-            // newest state Cabinet has actually seen, not just whatever
-            // was newest back when the game was first kept.
-            if keptStore.kept(romId: rom.id) != nil {
-                keptStore.refreshCachedState(rom: rom, liveStates: states, session: session)
-            }
         } else {
             firmware = []
             missingFirmware = []
-            saves = []
-            states = []
         }
 
-        // A kept game's local states belong in the list either way:
-        // offline they are the only thing there is to offer, online they
-        // are already present above unless a refresh has not caught up
-        // yet, in which case showing both would be the same state twice
-        // under two different labels. Every queued save gets its own
-        // row too, not just the newest, so a trip with several saves
-        // offers every one of them back, not only the last.
-        if let core = NativeCore.core(for: rom, canonicalSlug: canonicalSlug) {
-            if let local = keptStore.localState(for: rom.id),
-               !states.contains(where: { $0.id == local.stateId }) {
-                states.append(GameState(localStateId: local.stateId, updatedAt: local.updatedAt, emulator: core.emulatorTag))
-            }
-            for pending in keptStore.pendingStates(for: rom.id) {
-                let syntheticId = pending.stem.hashValue
-                guard !states.contains(where: { $0.id == syntheticId }) else { continue }
-                states.append(
-                    GameState(
-                        localStateId: syntheticId, updatedAt: Self.isoStamp(pending.savedAt), emulator: core.emulatorTag
-                    )
-                )
-            }
-            states.sort { ($0.updatedAt ?? "") > ($1.updatedAt ?? "") }
+        let platform = NativePlatform.platform(for: rom, canonicalSlug: canonicalSlug)
+
+        // The save and the three states, the TV's game page's: RomM's with a
+        // connection, else as last seen and the phone's own (GameSaves). The
+        // VMU card has its own row below.
+        if platform != .dreamcast, let core = NativeCore.core(for: rom, canonicalSlug: canonicalSlug) {
+            savedLine = await GameSaves.savedLine(romId: rom.id, tag: core.emulatorTag, session: session)
+            states = platform?.supportsSaveStates == true
+                ? await GameSaves.offeredStates(romId: rom.id, tag: core.emulatorTag, session: session) : []
         }
 
-        // The VMU row. Prefetch keeps the local card current when a
-        // connection exists (a no-op when the server stamp has not
-        // moved), then detection parses whatever card would actually
-        // boot.
-        if NativePlatform.platform(for: rom, canonicalSlug: canonicalSlug) == .dreamcast {
+        // The VMU row: the newest card brought down by the start's own rule
+        // when a connection exists, then detection parses whatever card would
+        // actually boot.
+        if platform == .dreamcast {
             if !NetworkMonitor.shared.isOffline {
-                await MemoryCardStore.shared.prefetchFromServer(rom: rom, platform: .dreamcast, session: session)
+                await VMULauncher.refresh(rom: rom, session: session)
             }
             if let card = VMULauncher.currentCard(romId: rom.id) {
                 vmuMinigame = VMUCard.minigameName(card)

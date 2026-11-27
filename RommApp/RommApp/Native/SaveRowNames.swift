@@ -1,15 +1,13 @@
 import Foundation
 
-/// The names this app gives its rows on RomM, built exactly the way
-/// CabinetOS builds them, so a save made on either app lands in the same
-/// row (docs/scope-handheld.md, continuity). RomM 5.4 matches an
-/// overwrite on emulator tag and file name together, so a name that
-/// differs by one character keeps a second row forever.
+/// The names this app gives a game's saves, built exactly the way CabinetOS
+/// builds them, so a save made on either app goes up under the same name
+/// (docs/scope-handheld.md, continuity; SaveForm.upName).
 enum SaveRowNames {
-    /// The stem of a battery, card or clock row, `<stem> (Cabinet).srm`:
-    /// RomM's `fs_name` with everything from its last dot removed, then
-    /// cleaned by `sanitisedStem`. CabinetOS's `fsStem` (frontend/src/
-    /// main.cpp, where a launch job is built) and its `saveRowName`.
+    /// The stem of a game's save, `<stem>.srm`: RomM's `fs_name` with
+    /// everything from its last dot removed, then cleaned by
+    /// `sanitisedStem`. CabinetOS's `fsStem` (frontend/src/main.cpp, where
+    /// a launch job is built).
     /// Deliberately not RomM's own `fs_name_no_ext`, which can strip a
     /// different amount, or nothing.
     static func stem(fsName: String) -> String {

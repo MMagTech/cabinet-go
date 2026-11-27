@@ -7,6 +7,13 @@ import Foundation
 /// screen; the Debug-screen smoke tests that predated it (a hardcoded
 /// FBNeo test title list, a free-text Saturn search box) are gone, their
 /// job done once the real flow existed to test instead.
+/// A game made ready to play: the core it loaded in, and the sitting's saves
+/// (nil for a core with no saves).
+struct NativeLaunch {
+    let core: NativeCore
+    let saves: GameSaves?
+}
+
 enum NativeLauncher {
     enum LaunchError: LocalizedError {
         case noNativeCore
@@ -34,7 +41,7 @@ enum NativeLauncher {
     @MainActor
     static func prepare(
         rom: Rom, session: Session, onProgress: @escaping @MainActor (Double) -> Void = { _ in }
-    ) async throws -> NativeCore {
+    ) async throws -> NativeLaunch {
         let canonicalSlug = rom.canonicalPlatformSlug(platformsVersions: session.platformsVersions)
         guard let platform = NativePlatform.platform(for: rom, canonicalSlug: canonicalSlug) else {
             throw LaunchError.noNativeCore
@@ -111,7 +118,7 @@ enum NativeLauncher {
     @MainActor
     private static func finishLaunch(
         platform: NativePlatform, rom: Rom, session: Session, romURL: URL, workDir: URL
-    ) async throws -> NativeCore {
+    ) async throws -> NativeLaunch {
         let core = platform.core
         let loadURL = try extractedIfArchived(romURL, core: core, in: workDir)
         // On a platform with one core the directory is exactly what it
@@ -121,14 +128,14 @@ enum NativeLauncher {
         // where they are on purpose (alpha, one user, high scores).
         let saveDir = coreSaveDirectory(
             romId: rom.id, core: platform.cores.count > 1 ? core : nil)
-        await restoreVMUSaveIfNeeded(rom: rom, session: session, platform: platform, workDir: workDir)
-        await restoreCoreFileSaveIfNeeded(
-            rom: rom, session: session, platform: platform, core: core,
-            loadURL: loadURL, saveDir: saveDir
-        )
-        return try activate(
+        // The sitting's saves: the start's pick, and a file or a folder put
+        // in place before the core reads it (GameSaves).
+        let saves = await GameSaves.start(
+            rom: rom, core: core, loadURL: loadURL, saveDir: saveDir, session: session)
+        let active = try activate(
             platform: platform, core: core, loadURL: loadURL,
             workDir: workDir, saveDir: saveDir)
+        return NativeLaunch(core: active, saves: saves)
     }
 
     /// The persistent per-game directory handed to the core as its save
@@ -164,84 +171,6 @@ enum NativeLauncher {
             .appendingPathComponent("SAVEDATA", isDirectory: true)
     }
 
-    /// The whole SAVEDATA tree as one blob, so it rides the same upload,
-    /// the same store and the same server row as every other platform's
-    /// single save file.
-    ///
-    /// A plain zip of SAVEDATA, rooted the way CabinetOS roots it: the
-    /// first path component is each save folder, `ULUS10002LUMINES/...`.
-    /// See PSPSaveZip for why, and for why it is written by hand. PSP once
-    /// uploaded Apple's rtfd archive (opens nowhere else, replaced
-    /// 2026-09-17), then a `PSP/SAVEDATA/`-prefixed zip that no other app
-    /// wrote (replaced 2026-10-15, never released).
-    static func archivePSPSaveData(saveDir: URL) -> Data? {
-        PSPSaveZip.archive(saveData: pspSaveDataDirectory(saveDir: saveDir))
-    }
-
-    /// Unpacks an archive over whatever is already on this device.
-    ///
-    /// Deliberately never removes a save folder the archive does not
-    /// contain. Newest-wins is the right rule and matches every other
-    /// platform here, but a save folder is a whole slot rather than a
-    /// newer version of one file, so if that choice is ever wrong the
-    /// cost should be a stale slot sitting beside a good one, not
-    /// somebody's save vanishing. Only folders present in the archive
-    /// are replaced.
-    static func unpackPSPSaveData(_ data: Data, saveDir: URL) {
-        // Zip only, both directions. The container is checked by its
-        // first bytes rather than the file's extension, which is .srm on
-        // the server regardless and says nothing about the contents.
-        //
-        // Builds before 2026-09-17 wrote Apple's rtfd directory archive
-        // here, and a reader for it briefly lived alongside this. It was
-        // removed deliberately: those saves are not wanted. Anything that
-        // is not a zip is ignored rather than half-applied, so an rtfd
-        // blob from an older build leaves whatever is already on this
-        // device alone instead of wiping it.
-        guard data.starts(with: [0x50, 0x4B, 0x03, 0x04]) else { return }
-        unpackPSPSaveDataZip(data, saveDir: saveDir)
-    }
-
-    /// A zip of save folders: CabinetOS's layout, rooted at SAVEDATA, or
-    /// one carrying the `PSP/SAVEDATA/` prefix, which is how some other
-    /// tools lay out a memory stick and how this app wrote them for a
-    /// month before matching CabinetOS. Both land in the same place.
-    ///
-    /// Extracted to a staging directory first and then moved in one save
-    /// folder at a time, rather than straight over the live tree, so a
-    /// slot is replaced whole. Extracting in place would merge a new
-    /// slot's files over an old slot's leftovers.
-    private static func unpackPSPSaveDataZip(_ data: Data, saveDir: URL) {
-        let fm = FileManager.default
-        let staging = fm.temporaryDirectory
-            .appendingPathComponent("psp-unzip-\(UUID().uuidString)", isDirectory: true)
-        defer { try? fm.removeItem(at: staging) }
-        guard (try? fm.createDirectory(at: staging, withIntermediateDirectories: true)) != nil
-        else { return }
-        let zipURL = staging.appendingPathComponent("save.zip")
-        guard (try? data.write(to: zipURL)) != nil else { return }
-
-        let extracted = staging.appendingPathComponent("out", isDirectory: true)
-        try? fm.createDirectory(at: extracted, withIntermediateDirectories: true)
-        guard archive_extract_all(zipURL.path, extracted.path) != 0 else { return }
-
-        let prefixed = extracted
-            .appendingPathComponent("PSP", isDirectory: true)
-            .appendingPathComponent("SAVEDATA", isDirectory: true)
-        var isDirectory: ObjCBool = false
-        let unpackedSaveData = fm.fileExists(atPath: prefixed.path, isDirectory: &isDirectory)
-            && isDirectory.boolValue ? prefixed : extracted
-        guard let folders = try? fm.contentsOfDirectory(atPath: unpackedSaveData.path)
-        else { return }
-        let dir = pspSaveDataDirectory(saveDir: saveDir)
-        try? fm.createDirectory(at: dir, withIntermediateDirectories: true)
-        for name in folders {
-            let target = dir.appendingPathComponent(name)
-            try? fm.removeItem(at: target)
-            try? fm.moveItem(at: unpackedSaveData.appendingPathComponent(name), to: target)
-        }
-    }
-
     /// Throws away the emulator's own per-game settings, leaving the
     /// game's progress alone.
     ///
@@ -272,243 +201,6 @@ enum NativeLauncher {
             .appendingPathComponent("cfg", isDirectory: true)
         let contents = try? FileManager.default.contentsOfDirectory(atPath: cfg.path)
         return !(contents ?? []).isEmpty
-    }
-
-    /// Sega CD, Neo Geo Pocket and 3DO: their cores read a save file by
-    /// name from the save directory at load (bram_load, flash_read,
-    /// opera_lr_nvram_load), so the restore is placing that file before
-    /// boot, the same shape as the VMU path above and with the same
-    /// own-rows-only rule: a web-player .srm for these platforms is not
-    /// this file, so there is nothing foreign worth adopting.
-    /// Where an arcade core keeps this game's NVRAM, relative to the
-    /// save directory it was given. The two emulators disagree about
-    /// both the folder and the extension, and their contents are not
-    /// interchangeable, which is exactly why the sync keeps them apart
-    /// rather than treating "the arcade save" as one thing.
-    static func arcadeNVRAMFile(core: NativeCore, saveDir: URL, stem: String) -> URL? {
-        switch core {
-        case .mame2003Plus:
-            return saveDir
-                .appendingPathComponent("nvram", isDirectory: true)
-                .appendingPathComponent("\(stem).nv")
-        case .fbneo:
-            return saveDir
-                .appendingPathComponent("fbneo", isDirectory: true)
-                .appendingPathComponent("\(stem).fs")
-        default:
-            return nil
-        }
-    }
-
-    /// Arcade NVRAM in, before the core boots.
-    ///
-    /// Same decision rules the memory-card platforms use, keyed by core
-    /// as well as by game: a copy this device still owes an upload wins
-    /// outright, else a newer row from the server, else whatever is
-    /// already on disk. What differs is only that a game legitimately
-    /// has two of these, one per arcade emulator, and they are never
-    /// candidates for each other.
-    private static func restoreArcadeNVRAM(
-        rom: Rom, session: Session, core: NativeCore, loadURL: URL, saveDir: URL
-    ) async {
-        let stem = loadURL.deletingPathExtension().lastPathComponent
-        guard let target = arcadeNVRAMFile(core: core, saveDir: saveDir, stem: stem) else { return }
-        let store = MemoryCardStore.shared
-
-        func place(_ bytes: Data) {
-            try? FileManager.default.createDirectory(
-                at: target.deletingLastPathComponent(), withIntermediateDirectories: true)
-            try? bytes.write(to: target, options: .atomic)
-        }
-
-        let local = store.localCard(romId: rom.id, core: core)
-        if store.pendingUpload(romId: rom.id, core: core), let local {
-            place(local)
-            return
-        }
-        if let own = (try? await session.saves(romId: rom.id))?
-            .filter({ $0.emulator == core.emulatorTag })
-            .sorted(by: { ($0.updatedAt ?? "") > ($1.updatedAt ?? "") })
-            .first,
-           own.updatedAt != store.serverStamp(romId: rom.id, core: core) || local == nil,
-           let bytes = try? await session.saveContent(own) {
-            store.storeDownloaded(
-                romId: rom.id, data: bytes, serverStamp: own.updatedAt, core: core)
-            place(bytes)
-            return
-        }
-        if let local {
-            place(local)
-        }
-    }
-
-    /// PSP's pre-boot restore. The same decision every other platform
-    /// makes, applied to an archive instead of a file: a pending local
-    /// copy wins outright, else the newest own server row when its stamp
-    /// has moved or nothing is local, else what this device already has,
-    /// which needs no action because it is already on disk.
-    private static func restorePSPSaves(
-        rom: Rom, session: Session, platform: NativePlatform, saveDir: URL
-    ) async {
-        let store = MemoryCardStore.shared
-        if store.pendingUpload(romId: rom.id, region: .saveRAM),
-           let local = store.localCard(romId: rom.id, region: .saveRAM) {
-            unpackPSPSaveData(local, saveDir: saveDir)
-            return
-        }
-        let serverRows = try? await session.saves(romId: rom.id)
-        guard let own = serverRows?
-            .filter({ $0.emulator == platform.core.emulatorTag })
-            .sorted(by: { ($0.updatedAt ?? "") > ($1.updatedAt ?? "") })
-            .first
-        else { return }
-        let local = store.localCard(romId: rom.id, region: .saveRAM)
-        guard own.updatedAt != store.serverStamp(romId: rom.id, region: .saveRAM) || local == nil,
-              let bytes = try? await session.saveContent(own)
-        else { return }
-        store.storeDownloaded(romId: rom.id, data: bytes, serverStamp: own.updatedAt, region: .saveRAM)
-        unpackPSPSaveData(bytes, saveDir: saveDir)
-    }
-
-    private static func restoreCoreFileSaveIfNeeded(
-        rom: Rom, session: Session, platform: NativePlatform, core: NativeCore,
-        loadURL: URL, saveDir: URL
-    ) async {
-        // nil suffix means the platform's file lives at a fixed nested
-        // path instead of `<stem>.<suffix>`: Opera writes its NVRAM to
-        // opera/shared/nvram.0.srm under the save directory (fixed
-        // because forcedOptions pins nvram_storage and nvram_version),
-        // so the restore target is that exact path.
-        let suffix: String?
-        switch platform {
-        case .segaCD: suffix = "brm"
-        case .ngpc: suffix = "flash"
-        // melonDS writes <content basename>.sav through its own
-        // NDSCart_SRAMManager, debounce-flushed during play and force
-        // flushed at unload (the latter is Cabinet's patch in
-        // build-core.sh; stock unload never flushed, losing any save
-        // made in the two seconds before quitting).
-        case .nds: suffix = "sav"
-        case .threeDO: suffix = nil
-        case .arcade:
-            await restoreArcadeNVRAM(
-                rom: rom, session: session, core: core, loadURL: loadURL, saveDir: saveDir)
-            return
-        case .psp:
-            await restorePSPSaves(
-                rom: rom, session: session, platform: platform, saveDir: saveDir)
-            return
-        default: return
-        }
-        let store = MemoryCardStore.shared
-        let stem = loadURL.deletingPathExtension().lastPathComponent
-        // One server list for however many regions restore below; nil
-        // means unreachable and only local copies play.
-        let serverRows = try? await session.saves(romId: rom.id)
-
-        // The same decision every region makes: a pending local copy wins
-        // outright, else the newest own server row when its stamp moved
-        // or nothing useful is local, else whatever is on this device.
-        // Nothing anywhere leaves whatever file a previous session's
-        // flush left in the save directory, which is already this game's
-        // newest save; the core reads it exactly as it wrote it.
-        func restore(region: MemoryCardStore.Region, to target: URL) async {
-            let local = store.localCard(romId: rom.id, region: region)
-            if store.pendingUpload(romId: rom.id, region: region), let local {
-                try? local.write(to: target, options: .atomic)
-                return
-            }
-            if let own = serverRows?
-                .filter({ $0.emulator == platform.core.emulatorTag && MemoryCardStore.region(ofFileName: $0.fileName) == region })
-                .sorted(by: { ($0.updatedAt ?? "") > ($1.updatedAt ?? "") })
-                .first,
-               own.updatedAt != store.serverStamp(romId: rom.id, region: region) || local == nil,
-               let bytes = try? await session.saveContent(own) {
-                store.storeDownloaded(romId: rom.id, data: bytes, serverStamp: own.updatedAt, region: region)
-                try? bytes.write(to: target, options: .atomic)
-                return
-            }
-            if let local {
-                try? local.write(to: target, options: .atomic)
-            }
-        }
-
-        if let suffix {
-            await restore(region: .saveRAM, to: saveDir.appendingPathComponent("\(stem).\(suffix)"))
-        } else {
-            let operaDir = saveDir
-                .appendingPathComponent("opera", isDirectory: true)
-                .appendingPathComponent("shared", isDirectory: true)
-            try? FileManager.default.createDirectory(at: operaDir, withIntermediateDirectories: true)
-            await restore(region: .saveRAM, to: operaDir.appendingPathComponent("nvram.0.srm"))
-        }
-
-        // Sega CD's second save location, the external RAM cartridge,
-        // which games prefer over the internal RAM when present (Lunar,
-        // first device test). Its filename is fixed by the two core
-        // options Cabinet forces: cart_bram stays on its "per cart"
-        // default (per-game separation already comes from each game's
-        // own save directory) and cart_size is "4meg", which makes the
-        // core look for exactly this name.
-        if platform == .segaCD {
-            await restore(region: .cart, to: saveDir.appendingPathComponent("4Mbit_cart.brm"))
-        }
-    }
-
-    /// Dreamcast only, and run before the core boots rather than after
-    /// the way PS1's own `syncMemoryCardIn` in NativePlayerView does:
-    /// Flycast reads whatever VMU file already exists on disk once,
-    /// synchronously, while `retro_load_game` sets up its Maple bus
-    /// devices, so anything placed after `loadGame` returns is already
-    /// too late, there is no RETRO_MEMORY_SAVE_RAM injection point for
-    /// this core the way there is for PS1's. The path itself is fixed
-    /// and predictable, `<workDir>/dc/vmu_save_A1.bin`: confirmed
-    /// 2026-08-11 by reading shell/libretro/oslib.cpp directly (a
-    /// separate file from the core/oslib/oslib.cpp this investigation
-    /// spent most of a session inside by mistake), where
-    /// `per_content_vmus` defaults to 0 and the plain, gameId-free path
-    /// is exactly what this core actually uses.
-    ///
-    /// Same own-card-wins-else-newest-server-card-wins logic as
-    /// `syncMemoryCardIn`, just writing a file instead of handing bytes
-    /// to the core directly, and applied uniformly to kept and
-    /// temp-directory launches alike: a kept game's own directory
-    /// already carries its last card forward for free, but a newer
-    /// save from another device still deserves the same server check
-    /// PS1 always runs regardless of Keep.
-    private static func restoreVMUSaveIfNeeded(
-        rom: Rom, session: Session, platform: NativePlatform, workDir: URL
-    ) async {
-        guard platform == .dreamcast else { return }
-        let store = MemoryCardStore.shared
-        let dcDir = workDir.appendingPathComponent("dc", isDirectory: true)
-        let target = dcDir.appendingPathComponent("vmu_save_A1.bin")
-
-        func place(_ data: Data) {
-            try? FileManager.default.createDirectory(at: dcDir, withIntermediateDirectories: true)
-            try? data.write(to: target, options: .atomic)
-        }
-
-        let local = store.localCard(romId: rom.id)
-        if store.pendingUpload(romId: rom.id), let local {
-            place(local)
-            return
-        }
-
-        if let saves = try? await session.saves(romId: rom.id) {
-            let sorted = saves.sorted { ($0.updatedAt ?? "") > ($1.updatedAt ?? "") }
-            let own = sorted.first { $0.emulator == NativeCore.flycast.emulatorTag }
-            if let own, own.updatedAt != store.serverStamp(romId: rom.id) || local == nil,
-               let bytes = try? await session.saveContent(own) {
-                store.storeDownloaded(romId: rom.id, data: bytes, serverStamp: own.updatedAt)
-                place(bytes)
-                return
-            }
-        }
-
-        if let local {
-            place(local)
-        }
     }
 
     private static func activate(platform: NativePlatform, core: NativeCore, loadURL: URL, workDir: URL, saveDir: URL) throws -> NativeCore {
