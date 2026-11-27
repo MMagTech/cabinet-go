@@ -18,7 +18,7 @@ vertex VertexOut libretro_vertex(const device VertexIn *vertices [[buffer(0)]], 
     return out;
 }
 
-// Sharp (none), the default: a plain nearest-sampled passthrough with no
+// Plain (the `.sharp` case), the default: a nearest-sampled passthrough with no
 // filter, matching what the native player has always rendered.
 fragment float4 libretro_fragment(VertexOut in [[stage_in]],
                                 texture2d<float> tex [[texture(0)]],
@@ -212,14 +212,15 @@ fragment float4 shader_crt_geom_fragment(VertexOut in [[stage_in]],
     return float4(color.rgb * scan * vignette, color.a);
 }
 
-// lcd: the generic handheld screen look for GBA/Game Gear/NGPC, none of
-// which were ever displayed on a CRT. Reimplements the real math (not a
-// copy) of libretro/slang-shaders' lcd3x.slang, itself explicitly public
-// domain (Author: Gigaherz), using its own shipped defaults
+// lcd: "LCD 3x", CabinetOS's handheld look, offered on every handheld
+// screen. lcd3x (Author: Gigaherz, public domain) as libretro/glsl-shaders
+// has it at the commit CabinetOS draws from (435612fe), its own defaults
 // (brighten_scanlines 16.0, brighten_lcd 4.0): a soft sine-based scanline
 // darkening plus a per-channel horizontal subpixel-fringe term, phase
 // offset 2/3 of a cycle per channel to fake an RGB stripe mask without
-// sampling neighbouring texels.
+// sampling neighbouring texels. The same maths as that file's fragment
+// stage, line for line; the texture here is the frame's own size, so its
+// TextureSize / InputSize is 1.
 fragment float4 shader_lcd_fragment(VertexOut in [[stage_in]],
                                      texture2d<float> tex [[texture(0)]],
                                      sampler samp [[sampler(0)]],
@@ -257,27 +258,100 @@ fragment float4 shader_vmu_lcd_fragment(VertexOut in [[stage_in]],
     return float4(paper * (0.15 + 0.85 * lum), 1.0);
 }
 
-// gameboy: a two-axis dot-matrix grid (both x and y, unlike lcd's
-// scanline-only pattern), a touch of extra contrast, and a faint warm-
-// green tint evoking the original DMG/GBC reflective screen. The real
-// community dot-matrix shader (libretro/slang-shaders handheld/shaders/
-// gameboy) is a five-pass pipeline with border art and previous-frame
-// ghosting; this frontend has no multi-pass or prior-frame support, so
-// this is a single-pass approximation of the same idea, not a port of
-// its exact math. Colorization/recoloring is deliberately left alone
-// here: Gambatte's own gambatte_gb_colorization core option already
-// owns "what colors a mono Game Boy cart gets," this shader only shapes
-// the screen, never repaints the palette.
-fragment float4 shader_gameboy_fragment(VertexOut in [[stage_in]],
-                                         texture2d<float> tex [[texture(0)]],
-                                         sampler samp [[sampler(0)]],
-                                         constant float2 &texelSize [[buffer(1)]]) {
-    float4 color = tex.sample(samp, in.texCoord);
-    float2 cell = fract(in.texCoord / texelSize);
-    float2 dist = abs(cell - 0.5) * 2.0;
-    float grid = 1.0 - max(dist.x, dist.y) * 0.22;
-    float3 shaped = color.rgb * grid;
-    float3 contrasted = (shaped - 0.5) * 1.08 + 0.5;
-    float3 tinted = mix(contrasted, contrasted * float3(0.92, 1.02, 0.9), 0.18);
-    return float4(clamp(tinted, 0.0, 1.0), color.a);
+// THE DOT MATRIX LOOKS, CabinetOS's three Game Boy screens by their TV
+// names: "Dot matrix" (the original Game Boy's green), "Dot matrix Pocket"
+// (the Pocket's grey) and, for Game Boy Color, "Dot matrix" keeping the
+// game's own colours. On the TV they are multi-pass GPL shaders
+// (libretro/glsl-shaders `handheld/gameboy.glslp`, `gameboy-pocket.glslp`,
+// `gbc-dot-matrix-white.glslp`); this app is MIT and draws one pass, so
+// these are written here from what the screen looks like, not translated
+// from those files. Taken from them only as plain values: each screen's
+// two colours (their palette images) and the presets' own settings named
+// below. Left out: the previous frames' ghosting (no frame history here)
+// and the paper texture.
+//
+// One square dot per game pixel with a gap around it, the dot's darkness
+// from how dark the pixel is, and a faint dot even where the pixel is
+// blank (the "off" dot a real screen shows), over the screen's light
+// shade. The dots cast a soft shadow down and to the right onto the
+// screen behind them. Edges are softened over one screen pixel, so the
+// grid stays even at any size the picture is drawn.
+
+// How much of a dot's cell the gap takes, and the shadow's offset and
+// strength, in cells.
+constant float kDotGap = 0.14;
+constant float2 kDotShadowOffset = float2(0.22, 0.28);
+constant float kDotShadowStrength = 0.30;
+
+// 1 inside the dot whose cell holds `p` (in game pixels), 0 in the gap.
+static float dotCover(float2 p, float2 aa) {
+    float2 edge = abs(fract(p) - 0.5) - (0.5 - kDotGap * 0.5);
+    float2 soft = smoothstep(-aa * 0.5, aa * 0.5, edge);
+    return (1.0 - soft.x) * (1.0 - soft.y);
+}
+
+// The game pixel whose cell holds `p`, sampled at its centre.
+static float3 dotSource(texture2d<float> tex, sampler samp, float2 p, float2 texelSize) {
+    return tex.sample(samp, (floor(p) + 0.5) * texelSize).rgb;
+}
+
+static float dotDarkness(float3 c) {
+    return 1.0 - dot(c, float3(0.299, 0.587, 0.114));
+}
+
+// A mono screen: dots in `ink` over `paper`, as dark as the pixel is,
+// never fainter than `baseline` (the presets' baseline_alpha, 0.10).
+static float4 monoDotMatrix(float2 uv, texture2d<float> tex, sampler samp,
+                            float2 texelSize, float3 paper, float3 ink) {
+    const float baseline = 0.10;
+    float2 p = uv / texelSize;
+    float2 aa = fwidth(p);
+    float cover = dotCover(p, aa);
+    float alpha = baseline + (1.0 - baseline) * dotDarkness(dotSource(tex, samp, p, texelSize));
+    float2 sp = p - kDotShadowOffset;
+    float shadowAlpha = baseline + (1.0 - baseline) * dotDarkness(dotSource(tex, samp, sp, texelSize));
+    float shadow = kDotShadowStrength * shadowAlpha * dotCover(sp, aa);
+    float3 screen = paper * (1.0 - shadow);
+    return float4(mix(screen, ink, alpha * cover), 1.0);
+}
+
+// "Dot matrix": the original Game Boy's yellow-green screen and its dark
+// teal-green dots (gameboy.glslp's palette.png, #A0AA06 and #1D6A6B).
+fragment float4 shader_dot_matrix_fragment(VertexOut in [[stage_in]],
+                                           texture2d<float> tex [[texture(0)]],
+                                           sampler samp [[sampler(0)]],
+                                           constant float2 &texelSize [[buffer(1)]]) {
+    return monoDotMatrix(in.texCoord, tex, samp, texelSize,
+                         float3(0xA0, 0xAA, 0x06) / 255.0, float3(0x1D, 0x6A, 0x6B) / 255.0);
+}
+
+// "Dot matrix Pocket": the Game Boy Pocket's grey-green screen and its
+// near-black dots (gameboy-pocket.glslp's gbp-palette.png, #A6AC84 and
+// #121923).
+fragment float4 shader_dot_matrix_pocket_fragment(VertexOut in [[stage_in]],
+                                                  texture2d<float> tex [[texture(0)]],
+                                                  sampler samp [[sampler(0)]],
+                                                  constant float2 &texelSize [[buffer(1)]]) {
+    return monoDotMatrix(in.texCoord, tex, samp, texelSize,
+                         float3(0xA6, 0xAC, 0x84) / 255.0, float3(0x12, 0x19, 0x23) / 255.0);
+}
+
+// "Dot matrix" on Game Boy Color: each dot in the game's own colour, a
+// little desaturated (the preset's desaturate_toggle, 0.4), fully opaque
+// (its baseline_alpha, 1.0), over a white screen (b-w-palette.png), so a
+// colour game keeps its colours and only the grid and the shadow show.
+fragment float4 shader_dot_matrix_color_fragment(VertexOut in [[stage_in]],
+                                                 texture2d<float> tex [[texture(0)]],
+                                                 sampler samp [[sampler(0)]],
+                                                 constant float2 &texelSize [[buffer(1)]]) {
+    const float3 paper = float3(1.0);
+    float2 p = in.texCoord / texelSize;
+    float2 aa = fwidth(p);
+    float cover = dotCover(p, aa);
+    float3 c = dotSource(tex, samp, p, texelSize);
+    float3 dotColour = mix(c, float3(dot(c, float3(0.299, 0.587, 0.114))), 0.4);
+    float2 sp = p - kDotShadowOffset;
+    float shadow = kDotShadowStrength * dotDarkness(dotSource(tex, samp, sp, texelSize)) * dotCover(sp, aa);
+    float3 screen = paper * (1.0 - shadow);
+    return float4(mix(screen, dotColour, cover), 1.0);
 }

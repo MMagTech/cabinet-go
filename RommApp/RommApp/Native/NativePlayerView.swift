@@ -419,25 +419,29 @@ struct NativePlayerView: View {
                         .padding(.vertical, 6)
                 }
                 .buttonStyle(.bordered)
-                Menu {
-                    ForEach(NativeShader.available(for: platform)) { candidate in
-                        Button {
-                            renderer.shader = candidate
-                            NativeShader.setCurrent(candidate, for: platform)
-                        } label: {
-                            if candidate == renderer.shader {
-                                Label(candidate.label, systemImage: "checkmark")
-                            } else {
-                                Text(candidate.label)
+                // A system with only Plain has no Look row, as on the TV:
+                // a row that does nothing is worse than none.
+                if NativeShader.available(for: platform).count > 1 {
+                    Menu {
+                        ForEach(NativeShader.available(for: platform)) { candidate in
+                            Button {
+                                renderer.shader = candidate
+                                NativeShader.setCurrent(candidate, for: platform)
+                            } label: {
+                                if candidate == renderer.shader {
+                                    Label(candidate.label, systemImage: "checkmark")
+                                } else {
+                                    Text(candidate.label)
+                                }
                             }
                         }
+                    } label: {
+                        Label("Look", systemImage: "camera.filters")
+                            .frame(maxWidth: .infinity)
+                            .padding(.vertical, 6)
                     }
-                } label: {
-                    Label("Shader", systemImage: "camera.filters")
-                        .frame(maxWidth: .infinity)
-                        .padding(.vertical, 6)
+                    .buttonStyle(.bordered)
                 }
-                .buttonStyle(.bordered)
                 // Game & Watch has no save states (the core cannot
                 // serialize), so the slots hide rather than fail.
                 if platform.supportsSaveStates {
