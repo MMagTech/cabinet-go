@@ -40,7 +40,7 @@ enum NativeShader: String, CaseIterable, Identifiable {
     /// and offered in NO platform's menu: the skin is the whole
     /// presentation there and a shader picker is exactly the kind of
     /// setting the player deliberately does not have. available(for:)
-    /// filters it out everywhere, which is load-bearing, not tidiness.
+    /// lists it for no platform, which is load-bearing, not tidiness.
     case vmuLCD
 
     var id: String { rawValue }
@@ -84,31 +84,40 @@ enum NativeShader: String, CaseIterable, Identifiable {
         }
     }
 
-    /// The CRT shaders simulate a television; none of these platforms was
-    /// ever displayed on one, they had their own small LCD screens. Found
-    /// 2026-08-08 while adding LCD/Game Boy: no reason to keep offering a
-    /// look that never applied to this hardware.
-    private static let handheldPlatforms: Set<NativePlatform> = [.gb, .gbc, .gba, .gameGear, .ngpc, .nds]
-
-    /// The looks worth offering for a platform, in the TV's order. Every
-    /// handheld swaps the CRT variants for LCD 3x, the TV's handheld look;
-    /// the Game Boy adds its green and Pocket dot matrix screens, and the
-    /// Game Boy Color its own, which keeps the game's colours, since a
-    /// green screen turns a colour game green (CabinetOS's looks.cpp). The
-    /// filter cuts both ways: anything else drops the handheld screens the
-    /// way handhelds drop the CRTs.
+    /// The looks worth offering for a platform, in the TV's order. A look
+    /// draws the screen a system was played on, so the CRT looks go only
+    /// to the systems played on a television, and the handhelds, which had
+    /// their own LCD screens, get LCD 3x, the TV's handheld look, in their
+    /// place (found 2026-08-08). The Game Boy adds its green and Pocket dot
+    /// matrix screens, and the Game Boy Color its own, which keeps the
+    /// game's colours, since a green screen turns a colour game green
+    /// (CabinetOS's looks.cpp). Game & Watch, Virtual Boy and Vectrex have
+    /// only Plain, so no Look row, as the TV gives them no look: Game &
+    /// Watch draws the device's own artwork, so a look would draw over a
+    /// photo, and the Virtual Boy's red LED screen and the Vectrex's
+    /// vector screen were neither a television nor a grid of pixels.
+    ///
+    /// Every platform is named, with no default, so a new one has to be
+    /// placed here before the app builds: PSP, Game & Watch, Virtual Boy
+    /// and Vectrex were added after the handheld rule and got the CRT
+    /// looks unseen.
     static func available(for platform: NativePlatform) -> [NativeShader] {
-        guard handheldPlatforms.contains(platform) else {
-            return allCases.filter { !handheldLooks.contains($0) && $0 != .vmuLCD }
-        }
         switch platform {
-        case .gb: return [.sharp, .sabr, .lcd, .dotMatrix, .dotMatrixPocket]
-        case .gbc: return [.sharp, .sabr, .lcd, .dotMatrixColor]
-        default: return [.sharp, .sabr, .lcd]
+        case .gb:
+            return [.sharp, .sabr, .lcd, .dotMatrix, .dotMatrixPocket]
+        case .gbc:
+            return [.sharp, .sabr, .lcd, .dotMatrixColor]
+        case .gba, .gameGear, .ngpc, .nds, .psp:
+            return [.sharp, .sabr, .lcd]
+        case .gameAndWatch, .virtualBoy, .vectrex:
+            return [.sharp]
+        case .arcade, .saturn, .genesis, .segaCD, .masterSystem, .sega32X,
+             .tg16, .tgCD, .snes, .nes, .atari7800, .psx, .dreamcast, .n64,
+             .atari2600, .threeDO:
+            return [.sharp, .sabr, .crtAperture, .crtEasymode, .crtMattias,
+                    .crtBeam, .crtCaligari, .crtGeom]
         }
     }
-
-    private static let handheldLooks: Set<NativeShader> = [.lcd, .dotMatrix, .dotMatrixPocket, .dotMatrixColor]
 
     private static func key(for platform: NativePlatform) -> String {
         "com.mmagtech.RommApp.nativeShader.\(platform.storageKey)"
