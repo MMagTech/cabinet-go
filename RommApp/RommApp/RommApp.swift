@@ -39,7 +39,7 @@ struct RommApp: App {
                 )
                 .environmentObject(session)
             } else if ProcessInfo.processInfo.arguments.contains("-cabinetNoticeGallery") {
-                // The start's notices on their own (NoticeGallery), for
+                // The game's notices on their own (NoticeGallery), for
                 // judging them in a simulator, where no game can start.
                 NoticeGallery()
             } else {

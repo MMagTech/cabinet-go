@@ -30,16 +30,16 @@ struct NativePlayerView: View {
     @State private var previousControllerMenu: (() -> Void)?
     @State private var previousControllerDisconnect: ((Int) -> Void)?
     @State private var menuVisible = false
-    @State private var menuStatus: String?
     @State private var menuBusy = false
     /// The touch controls' visibility slider, from Settings.
     @AppStorage("com.mmagtech.RommApp.controlOpacity") private var controlOpacity = 0.7
     @Environment(\.scenePhase) private var scenePhase
     @State private var startedAt: Date?
-    /// What the start says over the game ("Continuing from another
-    /// device"), for a few seconds: the TV's pill. Drawn over the picture, so
-    /// nothing on screen moves.
-    @State private var notice: String?
+    /// What the game says over itself for a few seconds, the TV's pill: the
+    /// start's notice ("Continuing from another device") and the pause
+    /// menu's answers ("State saved"). Drawn over the picture and over the
+    /// menu, so nothing on screen moves and the menu never changes size.
+    @State private var notice: GameNotice.Shown?
 
     private var canonicalSlug: String {
         rom.canonicalPlatformSlug(platformsVersions: session.platformsVersions)
@@ -114,7 +114,6 @@ struct NativePlayerView: View {
 
     private func openMenu() {
         renderer.paused = true
-        menuStatus = nil
         menuVisible = true
         // Say so on the television, which is still showing the frozen
         // frame. Harmless with no television attached.
@@ -243,7 +242,8 @@ struct NativePlayerView: View {
             }
             .overlay(alignment: .top) {
                 if let notice {
-                    StartNotice(words: notice, problem: notice == GameSaves.couldNotUseNewest)
+                    GameNotice(words: notice.words, tone: notice.tone)
+                        .id(notice.id)
                         .padding(.top, 12)
                         .transition(.opacity)
                         .allowsHitTesting(false)
@@ -260,7 +260,9 @@ struct NativePlayerView: View {
             if startedAt == nil { startedAt = Date() }
             saves?.seat(renderer)
             renderer.awaitingSaveRAM = false
-            if let words = saves?.notice { Task { await say(words) } }
+            if let words = saves?.notice {
+                say(words, words == GameSaves.couldNotUseNewest ? .problem : .info)
+            }
             while !Task.isCancelled {
                 await session.reportPlaying(romId: rom.id)
                 try? await Task.sleep(for: .seconds(60))
@@ -414,11 +416,6 @@ struct NativePlayerView: View {
                         .font(.caption)
                         .foregroundStyle(.secondary)
                 }
-                if let menuStatus {
-                    Text(menuStatus)
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
-                }
                 VStack(spacing: 10) {
                     Button(role: .destructive) {
                         dismiss()
@@ -502,16 +499,19 @@ struct NativePlayerView: View {
     /// A STATE IS WRITTEN ON THE PHONE FIRST, for every game, and marked
     /// owed in the game's push (GameSaves.keepState): no connection, and no
     /// end of the app, loses it. It goes up inside the game's snapshot when
-    /// the game is left. "State saved", the TV's words.
+    /// the game is left. "State saved", the TV's words, in the pill.
     private func saveState() {
         guard let saves, let state = LibretroFrontend.shared.serializeState() else {
-            menuStatus = "Couldn't save a state"
+            say("Couldn't save a state", .problem)
             return
         }
         // Taken while the pause menu still holds the exact frame being saved.
         let screenshot = renderer.screenshotPNG()
-        menuStatus = saves.keepState(state, picture: screenshot, stem: stateFileStem())
-            ? GameSaves.stateSaved : "Couldn't save a state"
+        if saves.keepState(state, picture: screenshot, stem: stateFileStem()) {
+            say(GameSaves.stateSaved, .done)
+        } else {
+            say("Couldn't save a state", .problem)
+        }
     }
 
     /// The newest of the three states the game offers (GameSaves.offeredStates):
@@ -522,29 +522,32 @@ struct NativePlayerView: View {
             let offered = await GameSaves.offeredStates(romId: rom.id, tag: core.emulatorTag, session: session)
             defer { menuBusy = false }
             guard let newest = offered.first else {
-                menuStatus = "No saved state for this game"
+                say("No saved state for this game", .problem)
                 return
             }
             guard let bytes = await GameSaves.stateBytes(newest, session: session) else {
-                menuStatus = "Couldn't reach RomM"
+                say("Couldn't reach RomM", .problem)
                 return
             }
             if LibretroFrontend.shared.unserializeState(bytes) {
-                menuStatus = nil
                 closeMenu()
             } else {
-                menuStatus = "Couldn't load that state"
+                say("Couldn't load that state", .problem)
             }
         }
     }
 
-    /// The start's notice, as long as it takes to read: the TV's rule, 1.5 s
-    /// and 60 ms a character, from 2.5 s to 4.5 s.
-    private func say(_ words: String) async {
-        withAnimation { notice = words }
+    /// A notice, as long as it takes to read: the TV's rule, 1.5 s and 60 ms
+    /// a character, from 2.5 s to 4.5 s. One at a time: a newer one takes
+    /// the pill's place, and an older one's clock never ends the newer.
+    private func say(_ words: String, _ tone: GameNotice.Tone) {
+        let shown = GameNotice.Shown(words: words, tone: tone)
+        withAnimation { notice = shown }
         let seconds = min(max(1.5 + 0.06 * Double(words.count), 2.5), 4.5)
-        try? await Task.sleep(for: .seconds(seconds))
-        withAnimation { notice = nil }
+        Task {
+            try? await Task.sleep(for: .seconds(seconds))
+            if notice?.id == shown.id { withAnimation { notice = nil } }
+        }
     }
 }
 
@@ -563,19 +566,40 @@ private struct SetBackWhilePaused: ViewModifier {
     }
 }
 
-/// WHAT A START SAYS OVER THE GAME (GameSaves.notice), the TV's pill in the
-/// phone's own look: iOS's thick glass in its dark form, so it reads the
-/// same over a Game Boy's white screen and a dark one, and the TV's dot
-/// before the words: white for news, the TV's amber for a save it could not
-/// use (CabinetOS's notice.cpp).
-struct StartNotice: View {
+/// WHAT THE GAME SAYS OVER ITSELF: the start's notice (GameSaves.notice) and
+/// the pause menu's answers, the TV's pill in the phone's own look. iOS's
+/// thick glass in its dark form, so it reads the same over a Game Boy's
+/// white screen and a dark one, and the TV's dot before the words, its
+/// colour saying which kind of answer it is (CabinetOS's notice.cpp): white
+/// for news, the TV's cyan for something done, its amber for a problem.
+/// The pause menu's answers were a line inside the menu's card, which grew
+/// and pushed its buttons down; the TV moved the same line out of its menu
+/// into the pill on 2026-09-23.
+struct GameNotice: View {
+    enum Tone { case info, done, problem }
+
+    /// One showing of a notice: the same words twice are two showings.
+    struct Shown: Equatable {
+        let words: String
+        let tone: Tone
+        let id = UUID()
+    }
+
     let words: String
-    let problem: Bool
+    let tone: Tone
+
+    private var dot: Color {
+        switch tone {
+        case .info: return Color.white.opacity(0.7)
+        case .done: return Color(red: 0x58 / 255.0, green: 0xE8 / 255.0, blue: 0xF6 / 255.0)
+        case .problem: return Color(red: 1.0, green: 0xC4 / 255.0, blue: 0x57 / 255.0)
+        }
+    }
 
     var body: some View {
         HStack(spacing: 8) {
             Circle()
-                .fill(problem ? Color(red: 1.0, green: 0xC4 / 255.0, blue: 0x57 / 255.0) : Color.white.opacity(0.7))
+                .fill(dot)
                 .frame(width: 7, height: 7)
             Text(words)
                 .font(.footnote.weight(.semibold))
@@ -591,26 +615,28 @@ struct StartNotice: View {
 }
 
 #if DEBUG
-/// The start's notices on their own, for judging them without starting a
-/// game (`-cabinetNoticeGallery`, RommApp): each over a Game Boy's white
-/// screen and over a dark one, where the player draws them.
+/// The game's notices on their own, for judging them without starting a
+/// game (`-cabinetNoticeGallery`, RommApp): one of each tone over a Game
+/// Boy's white screen and over a dark one, where the player draws them.
 struct NoticeGallery: View {
     var body: some View {
         VStack(spacing: 0) {
-            panel(Color(white: 0.97), GameSaves.continuingElsewhere)
-            panel(Color(white: 0.97), GameSaves.couldNotUseNewest)
-            panel(Color(white: 0.10), GameSaves.continuingElsewhere)
-            panel(Color(white: 0.10), GameSaves.couldNotUseNewest)
+            panel(Color(white: 0.97), GameSaves.continuingElsewhere, .info)
+            panel(Color(white: 0.97), GameSaves.stateSaved, .done)
+            panel(Color(white: 0.97), GameSaves.couldNotUseNewest, .problem)
+            panel(Color(white: 0.10), GameSaves.continuingElsewhere, .info)
+            panel(Color(white: 0.10), GameSaves.stateSaved, .done)
+            panel(Color(white: 0.10), GameSaves.couldNotUseNewest, .problem)
         }
         .background(Color.black)
         .ignoresSafeArea()
     }
 
-    private func panel(_ screen: Color, _ words: String) -> some View {
+    private func panel(_ screen: Color, _ words: String, _ tone: GameNotice.Tone) -> some View {
         screen
             .overlay(alignment: .top) {
-                StartNotice(words: words, problem: words == GameSaves.couldNotUseNewest)
-                    .padding(.top, 70)
+                GameNotice(words: words, tone: tone)
+                    .padding(.top, 40)
             }
     }
 }
