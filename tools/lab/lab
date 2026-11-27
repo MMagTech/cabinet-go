@@ -27,7 +27,7 @@ usage() {
 usage: tools/lab/lab <command> [args]
 
   check [station]     run every assertion, or one station's
-                      stations: wiring controls
+                      stations: wiring controls saves
   bench <args>        measure a core headless (see bench/README or -h)
   core <name>         bring-up status for one core, as a checklist
   stations            list what exists and what each one covers
@@ -45,11 +45,12 @@ USAGE
 #
 # A check must never modify the working tree. The tripwire below enforces
 # that rather than trusting it.
-CHECK_STATIONS="wiring controls"
+CHECK_STATIONS="wiring controls saves"
 check_script_for() {
     case "$1" in
     wiring)   echo "$LAB/wiring/run.sh" ;;
     controls) echo "$LAB/controls/run.sh" ;;
+    saves)    echo "$LAB/saves/run.sh" ;;
     *)        echo "" ;;
     esac
 }
@@ -117,6 +118,7 @@ stations)
     cat <<'LIST'
 wiring    asserts   core ids, symbol collisions, layouts present
 controls  asserts   the real controller state machines, headless in the simulator
+saves     asserts   the real save files against CabinetOS's case tables and RomM's answers
 bench     measures  any core headless: frame time, audio rate, geometry, hashes
 core      reports   bring-up status for one core, as a checklist
 LIST
