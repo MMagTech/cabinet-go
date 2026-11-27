@@ -570,7 +570,7 @@ struct NativePlayerView: View {
 enum PauseMenu {
     static var fade: Animation { .timingCurve(0.65, 0, 0.35, 1, duration: 0.62 * slow) }
     /// `-cabinetMenuSlow 10` in a debug build stretches the fade so it can be
-    /// watched in slow motion (PauseMenuBench), as the TV's `--menu-fade`.
+    /// watched in slow motion (PauseMenuBench), as the TV's menu fade flag does.
     private static var slow: Double {
         #if DEBUG
         let asked = UserDefaults.standard.double(forKey: "cabinetMenuSlow")
