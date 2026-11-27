@@ -211,26 +211,44 @@ struct HomeView: View {
     // MARK: Layouts
 
     private func tallLayout(height: CGFloat) -> some View {
-        VStack(alignment: .leading, spacing: 28) {
-            if let hero = resumeHero {
-                heroCard(for: hero, height: portraitHeroHeight(for: height), wide: false)
+        let hero = resumeHero
+        let rails = (recentBesides(hero).isEmpty ? 0 : 1) + (favorites.isEmpty ? 0 : 1)
+        let sizes = portraitSizes(for: height, rails: rails)
+        return VStack(alignment: .leading, spacing: Self.tallSpacing) {
+            if let hero {
+                heroCard(for: hero, height: sizes.hero, wide: false)
                     .padding(.horizontal, 20)
             }
             // Outside the hero's own block, and that matters: when
             // nothing recent is playable here there is no hero, and the
             // shelf is the only way back to those games. The empty state
             // belongs to an empty library, not to an unplayable one.
-            if !recentBesides(resumeHero).isEmpty {
-                rotationRow("Recent", recentBesides(resumeHero), seeAll: .recentlyPlayed)
+            if !recentBesides(hero).isEmpty {
+                rotationRow("Recent", recentBesides(hero), seeAll: .recentlyPlayed, coverHeight: sizes.cover)
             } else if loaded, recent.isEmpty {
                 emptyState.padding(.horizontal, 20)
             }
             if !favorites.isEmpty {
-                rotationRow("Favorites", favorites, seeAll: session.favoriteCollection.map { .collection($0) })
+                rotationRow(
+                    "Favorites", favorites, seeAll: session.favoriteCollection.map { .collection($0) },
+                    coverHeight: sizes.cover
+                )
             }
         }
-        .padding(.vertical, 20)
+        .padding(.vertical, Self.tallPadding)
     }
+
+    /// Portrait's gaps, named because the hero's height is worked out
+    /// from them.
+    private static let tallSpacing: CGFloat = 20
+    private static let tallPadding: CGFloat = 16
+    /// A rail cover's height, and the shortest a portrait rail may take
+    /// it to on a shorter phone.
+    private static let railCoverHeight: CGFloat = 133
+    private static let railCoverFloor: CGFloat = 112
+    /// The shortest portrait hero: below this the game you came back for
+    /// is barely bigger than a rail cover.
+    private static let heroFloor: CGFloat = 240
 
     /// Landscape: the hero takes the left, everything else stacks to its
     /// right, so nothing is pushed off a screen that is short but wide.
@@ -305,12 +323,32 @@ struct HomeView: View {
 
     /// Portrait's hero takes a share of the screen rather than a fixed 360
     /// points, which dominated a small phone and looked timid on a large
-    /// one. Bounded at both ends, and deliberately short of half the
-    /// screen so the first rail still shows: Home is meant to say "resume
-    /// this, and here is what else is around", and a hero filling the
-    /// whole screen only says the first half.
-    private func portraitHeroHeight(for available: CGFloat) -> CGFloat {
-        min(max(available * 0.45, 280), 460)
+    /// one, and gives back what the rails below it need, so Favorites ends
+    /// above the tab bar instead of under it. The share alone did not: on
+    /// an iPhone Air the second rail ran 79 points under the bar. When the
+    /// hero reaches its floor the rail covers shrink, down to their own
+    /// floor, which is meant to fit both rails on a regular sized iPhone; a phone
+    /// shorter than that scrolls.
+    private func portraitSizes(for available: CGFloat, rails: Int) -> (hero: CGFloat, cover: CGFloat) {
+        let share = min(max(available * 0.45, 280), 460)
+        guard rails > 0 else { return (share, Self.railCoverHeight) }
+        let count = CGFloat(rails)
+        let gaps = Self.tallPadding * 2 + Self.tallSpacing * count
+        // What the hero and the covers share once the gaps and each
+        // rail's two lines of text are taken out.
+        let room = available - gaps - count * railTextHeight
+        let cover = min(Self.railCoverHeight, max(Self.railCoverFloor, floor((room - Self.heroFloor) / count)))
+        let hero = max(min(share, room - count * cover), Self.heroFloor)
+        return (hero, cover)
+    }
+
+    /// A rail's header and caption, from the line heights of the fonts
+    /// they use, the way `heroBandHeight` measures the band, so a larger
+    /// text size is counted rather than run under the tab bar.
+    private var railTextHeight: CGFloat {
+        let header = UIFont.preferredFont(forTextStyle: .headline).lineHeight
+        let caption = UIFont.preferredFont(forTextStyle: .caption1).lineHeight
+        return ceil(header + 12 + 6 + caption)
     }
 
     /// Reserving a real row rather than overlaying text on the art (see
@@ -362,8 +400,7 @@ struct HomeView: View {
                 // artwork. A material keeps the game's colours showing
                 // through (the blurred fill behind spans the whole card,
                 // this row included) while still giving the text a
-                // surface it can be read against, and it matches the
-                // Resume pill, which is already the same material.
+                // surface it can be read against.
                 HStack {
                     VStack(alignment: .leading, spacing: 2) {
                         Text(rom.displayName)
@@ -374,8 +411,12 @@ struct HomeView: View {
                             .foregroundStyle(.secondary)
                     }
                     Spacer(minLength: 0)
+                    // Holds the Resume capsule's exact room, at any text
+                    // size, so a long title ends in an ellipsis short of
+                    // it. The real button is laid over this spot below.
+                    resumeCapsule(wide: wide).hidden()
                 }
-                .padding(.horizontal, wide ? 12 : 16)
+                .padding(.horizontal, Self.bandInset(wide: wide))
                 .padding(.vertical, wide ? 10 : 12)
                 .frame(maxWidth: .infinity)
                 .frame(height: bandHeight)
@@ -415,28 +456,49 @@ struct HomeView: View {
         // screen with a Play button on it is two. Tapping the artwork
         // still opens that screen, which is where you go to pick a
         // different state, change the core, or export.
-        .overlay(alignment: .topTrailing) {
+        //
+        // A Resume capsule at the end of the band, beside the game's name,
+        // the way the TV app offers Resume, not a pill on the art: that
+        // sat over the cover it was meant to show off. In the text's own
+        // colour, so it never fights the cover's. Laid over the card
+        // rather than inside it, because a button inside another button's
+        // label does not reliably get its own taps.
+        .overlay(alignment: .bottomTrailing) {
             Button {
                 Task { await beginResume(rom) }
             } label: {
-                Group {
-                    if preparingResume {
-                        ProgressView().tint(.white)
-                    } else {
-                        Label("Resume", systemImage: "play.fill")
-                            .font(.subheadline.weight(.semibold))
-                            .foregroundStyle(.white)
-                    }
-                }
-                .frame(minWidth: 92)
-                .padding(.horizontal, 14)
-                .padding(.vertical, 8)
-                .background(.ultraThinMaterial, in: .capsule)
+                resumeCapsule(wide: wide)
+                    // A taller hit area than the capsule draws, so a thumb
+                    // need not land on it exactly.
+                    .padding(Self.resumeHitMargin)
+                    .contentShape(Rectangle())
             }
             .buttonStyle(.plain)
             .disabled(preparingResume)
-            .padding(12)
+            .frame(height: heroBandHeight(wide: wide))
+            .padding(.trailing, Self.bandInset(wide: wide) - Self.resumeHitMargin)
         }
+    }
+
+    private static func bandInset(wide: Bool) -> CGFloat { wide ? 12 : 16 }
+    private static let resumeHitMargin: CGFloat = 6
+
+    /// The Resume capsule's face, drawn twice: hidden in the band to hold
+    /// its room, and as the button over that spot. The spinner replaces
+    /// the words without changing the capsule's size.
+    private func resumeCapsule(wide: Bool) -> some View {
+        Label("Resume", systemImage: "play.fill")
+            .font((wide ? Font.footnote : .subheadline).weight(.semibold))
+            .foregroundStyle(.background)
+            .opacity(preparingResume ? 0 : 1)
+            .overlay {
+                if preparingResume {
+                    ProgressView().tint(Color(uiColor: .systemBackground))
+                }
+            }
+            .padding(.horizontal, wide ? 10 : 12)
+            .padding(.vertical, wide ? 6 : 7)
+            .background(.primary, in: .capsule)
     }
 
     private func consumeQuickAction() {
@@ -534,8 +596,12 @@ struct HomeView: View {
     /// transiently, before that destination has finished loading (the
     /// favorite collection isn't known until the first fetch lands), in
     /// which case the header is a plain label rather than a broken link.
-    private func rotationRow(_ title: String, _ roms: [Rom], seeAll: RomListView.Source?) -> some View {
-        VStack(alignment: .leading, spacing: 12) {
+    private func rotationRow(
+        _ title: String, _ roms: [Rom], seeAll: RomListView.Source?,
+        coverHeight: CGFloat = railCoverHeight
+    ) -> some View {
+        let coverWidth = (coverHeight * 0.75).rounded()
+        return VStack(alignment: .leading, spacing: 12) {
             if let seeAll {
                 NavigationLink {
                     romList(seeAll)
@@ -565,7 +631,7 @@ struct HomeView: View {
                                 resuming = rom
                             } label: {
                                 CoverImage(path: rom.pathCoverSmall, title: rom.displayName)
-                                    .frame(width: 100, height: 133)
+                                    .frame(width: coverWidth, height: coverHeight)
                                     .clipShape(.rect(cornerRadius: 10))
                                     .contentShape(Rectangle())
                                     .compatibilityBadge(romId: rom.id, compact: true)
@@ -578,7 +644,7 @@ struct HomeView: View {
                             Text(rom.displayName)
                                 .font(.caption)
                                 .lineLimit(1)
-                                .frame(width: 100, alignment: .leading)
+                                .frame(width: coverWidth, alignment: .leading)
                                 .foregroundStyle(
                                     compatibility.isMarked(rom.id) ? .secondary : .primary
                                 )
@@ -664,17 +730,21 @@ struct HomeView: View {
         async let recentTask = session.recentlyPlayed()
         async let favoritesTask = session.favoriteRoms()
 
+        var fetched: [Rom]?
         do {
-            recent = try await recentTask.items
+            fetched = try await recentTask.items
             offline = false
         } catch RommError.offline {
             offline = true
         } catch {
             // Left as is on purpose, see above.
         }
-        if let favs = try? await favoritesTask {
-            favorites = favs
-        }
+        // Both set together: the hero's height depends on whether a
+        // Favorites rail is below it, so recents shown first would draw
+        // the hero tall and then shrink it when favorites arrived.
+        let favs = try? await favoritesTask
+        if let fetched { recent = fetched }
+        if let favs { favorites = favs }
         loaded = true
     }
 

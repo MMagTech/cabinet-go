@@ -13,13 +13,13 @@ enum LibraryTileArt {
     /// How many covers a finished tile carries. Anything short of this is
     /// treated as an incomplete result: not stored, and refetched next
     /// launch rather than cached as though it were correct.
-    static let coversPerTile = 2
+    static let coversPerTile = 6
 
     /// Bumped whenever the art selection logic changes. Without it a
     /// stored pick from an earlier build keeps being restored for the rest
     /// of the day and the new logic never runs, which is exactly how a
     /// fixed Atari 7800 tile kept coming back with one cover.
-    private static let schema = 2
+    private static let schema = 3
 
     /// The day the art was last rolled, as a whole number of days.
     static var today: Int {
@@ -44,15 +44,16 @@ enum LibraryTileArt {
         guard defaults.integer(forKey: dayKey(namespace)) == today,
               let stored = defaults.dictionary(forKey: artKey(namespace)) as? [String: [String]]
         else { return [:] }
-        // Only complete entries come back. A half filled tile from a
-        // failed request must not be treated as settled for the day.
-        return stored.filter { $0.value.count >= coversPerTile }
+        // A failed request stores nothing (`load` keeps only non-empty
+        // picks), so anything stored is settled for the day, including a
+        // small collection that only has a cover or two to give.
+        return stored.filter { !$0.value.isEmpty }
     }
 
     static func persist(_ mosaics: [String: [String]], namespace: String) {
         let defaults = UserDefaults.standard
         defaults.set(
-            mosaics.filter { $0.value.count >= coversPerTile },
+            mosaics.filter { !$0.value.isEmpty },
             forKey: artKey(namespace)
         )
         defaults.set(today, forKey: dayKey(namespace))
@@ -63,9 +64,14 @@ enum LibraryTileArt {
     /// or a platform never seen, gets its own request without disturbing
     /// the ones already settled. Returns only the new entries; the caller
     /// merges and persists.
+    /// `collectionCounts` is each collection's playable count, which is
+    /// what the cover offset has to stay inside: RomM's own count includes
+    /// games on systems this app does not play, and the app never asks
+    /// for those.
     static func load(
         platforms: [Platform],
         collections: [Collection],
+        collectionCounts: [Int: Int],
         existing: [String: [String]],
         session: Session
     ) async -> [String: [String]] {
@@ -79,40 +85,20 @@ enum LibraryTileArt {
             for platform in wantPlatforms {
                 group.addTask {
                     let offset = seededOffset(id: platform.id, day: day, count: platform.romCount)
-                    // matchedOnly means every game returned has art, so
-                    // two requested is two shown, rather than a window of
-                    // six with the coverless ones skipped and a half
-                    // empty tile whenever several land in a row.
-                    let page = try? await session.roms(
-                        platformId: platform.id, limit: coversPerTile,
-                        offset: offset, matchedOnly: true
+                    let paths = await covers(
+                        offset: offset, session: session, platformId: platform.id, collectionId: nil
                     )
-                    var paths = page?.items.compactMap(\.pathCoverSmall) ?? []
-                    if paths.isEmpty {
-                        // matchedOnly guarantees art but demands a
-                        // metadata match, and a custom platform can be
-                        // full of hand-uploaded covers with no match at
-                        // all: Game & Watch's 59 all have art and none
-                        // had a match, so its tile drew bare. Ask again
-                        // without the filter and keep whatever art is
-                        // actually there.
-                        let any = try? await session.roms(
-                            platformId: platform.id, limit: 12,
-                            offset: 0, matchedOnly: false
-                        )
-                        paths = Array((any?.items.compactMap(\.pathCoverSmall) ?? []).prefix(coversPerTile))
-                    }
                     return (key(platform: platform), paths)
                 }
             }
             for collection in wantCollections {
                 group.addTask {
-                    let offset = seededOffset(id: collection.id, day: day, count: collection.romCount)
-                    let page = try? await session.roms(
-                        collectionId: collection.id, limit: coversPerTile,
-                        offset: offset, matchedOnly: true
+                    let count = collectionCounts[collection.id] ?? collection.romCount
+                    let offset = seededOffset(id: collection.id, day: day, count: count)
+                    let paths = await covers(
+                        offset: offset, session: session, platformId: nil, collectionId: collection.id
                     )
-                    return (key(collection: collection), page?.items.compactMap(\.pathCoverSmall) ?? [])
+                    return (key(collection: collection), paths)
                 }
             }
             for await (key, paths) in group where !paths.isEmpty {
@@ -122,16 +108,48 @@ enum LibraryTileArt {
         return fresh
     }
 
+    /// One tile's covers, from a platform or a collection.
+    ///
+    /// First the day's window of matched games: matchedOnly returns only
+    /// games with art, so the covers asked for are the covers shown. The
+    /// offset is chosen from the tile's full count, though, and when some
+    /// of its games are unmatched the matched list is shorter, so the
+    /// window can fall past its end and come back empty: Beat 'em Ups on
+    /// the reference server has 24 games the phone plays and 11 matched,
+    /// and drew no art. Then the first matched games. Last, any game with
+    /// art at all, for a library of hand-uploaded covers with no metadata
+    /// match: Game & Watch's 59 all have art and none had a match.
+    private static func covers(
+        offset: Int, session: Session, platformId: Int?, collectionId: Int?
+    ) async -> [String] {
+        func window(_ offset: Int, _ limit: Int, matched: Bool) async -> [String] {
+            let page = try? await session.roms(
+                platformId: platformId, collectionId: collectionId,
+                limit: limit, offset: offset, matchedOnly: matched
+            )
+            return page?.items.compactMap(\.pathCoverSmall) ?? []
+        }
+        var paths = await window(offset, coversPerTile, matched: true)
+        if paths.isEmpty, offset > 0 {
+            paths = await window(0, coversPerTile, matched: true)
+        }
+        if paths.isEmpty {
+            paths = Array(await window(0, 12, matched: false).prefix(coversPerTile))
+        }
+        return paths
+    }
+
     /// A stable pseudo-random offset. Deliberately not `Int.random`: the
     /// same tile must resolve to the same offset every time it is asked
     /// today, and to a different one tomorrow.
+    /// Leaves room for a full tile's covers after the offset.
     static func seededOffset(id: Int, day: Int, count: Int) -> Int {
-        guard count > 2 else { return 0 }
+        guard count > coversPerTile else { return 0 }
         var seed = UInt64(truncatingIfNeeded: id &* 2_654_435_761 &+ day &* 40_503)
         seed ^= seed << 13
         seed ^= seed >> 7
         seed ^= seed << 17
-        return Int(seed % UInt64(count - 1))
+        return Int(seed % UInt64(count - coversPerTile + 1))
     }
 
     private static func artKey(_ namespace: String) -> String {

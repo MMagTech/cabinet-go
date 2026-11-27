@@ -23,7 +23,27 @@ struct LibraryScreen: View {
     /// screen waiting on N extra requests.
     @State private var mosaics: [String: [String]] = [:]
 
+    /// Only the collections holding at least one game this app plays.
     @State private var collections: [Collection] = []
+    /// Each shown collection's playable count, by id. RomM's own count
+    /// includes games on systems this app does not play.
+    @State private var playableCounts: [Int: Int] = [:]
+    /// Whether RomM has collections at all, so an empty list can say why
+    /// it is empty.
+    @State private var hasAnyCollection = false
+    /// Collections hidden from this phone's Library. See HiddenCollections.
+    @State private var hiddenIDs = HiddenCollections.load()
+
+    private var shownCollections: [Collection] {
+        collections.filter { !hiddenIDs.contains($0.id) }
+    }
+
+    private var hiddenCount: Int {
+        collections.count - shownCollections.count
+    }
+    /// The visible height of the page, which every tile's height is
+    /// worked out from. See `tileHeight`.
+    @State private var visibleHeight: CGFloat = 0
     @State private var loadingCollections = true
     @State private var collectionsError: String?
 
@@ -61,6 +81,7 @@ struct LibraryScreen: View {
             case .collections: collectionList
             }
         }
+        .onGeometryChange(for: CGFloat.self) { $0.size.height } action: { visibleHeight = $0 }
         // The switcher belongs to the bar, not the page. Sitting in the
         // content it was a chrome shaped control marooned in a content
         // shaped place, which read as leftover layout once there were real
@@ -205,18 +226,15 @@ struct LibraryScreen: View {
                         .foregroundStyle(.secondary)
                         .padding(.top, 60)
                 } else {
-                    // Two columns of artwork tiles. This was the one screen in the app with no artwork
-                    // at all. Only what this app plays, so no headings.
-                    LazyVGrid(
-                        columns: Self.tileColumns,
-                        spacing: 10
-                    ) {
+                    // One column of artwork tiles. Only what this app
+                    // plays, so no headings.
+                    LazyVGrid(columns: Self.tileColumns, spacing: Self.tileSpacing) {
                         ForEach(supportedPlatforms) { platform in
                             platformTile(platform)
                         }
                     }
                     .padding(.horizontal, 16)
-                    .padding(.bottom, 12)
+                    .padding(.vertical, Self.tilePadding)
                 }
             }
             .refreshable { await loadPlatforms() }
@@ -258,21 +276,68 @@ struct LibraryScreen: View {
     private func collectionTile(_ collection: Collection) -> some View {
         tile(
             title: collection.name,
-            count: collection.romCount,
+            count: playableCounts[collection.id] ?? collection.romCount,
             coverKey: LibraryTileArt.key(collection: collection),
             source: .collection(collection)
         )
+        .contextMenu { hideButton(collection) }
     }
 
-    /// The tile art's label-zone fraction and cover slices were designed
-    /// around a phone's half-width tile. Two flexible columns keep that
-    /// true on every phone and pad; a Mac window is wide enough that two
-    /// columns stretched each tile to five times its designed width,
-    /// which turned the label panel into a dead expanse and the cover
-    /// slices into seamed landscape crops. Adaptive columns hand the
-    /// tile its intended proportions back, five or six to a row.
-    private static var tileColumns: [GridItem] {
-        [GridItem(.flexible(), spacing: 10), GridItem(.flexible())]
+    /// On a long press, beside the way games are marked: hides the
+    /// collection from this phone's Library only.
+    private func hideButton(_ collection: Collection) -> some View {
+        Button("Hide", systemImage: "eye.slash") {
+            hiddenIDs.insert(collection.id)
+            HiddenCollections.save(hiddenIDs)
+        }
+    }
+
+    /// The way back to hidden collections, after the shown ones.
+    private var hiddenLink: some View {
+        NavigationLink {
+            HiddenCollectionsView(
+                collections: collections, counts: playableCounts, hiddenIDs: $hiddenIDs
+            )
+        } label: {
+            HStack {
+                Label("Hidden", systemImage: "eye.slash")
+                Spacer()
+                Text("\(hiddenCount)")
+                    .foregroundStyle(.secondary)
+                    .font(.callout.monospacedDigit())
+                Image(systemName: "chevron.right")
+                    .font(.caption.weight(.semibold))
+                    .foregroundStyle(.tertiary)
+            }
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+    }
+
+    /// One column: a full-width tile shows its covers at their own
+    /// shape and long collection names whole, and Platforms and
+    /// Collections draw the same tile.
+    private static let tileColumns = [GridItem(.flexible())]
+    private static let tileSpacing: CGFloat = 8
+    private static let tilePadding: CGFloat = 12
+
+    /// One height for every tile in both tabs, worked out from the screen
+    /// the library is on rather than from any one phone: the platforms
+    /// (the short list) fill the visible height when they fit at a
+    /// readable size, on a small iPhone and a Max alike, and collections
+    /// take the same height so switching tabs never resizes a tile.
+    /// Below `minimum` the list scrolls instead of squeezing; above
+    /// `maximum` a tile stops growing, so a short list on a big screen
+    /// does not turn into a few giant tiles.
+    static func tileHeight(visible: CGFloat, count: Int) -> CGFloat {
+        let minimum: CGFloat = 64, maximum: CGFloat = 120
+        guard visible > 0, count > 0 else { return 96 }
+        let room = visible - tilePadding * 2 - tileSpacing * CGFloat(count - 1)
+        return min(max(room / CGFloat(count), minimum), maximum)
+    }
+
+    private var currentTileHeight: CGFloat {
+        Self.tileHeight(visible: visibleHeight, count: supportedPlatforms.count)
     }
 
     private func tile(
@@ -282,7 +347,7 @@ struct LibraryScreen: View {
         return NavigationLink {
             RomListView(source: source)
         } label: {
-            PlatformTile(title: title, count: count, covers: covers)
+            PlatformTile(title: title, count: count, covers: covers, height: currentTileHeight)
         }
         .buttonStyle(.plain)
     }
@@ -336,6 +401,7 @@ struct LibraryScreen: View {
     private func loadTileArt() async {
         let fresh = await LibraryTileArt.load(
             platforms: platforms, collections: collections,
+            collectionCounts: playableCounts,
             existing: mosaics, session: session
         )
         guard !fresh.isEmpty else { return }
@@ -359,11 +425,14 @@ struct LibraryScreen: View {
                     Text(collectionsError).foregroundStyle(.red)
                     Button("Try again") { Task { await loadCollections() } }
                 } else if collections.isEmpty {
-                    Text("No collections yet. Make one in RomM to see it here.")
+                    Text(noCollectionsMessage)
                         .foregroundStyle(.secondary)
                 } else {
-                    ForEach(collections) { collection in
+                    ForEach(shownCollections) { collection in
                         collectionRow(collection)
+                    }
+                    if hiddenCount > 0 {
+                        Section { hiddenLink }
                     }
                 }
             }
@@ -385,21 +454,27 @@ struct LibraryScreen: View {
                     }
                     .padding(.top, 60)
                 } else if collections.isEmpty {
-                    Text("No collections yet. Make one in RomM to see it here.")
+                    Text(noCollectionsMessage)
                         .foregroundStyle(.secondary)
                         .padding(.top, 60)
                         .padding(.horizontal)
                 } else {
-                    LazyVGrid(
-                        columns: Self.tileColumns,
-                        spacing: 10
-                    ) {
-                        ForEach(collections) { collection in
+                    LazyVGrid(columns: Self.tileColumns, spacing: Self.tileSpacing) {
+                        ForEach(shownCollections) { collection in
                             collectionTile(collection)
+                        }
+                        if hiddenCount > 0 {
+                            hiddenLink
+                                .padding(.horizontal, 16)
+                                .padding(.vertical, 12)
+                                .background(
+                                    Color(.secondarySystemGroupedBackground),
+                                    in: .rect(cornerRadius: 12)
+                                )
                         }
                     }
                     .padding(.horizontal, 16)
-                    .padding(.vertical, 12)
+                    .padding(.vertical, Self.tilePadding)
                 }
             }
             .refreshable { await loadCollections() }
@@ -413,10 +488,38 @@ struct LibraryScreen: View {
             HStack {
                 Text(collection.name)
                 Spacer()
-                Text("\(collection.romCount)")
+                Text("\(playableCounts[collection.id] ?? collection.romCount)")
                     .foregroundStyle(.secondary)
                     .font(.callout.monospacedDigit())
             }
+        }
+        .contextMenu { hideButton(collection) }
+    }
+
+    private var noCollectionsMessage: String {
+        hasAnyCollection
+            ? "None of your collections has games this phone plays."
+            : "No collections yet. Make one in RomM to see it here."
+    }
+
+    /// How many games in each collection this app plays: one small
+    /// request per collection, all at once, asking RomM for the
+    /// collection on the playable systems only (`Session.roms` adds that
+    /// filter) and reading the total. A collection of nothing playable
+    /// would open empty, so the library leaves it out.
+    private static func playableCounts(
+        of collections: [Collection], session: Session
+    ) async throws -> [Int: Int] {
+        try await withThrowingTaskGroup(of: (Int, Int).self) { group in
+            for collection in collections {
+                group.addTask {
+                    let page = try await session.roms(collectionId: collection.id, limit: 1)
+                    return (collection.id, page.total)
+                }
+            }
+            var counts: [Int: Int] = [:]
+            for try await (id, total) in group { counts[id] = total }
+            return counts
         }
     }
 
@@ -424,8 +527,14 @@ struct LibraryScreen: View {
         loadingCollections = true
         collectionsError = nil
         do {
-            collections = try await session.collections()
+            let all = try await session.collections()
                 .sorted { $0.name < $1.name }
+            // Shown only once every count is in, so collections never
+            // appear and then vanish under the person reading them.
+            let counts = try await Self.playableCounts(of: all, session: session)
+            collections = all.filter { (counts[$0.id] ?? 0) > 0 }
+            playableCounts = counts
+            hasAnyCollection = !all.isEmpty
             // Runs from both load paths; LibraryTileArt.load skips tiles
             // that already have art, so whichever list lands second only
             // fetches its own.

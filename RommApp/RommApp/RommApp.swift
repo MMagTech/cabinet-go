@@ -105,6 +105,7 @@ struct RommApp: App {
         // fourteen hundred games do not change between breakfast and
         // lunch, and the widget's recents do.
         SpotlightIndexer.refresh(session: session)
+        Task { await session.refreshServerVersion() }
         Task {
             let savesUploaded = await KeptGameStore.shared.syncPendingStates(session: session)
             let sessionsUploaded = await session.syncPendingPlaySessions()
