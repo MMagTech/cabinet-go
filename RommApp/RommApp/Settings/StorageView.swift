@@ -55,17 +55,6 @@ struct StorageView: View {
                                 Text(byteCount(game.totalBytes))
                                     .font(.caption)
                                     .foregroundStyle(.secondary)
-                                let pending = keptStore.pendingStateCount(for: game.romId)
-                                if pending > 0 {
-                                    Text("\(pending) save\(pending == 1 ? "" : "s") waiting to upload")
-                                        .font(.caption)
-                                        .foregroundStyle(.secondary)
-                                }
-                                if MemoryCardStore.shared.anyPendingUpload(romId: game.romId) {
-                                    Text("In-game save waiting to upload")
-                                        .font(.caption)
-                                        .foregroundStyle(.secondary)
-                                }
                             }
                         }
                         .swipeActions {

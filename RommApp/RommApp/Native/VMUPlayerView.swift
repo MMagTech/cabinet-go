@@ -77,7 +77,11 @@ struct VMUPlayerView: View {
                 actionButtons(m)
                 bottomRow(m)
 
-                if menuVisible { menu }
+                if menuVisible {
+                    PauseMenu.backdrop
+                        .onTapGesture { closeMenu() }
+                    menu.transition(PauseMenu.cardArrives).zIndex(PauseMenu.cardLayer)
+                }
             }
         }
         .ignoresSafeArea()
@@ -155,11 +159,11 @@ struct VMUPlayerView: View {
     private func openMenu() {
         guard !menuVisible else { return }
         renderer.paused = true
-        menuVisible = true
+        withAnimation(PauseMenu.fade) { menuVisible = true }
     }
 
     private func closeMenu() {
-        menuVisible = false
+        withAnimation(PauseMenu.fade) { menuVisible = false }
         // One blink as the menu goes, the LED's third and last job.
         ledBlink = true
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.15) { ledBlink = false }
@@ -415,43 +419,38 @@ struct VMUPlayerView: View {
     /// card matches the other players' pause menus so mid-session
     /// Cabinet reads as one app.
     private var menu: some View {
-        ZStack {
-            Color.black.opacity(0.55)
-                .ignoresSafeArea()
-                .onTapGesture { closeMenu() }
-            VStack(spacing: 18) {
-                VStack(spacing: 4) {
-                    Text(rom.displayName)
-                        .font(.headline)
-                        .lineLimit(1)
-                    Text("Paused")
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
-                }
-                VStack(spacing: 10) {
-                    Button(role: .destructive) {
-                        dismiss()
-                    } label: {
-                        Label("Quit", systemImage: "xmark")
-                            .frame(maxWidth: .infinity)
-                            .padding(.vertical, 6)
-                    }
-                    .buttonStyle(.bordered)
-                    Button {
-                        closeMenu()
-                    } label: {
-                        Label("Resume", systemImage: "play.fill")
-                            .frame(maxWidth: .infinity)
-                            .padding(.vertical, 6)
-                    }
-                    .buttonStyle(.borderedProminent)
-                }
+        VStack(spacing: 18) {
+            VStack(spacing: 4) {
+                Text(rom.displayName)
+                    .font(.headline)
+                    .lineLimit(1)
+                Text("Paused")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
             }
-            .frame(maxWidth: 280)
-            .padding(24)
-            .background(.regularMaterial, in: .rect(cornerRadius: 20))
-            .padding(40)
+            VStack(spacing: 10) {
+                Button(role: .destructive) {
+                    dismiss()
+                } label: {
+                    Label("Quit", systemImage: "xmark")
+                        .frame(maxWidth: .infinity)
+                        .padding(.vertical, 6)
+                }
+                .buttonStyle(.bordered)
+                Button {
+                    closeMenu()
+                } label: {
+                    Label("Resume", systemImage: "play.fill")
+                        .frame(maxWidth: .infinity)
+                        .padding(.vertical, 6)
+                }
+                .buttonStyle(.borderedProminent)
+            }
         }
+        .frame(maxWidth: 280)
+        .padding(24)
+        .pauseMenuCard()
+        .padding(40)
         .environment(\.colorScheme, .dark)
     }
 }

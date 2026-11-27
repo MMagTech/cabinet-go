@@ -148,10 +148,10 @@ Note the consequence: until a core's non-macOS trees are deleted and
 rebuilt, building them now stops with that message. That is the point.
 It converts a silent divergence into a loud one.
 
-### What is still outstanding
+### The rebuilds
 
-The pinning is in place and verified. The rebuilds are not done. Of the
-cores the iPhone app still ships, Gambatte and Genesis Plus GX need their
-iOS libraries rebuilt at the pinned revision, followed by playing
-something on each. Until that happens the app still ships what it shipped
-before, which is the divergence this file documents.
+Of the cores the iPhone app still ships, Gambatte and Genesis Plus GX
+were the two built from older revisions than their pin. Both were rebuilt
+at the pinned revision on 2026-11-26, so every core in the app is now
+built from its `pinned_commit`, the same commit CabinetOS's
+`cores/build-core.sh` builds.

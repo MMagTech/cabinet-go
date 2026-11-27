@@ -32,15 +32,14 @@ approved to the pixel; `VMUPlayerView` transcribes it.
 ## The card is the save
 
 There is no new save type and no new sync path. The VMU player opens
-and writes the exact card file RomM already stores as the Dreamcast
-game's save (the Flycast row, `<name> (Cabinet).srm`): VeMUlator's
-`enable_flash_write` commits every emulated flash write into the file
-in real time, so the phone's local card is always current, even through
-an app kill, and `VMULauncher.prepare` reconciles any orphaned play
-file back into the store's write-first queue before every boot. Uploads
-happen on quit and on backgrounding, through the same durable pending
-queue every battery save rides. No mid-play uploads: churn without
-benefit.
+and writes the exact card RomM already keeps as the Dreamcast game's
+save (Flycast's, under `flycast-native`, in the game's save channel):
+VeMUlator's `enable_flash_write` commits every emulated flash write into
+the file in real time, so the phone's local card is always current,
+even through an app kill, and a card changed since it was last sent is
+owed at the next start, before the pick (`GameSaves`). It goes up on
+quit and on backgrounding, by the same rule and the same push as every
+save. No mid-play uploads: churn without benefit.
 
 The VMU is never a platform. It does not appear in RomM, the library,
 settings, or the emulator picker; the minigame is cargo inside a DC

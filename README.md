@@ -25,8 +25,9 @@ stream it from CabinetOS with Moonlight.
 **Offline play.** Keep a game on your phone and it plays with no signal and
 no server at all: on a plane, on the subway, anywhere.
 
-**Your saves on your server.** Save states and in-game saves go back to
-your RomM server, named the way CabinetOS names them.
+**Your saves on your server.** In-game saves and save states go to your
+RomM server's save channels, the way CabinetOS sends them, so a game saved
+on the phone carries on at the TV and back. Needs RomM 5.5 or newer.
 
 **A whole platform in one go.** Download All keeps every game on a system
 at once, through the system's own background downloader, over Wi-Fi only,

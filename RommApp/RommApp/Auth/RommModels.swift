@@ -8,8 +8,12 @@ import Foundation
 
 /// `GET /api/heartbeat`, unauthenticated. Used to check that an address someone
 /// typed is really a RomM instance before asking them to pair with it.
+///
+/// `SAVE_SYNC` is there on a RomM that has save channels (5.5 and newer): the
+/// phone reads and writes saves only on such a server (SavePush).
 struct Heartbeat: Decodable {
     let system: System
+    let saveSync: SaveSync?
 
     struct System: Decodable {
         let version: String
@@ -17,7 +21,13 @@ struct Heartbeat: Decodable {
         enum CodingKeys: String, CodingKey { case version = "VERSION" }
     }
 
-    enum CodingKeys: String, CodingKey { case system = "SYSTEM" }
+    /// Only its presence is read.
+    struct SaveSync: Decodable {}
+
+    enum CodingKeys: String, CodingKey {
+        case system = "SYSTEM"
+        case saveSync = "SAVE_SYNC"
+    }
 }
 
 /// `POST /api/auth/device/init` returns this with HTTP 201.

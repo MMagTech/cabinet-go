@@ -39,6 +39,7 @@ struct HomeView: View {
         let id = UUID()
         let rom: Rom
         let core: NativeCore
+        let saves: GameSaves?
         let initialState: Data?
     }
 
@@ -182,7 +183,8 @@ struct HomeView: View {
                 if playerClosed { Task { await load() } }
             }
             .fullScreenCover(item: $nativeDirectLaunch) { launch in
-                NativePlayerView(rom: launch.rom, core: launch.core, initialState: launch.initialState)
+                NativePlayerView(rom: launch.rom, core: launch.core, saves: launch.saves,
+                                 initialState: launch.initialState)
                     .environmentObject(session)
             }
             .onChange(of: nativeDirectLaunch == nil) { _, playerClosed in
@@ -547,49 +549,29 @@ struct HomeView: View {
         await beginNativeResume(rom, core: nativeCore)
     }
 
-    /// Loads the newest state this core wrote, regardless of which device
-    /// wrote it, by weight of its timestamp: what makes switching between
-    /// devices transparent. Compares server states against whatever is
-    /// already on the device, same as `GameLaunchView`'s own launch path.
+    /// Loads the newest of the three states the game offers, whichever
+    /// device made it (GameSaves.offeredStates): what makes switching
+    /// between the phone and the TV transparent. Only this core's states,
+    /// by its tag: another emulator's state does not fail to load, it hangs.
+    /// The phone's own copy first; RomM's when it has none.
     private func beginNativeResume(_ rom: Rom, core: NativeCore) async {
+        let launch: NativeLaunch
         do {
-            try await NativeLauncher.prepare(rom: rom, session: session)
+            launch = try await NativeLauncher.prepare(rom: rom, session: session)
         } catch {
             resuming = rom
             return
         }
-
-        guard let states = try? await session.states(romId: rom.id) else {
+        let offered = await GameSaves.offeredStates(romId: rom.id, tag: core.emulatorTag, session: session)
+        guard let newest = offered.first else {
+            nativeDirectLaunch = NativeDirectLaunch(rom: rom, core: core, saves: launch.saves, initialState: nil)
+            return
+        }
+        guard let bytes = await GameSaves.stateBytes(newest, session: session) else {
             resuming = rom
             return
         }
-        // Only states this core wrote. Feeding another emulator's
-        // state into retro_unserialize does not fail, it hangs forever
-        // at the frame the state captured: found when a state saved
-        // during one accidental FBNeo session froze bowlrama under
-        // MAME on both platforms, synced through the server. The pause
-        // menu and GameLaunchView already filter exactly this way;
-        // this path claimed to match them and missed the filter.
-        let compatible = states.filter { $0.emulator == core.emulatorTag }
-        guard !compatible.isEmpty else {
-            nativeDirectLaunch = NativeDirectLaunch(rom: rom, core: core, initialState: nil)
-            return
-        }
-        let newest = compatible.max { ($0.updatedAt ?? "") < ($1.updatedAt ?? "") }!
-
-        // The copy already on this phone first: reading it costs nothing,
-        // and a network round trip only slows down a game already sitting
-        // on the device, matching `GameLaunchView.beginNativePlay`'s own
-        // reasoning.
-        if let local = keptStore.localState(for: rom.id), local.stateId == newest.id {
-            nativeDirectLaunch = NativeDirectLaunch(rom: rom, core: core, initialState: local.data)
-            return
-        }
-        guard let bytes = try? await session.stateContent(newest) else {
-            resuming = rom
-            return
-        }
-        nativeDirectLaunch = NativeDirectLaunch(rom: rom, core: core, initialState: bytes)
+        nativeDirectLaunch = NativeDirectLaunch(rom: rom, core: core, saves: launch.saves, initialState: bytes)
     }
 
     /// `seeAll` is the full list this rail is a preview of. Nil only

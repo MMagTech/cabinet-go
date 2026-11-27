@@ -17,15 +17,6 @@ struct KeptGame: Codable, Identifiable {
     let rom: Rom
     let totalBytes: Int64
     let keptAt: Date
-    /// The newest save state downloaded for this game, native only:
-    /// states are core-build-specific and states belong to RomM's
-    /// database, not its filesystem layout, so unlike the ROM and BIOS
-    /// they stay internal, never linked into the Files mirror, in
-    /// keeping with this app modeling itself on RomM's own library
-    /// shape. Nil means either nothing has ever been saved for this
-    /// game, or the platform has no native core to write a state for.
-    let stateId: Int?
-    let stateUpdatedAt: String?
     /// `rom.canonicalPlatformSlug(platformsVersions:)`, resolved once at
     /// keep time when a live session guarantees the server's slug mapping
     /// is in hand, and persisted so every later native-core lookup for
@@ -33,8 +24,8 @@ struct KeptGame: Codable, Identifiable {
     /// network, matching a kept game's whole point. Optional because
     /// manifests written before this field existed lack it: those fall
     /// back to the raw, unmapped `platformFsSlug` via `resolvedCanonicalSlug`
-    /// below, self-healing to the real value the next time this game's
-    /// launch screen runs `refreshCachedState` online.
+    /// below, self-healing to the real value the next time
+    /// `healCanonicalSlugs` runs.
     let canonicalPlatformSlug: String?
     /// True only for an entry rebuilt from an older manifest format
     /// that could no longer decode as-is: its `rom` is a best-effort
@@ -267,15 +258,10 @@ final class KeptGameStore: ObservableObject {
     /// game.
     private let documentsRoot: URL
     private static let linksMigratedKey = "romm.keptGames.linksMigrated"
-    /// The locally cached state's fixed filename inside a kept game's
-    /// private directory. Fixed, not per-state-id, since only the
-    /// newest state is ever kept locally and a refresh simply
-    /// overwrites it.
-    private static let stateFileName = "state.dat"
     /// Files inside a kept game's private directory that never become a
-    /// Files app link: the manifest is bookkeeping, and the cached state
-    /// stays internal per the platform-shape decision above.
-    private static let internalOnly: Set<String> = ["manifest.json", stateFileName, pendingStatesDirName]
+    /// Files app link: the manifest is bookkeeping. A game's saves and
+    /// states live apart, in SaveChannels (SaveMirror), never in the mirror.
+    private static let internalOnly: Set<String> = ["manifest.json"]
 
     var totalBytes: Int64 {
         games.reduce(0) { $0 + $1.totalBytes }
@@ -379,166 +365,6 @@ final class KeptGameStore: ObservableObject {
         return FileManager.default.fileExists(atPath: url.path) ? url : nil
     }
 
-    /// The newest state downloaded for this kept game, read straight off
-    /// disk: no network, whether asked offline or simply to skip a round
-    /// trip online for the one state Keep already has. Nil when nothing
-    /// has ever been cached, the ordinary case for a game never saved.
-    func localState(for romId: Int) -> (stateId: Int, updatedAt: String?, data: Data)? {
-        guard let game = kept(romId: romId), let stateId = game.stateId else { return nil }
-        let url = directory(for: romId).appendingPathComponent(Self.stateFileName)
-        guard let data = try? Data(contentsOf: url) else { return nil }
-        return (stateId, game.stateUpdatedAt, data)
-    }
-
-    /// Keeps a kept game's local state current for free, whenever the
-    /// app already has a live states list in hand from an ordinary
-    /// online visit to this game's launch screen. Nothing waits on
-    /// this: it only means the next time this game plays with no
-    /// connection, Resume reflects whatever was newest the last time
-    /// Cabinet had a chance to look, not whatever was newest back when
-    /// it was first kept.
-    func refreshCachedState(rom: Rom, liveStates: [GameState], session: Session) {
-        let canonicalSlug = rom.canonicalPlatformSlug(platformsVersions: session.platformsVersions)
-        guard let core = NativeCore.core(for: rom, canonicalSlug: canonicalSlug), let game = kept(romId: rom.id) else { return }
-        let newest = liveStates
-            .filter { $0.emulator == core.emulatorTag }
-            .sorted { ($0.updatedAt ?? "") > ($1.updatedAt ?? "") }
-            .first
-        guard let newest, newest.id != game.stateId else { return }
-        Task { [weak self] in
-            guard let self, let bytes = try? await session.stateContent(newest) else { return }
-            guard let index = self.games.firstIndex(where: { $0.romId == rom.id }) else { return }
-            let dir = self.directory(for: rom.id)
-            guard (try? bytes.write(to: dir.appendingPathComponent(Self.stateFileName))) != nil else { return }
-            let old = self.games[index]
-            let updated = KeptGame(
-                rom: old.rom, totalBytes: Self.directorySize(dir), keptAt: old.keptAt,
-                stateId: newest.id, stateUpdatedAt: newest.updatedAt,
-                canonicalPlatformSlug: old.rom.canonicalPlatformSlug(platformsVersions: session.platformsVersions),
-                needsMetadataRefresh: old.needsMetadataRefresh
-            )
-            self.games[index] = updated
-            if let manifestData = try? JSONEncoder().encode(updated) {
-                try? manifestData.write(to: dir.appendingPathComponent("manifest.json"))
-            }
-        }
-    }
-
-    /// Save states made for a kept game that have not yet reached RomM,
-    /// never linked into the Files mirror, same reasoning as the single
-    /// cached state: core-format-specific, no use to another app. The
-    /// directory itself is the queue, no separate manifest to keep in
-    /// sync: a file existing here means it still owes an upload, its
-    /// absence means the upload already succeeded. Append-only by
-    /// construction, each file already carries the same timestamped
-    /// name RomM itself would give it, so nothing here ever overwrites
-    /// anything, sync is only ever "finish the uploads."
-    private static let pendingStatesDirName = "pending-states"
-
-    private func pendingStatesDirectory(for romId: Int) -> URL {
-        directory(for: romId).appendingPathComponent(Self.pendingStatesDirName, isDirectory: true)
-    }
-
-    /// Every save still owed to RomM for this kept game, newest first.
-    func pendingStates(for romId: Int) -> [(stem: String, stateURL: URL, screenshotURL: URL?, savedAt: Date)] {
-        let dir = pendingStatesDirectory(for: romId)
-        guard let entries = try? FileManager.default.contentsOfDirectory(
-            at: dir, includingPropertiesForKeys: [.contentModificationDateKey]
-        ) else { return [] }
-        return entries
-            .filter { $0.pathExtension == "state" }
-            .map { url -> (stem: String, stateURL: URL, screenshotURL: URL?, savedAt: Date) in
-                let stem = url.deletingPathExtension().lastPathComponent
-                let screenshot = dir.appendingPathComponent("\(stem).png")
-                let savedAt = (try? url.resourceValues(forKeys: [.contentModificationDateKey]).contentModificationDate)
-                    ?? Date.distantPast
-                return (
-                    stem, url,
-                    FileManager.default.fileExists(atPath: screenshot.path) ? screenshot : nil, savedAt
-                )
-            }
-            .sorted { $0.savedAt > $1.savedAt }
-    }
-
-    func pendingStateCount(for romId: Int) -> Int {
-        pendingStates(for: romId).count
-    }
-
-    /// Whichever save is genuinely newest for this game, the downloaded
-    /// resume state or a still-queued local one, whichever has the
-    /// later file date: what "Load latest state" and the launch
-    /// screen's Resume-from list both mean by "latest" once nothing can
-    /// be asked live.
-    func newestLocalState(for romId: Int) -> Data? {
-        let cachedURL = directory(for: romId).appendingPathComponent(Self.stateFileName)
-        let cachedDate = try? cachedURL.resourceValues(forKeys: [.contentModificationDateKey]).contentModificationDate
-        if let newestPending = pendingStates(for: romId).first,
-           cachedDate == nil || newestPending.savedAt > cachedDate! {
-            return try? Data(contentsOf: newestPending.stateURL)
-        }
-        return try? Data(contentsOf: cachedURL)
-    }
-
-    /// Writes a save straight to local storage before any attempt to
-    /// reach the server: the one guarantee this queue exists to make,
-    /// losing signal mid-save must never mean losing the save.
-    @discardableResult
-    func queuePendingState(romId: Int, stem: String, stateData: Data, screenshotData: Data?) -> Bool {
-        let dir = pendingStatesDirectory(for: romId)
-        try? FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
-        guard (try? stateData.write(to: dir.appendingPathComponent("\(stem).state"))) != nil else { return false }
-        if let screenshotData {
-            try? screenshotData.write(to: dir.appendingPathComponent("\(stem).png"))
-        }
-        touchTotalBytes(romId: romId)
-        return true
-    }
-
-    /// Attempts every queued save across every kept game, each upload
-    /// using the file's own already-timestamped name so RomM's list
-    /// catches up exactly as if the save had happened online. A file
-    /// that uploads successfully leaves the queue; one that fails stays,
-    /// tried again next time this runs. Safe to call often and
-    /// opportunistically: nothing here can duplicate an upload or lose a
-    /// file, only remove one once RomM has confirmed it.
-    /// Returns how many saves actually uploaded this pass, for the in-app
-    /// confirmation Home shows; a no-op pass returns 0 and shows nothing.
-    @discardableResult
-    func syncPendingStates(session: Session) async -> Int {
-        var uploaded = 0
-        for game in games {
-            // The platform's own core, not `NativeCore.core(bySlug:)`: a
-            // state made on a system the phone no longer plays is still
-            // owed to RomM, under the tag its core always used.
-            guard let core = NativePlatform.platform(bySlug: game.resolvedCanonicalSlug, isArcade: game.rom.isArcade)?.core
-            else { continue }
-            for pending in pendingStates(for: game.romId) {
-                guard let stateData = try? Data(contentsOf: pending.stateURL) else { continue }
-                let screenshotData = pending.screenshotURL.flatMap { try? Data(contentsOf: $0) }
-                do {
-                    try await session.uploadState(
-                        romId: game.romId, emulator: core.emulatorTag,
-                        fileName: pending.stateURL.lastPathComponent,
-                        stateData: stateData,
-                        screenshotName: pending.screenshotURL?.lastPathComponent,
-                        screenshotData: screenshotData
-                    )
-                    try? FileManager.default.removeItem(at: pending.stateURL)
-                    if let screenshotURL = pending.screenshotURL {
-                        try? FileManager.default.removeItem(at: screenshotURL)
-                    }
-                    touchTotalBytes(romId: game.romId)
-                    uploaded += 1
-                } catch {
-                    // Left queued on purpose; the next opportunity, a
-                    // connection returning anywhere in the app or simply
-                    // revisiting this game, tries it again.
-                }
-            }
-        }
-        return uploaded
-    }
-
     /// Replaces a migrated entry's stand-in `Rom` with the real thing,
     /// for every kept game still flagged `needsMetadataRefresh`. The
     /// files on disk never needed this to be safe, they were never at
@@ -546,8 +372,8 @@ final class KeptGameStore: ObservableObject {
     /// one, real cover art, exact platform data, the moment there is a
     /// connection to ask for it. A rom that fails to fetch (deleted
     /// from the server, momentarily unreachable) stays flagged and
-    /// tries again next opportunity, the same tolerant shape as
-    /// `syncPendingStates`.
+    /// tries again next opportunity, the same tolerant shape as every
+    /// other refresh here.
     /// Recomputes and persists `canonicalPlatformSlug` for every kept
     /// game, not only ones missing it. No network round trip: `game.rom`
     /// is already the real thing, this only needs `session.platformsVersions`
@@ -574,7 +400,6 @@ final class KeptGameStore: ObservableObject {
             let dir = directory(for: game.romId)
             let updated = KeptGame(
                 rom: game.rom, totalBytes: game.totalBytes, keptAt: game.keptAt,
-                stateId: game.stateId, stateUpdatedAt: game.stateUpdatedAt,
                 canonicalPlatformSlug: game.rom.canonicalPlatformSlug(platformsVersions: session.platformsVersions),
                 needsMetadataRefresh: game.needsMetadataRefresh
             )
@@ -593,7 +418,6 @@ final class KeptGameStore: ObservableObject {
             let old = games[index]
             let updated = KeptGame(
                 rom: freshRom, totalBytes: old.totalBytes, keptAt: old.keptAt,
-                stateId: old.stateId, stateUpdatedAt: old.stateUpdatedAt,
                 canonicalPlatformSlug: freshRom.canonicalPlatformSlug(platformsVersions: session.platformsVersions),
                 needsMetadataRefresh: nil
             )
@@ -601,26 +425,6 @@ final class KeptGameStore: ObservableObject {
             if let manifestData = try? JSONEncoder().encode(updated) {
                 try? manifestData.write(to: dir.appendingPathComponent("manifest.json"))
             }
-        }
-    }
-
-    /// Recomputes and persists a kept game's stored size after a queue
-    /// write or upload changes what is actually on disk, so Storage
-    /// stays honest about what a kept game costs rather than reporting
-    /// whatever it measured back when it was first kept.
-    private func touchTotalBytes(romId: Int) {
-        guard let index = games.firstIndex(where: { $0.romId == romId }) else { return }
-        let dir = directory(for: romId)
-        let old = games[index]
-        let updated = KeptGame(
-            rom: old.rom, totalBytes: Self.directorySize(dir), keptAt: old.keptAt,
-            stateId: old.stateId, stateUpdatedAt: old.stateUpdatedAt,
-            canonicalPlatformSlug: old.canonicalPlatformSlug,
-            needsMetadataRefresh: old.needsMetadataRefresh
-        )
-        games[index] = updated
-        if let manifestData = try? JSONEncoder().encode(updated) {
-            try? manifestData.write(to: dir.appendingPathComponent("manifest.json"))
         }
     }
 
@@ -948,40 +752,19 @@ final class KeptGameStore: ObservableObject {
                 NativeLauncher.stageFirmware(from: firmwareURLs, in: staging, platform: platform)
             }
 
-            // The newest state, so a kept game can resume real progress
-            // with zero network rather than only booting fresh. Native
-            // only, and entirely tolerant of failure: a game that has
-            // never been saved has nothing to cache here, which is the
-            // ordinary case, not an error.
-            var cachedStateId: Int?
-            var cachedStateUpdatedAt: String?
-            if let core = NativeCore.core(for: rom, canonicalSlug: canonicalSlug),
-               let liveStates = try? await session.states(romId: rom.id) {
-                let newest = liveStates
-                    .filter { $0.emulator == core.emulatorTag }
-                    .sorted { ($0.updatedAt ?? "") > ($1.updatedAt ?? "") }
-                    .first
-                if let newest, let bytes = try? await session.stateContent(newest) {
-                    try? bytes.write(to: staging.appendingPathComponent(Self.stateFileName))
-                    cachedStateId = newest.id
-                    cachedStateUpdatedAt = newest.updatedAt
-                }
-            }
-
-            // The newest in-game save comes down at keep time too, into
-            // the same local store the launch sync reads, so a game kept
-            // and taken straight offline has its progress with it even
-            // when that progress was made on another device or in the
-            // web player. Tolerant of failure like the state cache
-            // above: the launch sync re-checks whenever it can reach the
-            // server anyway, this only makes sure offline is not empty.
-            if let platform = NativePlatform.platform(for: rom, canonicalSlug: canonicalSlug) {
-                await MemoryCardStore.shared.prefetchFromServer(rom: rom, platform: platform, session: session)
+            // The game's saves come down at keep time, so a game kept and
+            // taken straight offline has its progress with it, even when
+            // that progress was made on another device: RomM's channels and
+            // the save the start would continue from, by the start's own
+            // rule, and the three states the game offers (GameSaves).
+            // Tolerant of failure: a start re-checks whenever it can reach
+            // the server anyway.
+            if let core = NativeCore.core(for: rom, canonicalSlug: canonicalSlug) {
+                await GameSaves.fetchForOffline(romId: rom.id, tag: core.emulatorTag, session: session)
             }
 
             let manifest = KeptGame(
                 rom: rom, totalBytes: Self.directorySize(staging), keptAt: Date(),
-                stateId: cachedStateId, stateUpdatedAt: cachedStateUpdatedAt,
                 canonicalPlatformSlug: canonicalSlug, needsMetadataRefresh: nil
             )
             let data = try JSONEncoder().encode(manifest)
@@ -1068,7 +851,6 @@ final class KeptGameStore: ObservableObject {
             if let legacy = try? decoder.decode(LegacyKeptGameV1.self, from: data) {
                 let game = KeptGame(
                     rom: stubRom(from: legacy), totalBytes: legacy.totalBytes, keptAt: legacy.keptAt,
-                    stateId: nil, stateUpdatedAt: nil,
                     canonicalPlatformSlug: nil, needsMetadataRefresh: true
                 )
                 migrated.append((entry, game))
@@ -1095,10 +877,9 @@ final class KeptGameStore: ObservableObject {
         return games
     }
 
-    /// Recursive, not a shallow listing: the pending-states queue lives
-    /// in its own subdirectory, and a shallow count would silently
-    /// undercount a kept game's real size the moment a save queued up
-    /// inside it.
+    /// Recursive, not a shallow listing: a game's files can sit in
+    /// subdirectories, and a shallow count would silently undercount a
+    /// kept game's real size.
     private static func directorySize(_ dir: URL) -> Int64 {
         guard let enumerator = FileManager.default.enumerator(
             at: dir, includingPropertiesForKeys: [.fileSizeKey, .isRegularFileKey]

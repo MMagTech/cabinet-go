@@ -49,27 +49,14 @@ earlier ones are useful without the later ones.
   checks `NetworkMonitor` up front and skips the firmware/saves/states
   fetches entirely when offline, rather than waiting out three doomed
   timeouts, exactly the spinner this phase was scoped to remove.
-- Keep now also downloads the newest save state for a kept, native-
-  capable game, and keeps it current for free on every ordinary online
-  visit to that game's launch screen afterward. A locally cached state
-  populates the Resume-from list with zero network, so a kept game
-  resumes real progress offline rather than always booting fresh, and
-  is preferred over a network fetch even online whenever it is the
-  state actually selected, since a round trip for a state already on
-  the phone only slows things down. States stay internal, never linked
-  into the Files mirror: RomM's own library has no states folder, and a
-  state blob is core-format-specific, no use to another app the way a
-  ROM is. Confirmed before building.
-- Reached at length before any of this was built: a state cached at
-  keep time and refreshed opportunistically whenever there is a
-  connection is the right shape, not a queue, because Cabinet already
-  does a live fetch every time it is online, so it is never stale while
-  it has signal; the only real gap was the narrow window between the
-  last live check and actually losing signal, closed by refreshing on
-  ordinary use rather than needing a background job. Multi-device
-  staleness (a save made on another client while Cabinet is offline)
-  does not need solving on this read side either, it is exactly what
-  phase 3's already-scoped append-only upload queue exists for.
+- Keep also brings the game's saves down: RomM's save channels as last
+  seen, the bytes of the save a start would continue from, and the three
+  states the game offers, so a kept game played offline starts from the
+  same save it would online (`GameSaves.fetchForOffline`; the rule is in
+  [native-in-game-saves.md](native-in-game-saves.md)). States stay
+  internal, never linked into the Files mirror: RomM's own library has
+  no states folder, and a state blob is core-format-specific, no use to
+  another app the way a ROM is.
 - `Rom` gained `Encodable` so `KeptGame`'s manifest can embed the whole
   rom a game was kept from, not a hand-picked subset. That is what
   makes offline navigation possible: Home now shows every kept,
@@ -80,41 +67,22 @@ earlier ones are useful without the later ones.
   list: their player still needs the server to start, so listing them
   would set up a tap that fails.
 
-### Phase 3: Saves written locally, synced when connectivity returns (built 2026-08-07)
+### Phase 3: Saves written locally, synced when connectivity returns
 
-- A state saved on a kept game writes to local storage first, before
-  any attempt to reach RomM, in `KeptGameStore`'s own per-game
-  `pending-states` directory. Losing signal mid-save never means
-  losing the save; a game played natively without being kept still
-  saves directly, since native play without a connection was never
-  possible for it anyway.
-- Conflicts are designed out rather than resolved: each queued file
-  already carries RomM's own timestamped name (`stateFileStem()`), so
-  an upload lands exactly as if it had happened online, nothing
-  overwrites anything, sync is only "finish the uploads."
-  `KeptGameStore.syncPendingStates` is safe to call often: a file that
-  uploads successfully leaves the queue, one that fails stays for the
-  next attempt.
-- Upload is automatic and app-wide: `RommApp` observes
-  `NetworkMonitor` directly and syncs on foreground, on the connection
-  itself changing, or the manual toggle turning off, not only when the
-  specific game's screen happens to be revisited.
-- Every queued save shows as its own row in Resume-from, not just the
-  newest, matching "the local queue plus whatever was last fetched"
-  above literally: a trip with several saves offers every one of them
-  back. Loading falls back through local sources before ever asking
-  the network, and the pause menu's own "Load latest state" now
-  prefers the newest local save when offline instead of failing.
-- Visibility: a terse "N saves waiting to upload" appears on the
-  game's own Storage card and in the Storage settings list once
-  something is queued (saves are important enough to warrant this, not
-  fully silent).
-- Wording settled after a direct correction: the pause menu's offline
-  save status is "Waiting for signal to upload.", not a longer
-  "Saved on this iPhone, uploads once you're back online" draft,
-  since being offline already implies the save is local, no need to
-  say so twice, a standing correction to this project's UI copy, not
-  a one-off.
+Rebuilt on RomM's save channels on 2026-11-26 (step 5 of
+[scope-handheld.md](scope-handheld.md)'s order); the first build's
+per-game state queue is gone.
+
+- Every save and every state is written on the phone first, for every
+  game, kept or not, and marked owed in the game's one push to RomM
+  (`SavePush`). Losing signal mid-save, or iOS ending the app, never
+  means losing the save.
+- What waited goes up at the next foreground with a connection, without
+  the game being started (`RommApp.syncIfOnline`), and before a start
+  picks a save.
+- The game screen offers the game's three newest states, the phone's own
+  among them; with no connection, the phone's own files. Nothing on
+  screen says a save is waiting to upload, as on CabinetOS.
 
 ### Same-day follow-on: the app notices offline, live, not on request
 
@@ -197,10 +165,7 @@ shipped 2026-08-07, same session:
   is both kept and offline, informational caption unchanged, Files
   staying the deliberate path for that action. A not-yet-kept game's
   toggle stays visible but disabled offline, greyed rather than hidden,
-  since a failed download attempt costs nothing to undo. Saves
-  (`GameSave`, distinct from states) were confirmed as a non-issue
-  while looking at this: they were never wired into native play at all,
-  online or off, so their offline emptiness is correct, not a gap.
+  since a failed download attempt costs nothing to undo.
 
 ## Decisions already made
 
@@ -272,8 +237,8 @@ shipped 2026-08-07, same session:
   rest. One visible action held through three rounds of hedging, and
   was right every time.
 - Save states remain per-core, per the state-format finding in the
-  native player work: an offline save from the native player syncs up
-  tagged fbneo-native, same as an online one.
+  native player work: an offline state goes up under its core's tag,
+  the same as an online one.
 
 ## Out of scope, explicitly
 

@@ -21,6 +21,10 @@ final class Session: ObservableObject {
     @Published private(set) var stage: Stage = .needsServer
     @Published private(set) var serverURL: URL?
     @Published private(set) var serverVersion: String?
+    /// Whether the server has RomM 5.5's save channels, as its heartbeat
+    /// last said (`SAVE_SYNC`); kept for offline. Saves and states are read
+    /// and written only when it has (GameSaves.online).
+    @Published private(set) var serverHasChannels = false
     @Published private(set) var scopes: [String] = []
     /// An admin can rename any platform's folder to whatever they like, and
     /// RomM remembers the mapping from that folder name back to the
@@ -64,6 +68,7 @@ final class Session: ObservableObject {
 
     private let serverKey = "com.mmagtech.RommApp.serverURL"
     private let versionKey = "com.mmagtech.RommApp.serverVersion"
+    private let channelsKey = "com.mmagtech.RommApp.serverHasChannels"
     private let localServerKey = "com.mmagtech.RommApp.localServerURL"
     /// RomM's own id for the active pairing, kept because the presence
     /// heartbeat is matched on it. Absent for every pairing made before
@@ -85,9 +90,20 @@ final class Session: ObservableObject {
     /// heartbeat needs no sign-in and fails quietly offline.
     func refreshServerVersion() async {
         guard let client, let beat = try? await client.heartbeat() else { return }
-        guard beat.system.version != serverVersion else { return }
-        serverVersion = beat.system.version
-        UserDefaults.standard.set(beat.system.version, forKey: versionKey)
+        heard(beat)
+    }
+
+    /// What a heartbeat said of the server: its version, and whether it has
+    /// save channels.
+    private func heard(_ beat: Heartbeat) {
+        if beat.system.version != serverVersion {
+            serverVersion = beat.system.version
+            UserDefaults.standard.set(beat.system.version, forKey: versionKey)
+        }
+        if (beat.saveSync != nil) != serverHasChannels {
+            serverHasChannels = beat.saveSync != nil
+            UserDefaults.standard.set(serverHasChannels, forKey: channelsKey)
+        }
     }
 
     private func restore() {
@@ -97,6 +113,7 @@ final class Session: ObservableObject {
 
         serverURL = url
         serverVersion = UserDefaults.standard.string(forKey: versionKey)
+        serverHasChannels = UserDefaults.standard.bool(forKey: channelsKey)
         localServerURL = UserDefaults.standard.string(forKey: localServerKey)
             .flatMap { URL(string: $0) }
 
@@ -236,10 +253,9 @@ final class Session: ObservableObject {
 
         client = candidate
         serverURL = url
-        serverVersion = beat.system.version
+        heard(beat)
 
         UserDefaults.standard.set(url.absoluteString, forKey: serverKey)
-        UserDefaults.standard.set(beat.system.version, forKey: versionKey)
 
         // A token may already exist if this instance was paired before.
         if let host = url.host, let token = Keychain.token(forHost: host) {
@@ -428,6 +444,8 @@ final class Session: ObservableObject {
         client = nil
         serverURL = nil
         serverVersion = nil
+        serverHasChannels = false
+        UserDefaults.standard.removeObject(forKey: channelsKey)
         localServerURL = nil
         isUsingLocalAddress = false
         scopes = []
@@ -524,8 +542,7 @@ final class Session: ObservableObject {
     /// particular kept game: unlike saves, a play-session report can fail
     /// for a rom that is not kept at all, it only needs to have started
     /// online and lost signal before ending. The directory itself is the
-    /// queue, no separate manifest, same convention KeptGameStore's
-    /// pending-states directory already uses.
+    /// queue, no separate manifest.
     private static let pendingSessionsDir: URL = {
         let fm = FileManager.default
         let support = fm.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
@@ -691,70 +708,51 @@ final class Session: ObservableObject {
 
     // MARK: Launch data
 
-    func saves(romId: Int) async throws -> [GameSave] {
+    // The requests behind save channels (RommClient), for GameSaves.
+
+    func saveRows(romId: Int) async throws -> [RommAsset] {
         guard let client else { throw RommError.transport("No server selected.") }
-        return try await client.saves(romId: romId)
+        return try await client.saveRows(romId: romId)
     }
 
-    func states(romId: Int) async throws -> [GameState] {
+    func stateRows(romId: Int) async throws -> [RommAsset] {
         guard let client else { throw RommError.transport("No server selected.") }
-        return try await client.states(romId: romId)
+        return try await client.stateRows(romId: romId)
     }
 
-    func stateContent(_ state: GameState) async throws -> Data {
+    func assetContent(kind: String, id: Int) async throws -> Data {
         guard let client else { throw RommError.transport("No server selected.") }
-        return try await client.stateContent(state)
+        return try await client.assetContent(kind: kind, id: id)
     }
 
-    func saveContent(_ save: GameSave) async throws -> Data {
-        guard let client else { throw RommError.transport("No server selected.") }
-        return try await client.saveContent(save)
+    func saveAs(saveId: Int, query: [URLQueryItem]) async -> SaveAnswer {
+        guard let client else { return SaveAnswer(status: 0, error: "No server selected.") }
+        return await client.saveAs(saveId: saveId, query: query)
     }
 
-    func uploadSave(
-        romId: Int,
-        emulator: String,
-        fileName: String,
-        saveData: Data
-    ) async throws {
+    func channelFiles(romId: Int) async throws -> ChannelFiles {
         guard let client else { throw RommError.transport("No server selected.") }
-        try await client.uploadSave(
-            romId: romId, emulator: emulator, fileName: fileName, saveData: saveData
-        )
+        return try await client.channelFiles(romId: romId)
     }
 
-    func uploadState(
-        romId: Int,
-        emulator: String,
-        fileName: String,
-        stateData: Data,
-        screenshotName: String? = nil,
-        screenshotData: Data? = nil
-    ) async throws {
+    func channels(fileIds: [Int]) async throws -> [SaveChannel] {
         guard let client else { throw RommError.transport("No server selected.") }
-        try await client.uploadState(
-            romId: romId,
-            emulator: emulator,
-            fileName: fileName,
-            stateData: stateData,
-            screenshotName: screenshotName,
-            screenshotData: screenshotData
-        )
+        return try await client.channels(fileIds: fileIds)
+    }
+
+    func channelHistory(channelId: String) async throws -> [Snapshot] {
+        guard let client else { throw RommError.transport("No server selected.") }
+        return try await client.channelHistory(channelId: channelId)
+    }
+
+    func pushSnapshot(_ push: SnapshotPush) async throws -> PushAnswer {
+        guard let client else { throw RommError.transport("No server selected.") }
+        return try await client.pushSnapshot(push)
     }
 
     func screenshotData(path: String) async throws -> Data {
         guard let client else { throw RommError.transport("No server selected.") }
         return try await client.screenshotData(path: path)
-    }
-
-    func deleteStates(ids: [Int]) async throws {
-        guard let client else { throw RommError.transport("No server selected.") }
-        try await client.deleteStates(ids: ids)
-    }
-
-    func deleteSaves(ids: [Int]) async throws {
-        guard let client else { throw RommError.transport("No server selected.") }
-        try await client.deleteSaves(ids: ids)
     }
 
     func firmware(platformId: Int) async throws -> [Firmware] {

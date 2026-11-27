@@ -641,131 +641,118 @@ actor RommClient {
         return try await send(req, decoding: RomPage.self).items
     }
 
-    /// Saves, states and firmware for the launch screen. Each is a plain
-    /// list the server already models, so nothing here reinterprets RomM.
-    /// Uploads a save state the way RomM's own player does (POST
-    /// /api/states?rom_id=&emulator=, multipart with a `stateFile` part and
-    /// an optional `screenshotFile`), with bearer auth. The bytes
-    /// are opaque to RomM; what matters for later loads is the `emulator`
-    /// tag, which the launch screen uses to grey out states that the
-    /// running core cannot restore.
-    func uploadState(
-        romId: Int,
-        emulator: String,
-        fileName: String,
-        stateData: Data,
-        screenshotName: String? = nil,
-        screenshotData: Data? = nil
-    ) async throws {
-        var components = URLComponents(
-            url: baseURL.appendingPathComponent("/api/states"), resolvingAgainstBaseURL: false
-        )
-        components?.queryItems = [
-            URLQueryItem(name: "rom_id", value: String(romId)),
-            URLQueryItem(name: "emulator", value: emulator),
-        ]
-        guard let url = components?.url else {
-            throw RommError.transport("Could not build the request address.")
-        }
+    // MARK: Saves and states (RomM 5.5's save channels)
+    //
+    // The requests behind RommSnapshots' words: a game's saves and states as
+    // RomM lists them, a save's or a state's bytes, a save in an emulator's
+    // form, the files a game's channels can be on, this person's channels on
+    // them, a channel's history, and a push. Each reads its body through
+    // RommSnapshots. RomM 5.5.0-beta.1's code is the line (RommSnapshots).
 
+    /// The game's saves, including every snapshot's save, which RomM lists
+    /// with its channel named.
+    func saveRows(romId: Int) async throws -> [RommAsset] {
+        try await assets(request(path: "/api/saves", query: [URLQueryItem(name: "rom_id", value: String(romId))]))
+    }
+
+    /// The game's states, every snapshot's and the ones from before channels.
+    func stateRows(romId: Int) async throws -> [RommAsset] {
+        try await assets(request(path: "/api/states", query: [URLQueryItem(name: "rom_id", value: String(romId))]))
+    }
+
+    private func assets(_ req: URLRequest) async throws -> [RommAsset] {
+        guard let rows = RommSnapshots.readAssets(try await performExpectingSuccess(req)) else {
+            throw RommError.decoding("a list of saves or states")
+        }
+        return rows
+    }
+
+    /// A save's or a state's bytes as stored: `kind` is "saves" or "states".
+    func assetContent(kind: String, id: Int) async throws -> Data {
+        try await performExpectingSuccess(request(path: "/api/\(kind)/\(id)/content"))
+    }
+
+    /// A save in an emulator's form (`?core=<Sigil's name>`, its options),
+    /// or as stored with no query. Never throws: status 0 is no answer, and a
+    /// refusal carries Sigil's code or RomM's words.
+    func saveAs(saveId: Int, query: [URLQueryItem]) async -> SaveAnswer {
+        var answer = SaveAnswer()
+        do {
+            let (data, http) = try await perform(request(path: "/api/saves/\(saveId)/content", query: query))
+            answer.status = http.statusCode
+            if http.statusCode == 200 {
+                answer.bytes = data
+                let path = http.value(forHTTPHeaderField: "X-Save-Path") ?? ""
+                answer.savePath = path.removingPercentEncoding ?? path
+            } else {
+                let root = (try? JSONSerialization.jsonObject(with: data)) as? [String: Any]
+                let detail = root?["detail"]
+                answer.error = ((detail as? [String: Any])?["error"] as? String) ?? (detail as? String)
+                    ?? (root?["error"] as? String) ?? "HTTP \(http.statusCode)"
+            }
+        } catch {
+            answer.error = error.localizedDescription
+        }
+        return answer
+    }
+
+    /// The files a game's save channels can be on, from its own entry.
+    func channelFiles(romId: Int) async throws -> ChannelFiles {
+        guard let files = RommSnapshots.readChannelFiles(try await performExpectingSuccess(request(path: "/api/roms/\(romId)")))
+        else { throw RommError.decoding("the game's files") }
+        return files
+    }
+
+    /// This person's channels on any of `fileIds`, a hundred files a request.
+    /// RommError.notFound when RomM no longer knows one of the files.
+    func channels(fileIds: [Int]) async throws -> [SaveChannel] {
+        var out: [SaveChannel] = []
+        var at = 0
+        while at < fileIds.count {
+            let page = fileIds[at..<min(at + 100, fileIds.count)]
+            let query = page.map { URLQueryItem(name: "rom_file_id", value: String($0)) }
+            guard let listed = RommSnapshots.readChannels(try await performExpectingSuccess(request(path: "/api/channels", query: query)))
+            else { throw RommError.decoding("the game's save channels") }
+            out += listed
+            at += 100
+        }
+        return out
+    }
+
+    /// One channel's history, newest first. RomM's ids are UUIDs: anything
+    /// else is not put in the address.
+    func channelHistory(channelId: String) async throws -> [Snapshot] {
+        guard !channelId.isEmpty, channelId.allSatisfy({ $0.isHexDigit || $0 == "-" }) else {
+            throw RommError.transport("not a channel's id")
+        }
+        let req = request(path: "/api/snapshots", query: [URLQueryItem(name: "channel_id", value: channelId),
+                                                          URLQueryItem(name: "limit", value: "100")])
+        guard let list = RommSnapshots.readSnapshots(try await performExpectingSuccess(req)) else {
+            throw RommError.decoding("the channel's history")
+        }
+        return list
+    }
+
+    /// ONE PUSH INTO A CHANNEL (`POST /api/snapshots`): the manifest and the
+    /// parts RommSnapshots names. Whatever RomM answers comes back read;
+    /// only no answer at all throws.
+    func pushSnapshot(_ push: SnapshotPush) async throws -> PushAnswer {
         let boundary = "Boundary-\(UUID().uuidString)"
-        var req = URLRequest(url: url)
-        req.httpMethod = "POST"
+        var req = request(path: "/api/snapshots", method: "POST")
         req.setValue("multipart/form-data; boundary=\(boundary)", forHTTPHeaderField: "Content-Type")
-        if let accessToken {
-            req.setValue("Bearer \(accessToken)", forHTTPHeaderField: "Authorization")
-        }
-
         var body = Data()
-        body.append("--\(boundary)\r\n".data(using: .utf8)!)
-        body.append("Content-Disposition: form-data; name=\"stateFile\"; filename=\"\(fileName)\"\r\n".data(using: .utf8)!)
-        body.append("Content-Type: application/octet-stream\r\n\r\n".data(using: .utf8)!)
-        body.append(stateData)
-        body.append("\r\n".data(using: .utf8)!)
-        if let screenshotName, let screenshotData {
-            body.append("--\(boundary)\r\n".data(using: .utf8)!)
-            body.append("Content-Disposition: form-data; name=\"screenshotFile\"; filename=\"\(screenshotName)\"\r\n".data(using: .utf8)!)
-            body.append("Content-Type: image/png\r\n\r\n".data(using: .utf8)!)
-            body.append(screenshotData)
-            body.append("\r\n".data(using: .utf8)!)
+        for part in RommSnapshots.parts(push) {
+            body.append(Data("--\(boundary)\r\n".utf8))
+            let file = part.fileName.isEmpty ? "" : "; filename=\"\(part.fileName.replacingOccurrences(of: "\"", with: "_"))\""
+            body.append(Data("Content-Disposition: form-data; name=\"\(part.name)\"\(file)\r\n".utf8))
+            body.append(Data("Content-Type: \(part.contentType)\r\n\r\n".utf8))
+            body.append(part.data)
+            body.append(Data("\r\n".utf8))
         }
-        body.append("--\(boundary)--\r\n".data(using: .utf8)!)
+        body.append(Data("--\(boundary)--\r\n".utf8))
         req.httpBody = body
-
-        _ = try await performExpectingSuccess(req)
-    }
-
-    func saves(romId: Int) async throws -> [GameSave] {
-        try await sendQuery("/api/saves", [URLQueryItem(name: "rom_id", value: String(romId))])
-    }
-
-    /// Uploads a battery save (POST /api/saves, multipart with a `saveFile`
-    /// part), the endpoint RomM keeps distinct from states for exactly this
-    /// kind of data. `overwrite` replaces the server's copy of the same
-    /// file name instead of stacking a new row per upload, which is what
-    /// keeps a PS1 game at one memory card rather than one per session.
-    /// Both the parameter and the part name are confirmed against the live
-    /// server's OpenAPI schema, not assumed.
-    func uploadSave(
-        romId: Int,
-        emulator: String,
-        fileName: String,
-        saveData: Data
-    ) async throws {
-        var components = URLComponents(
-            url: baseURL.appendingPathComponent("/api/saves"), resolvingAgainstBaseURL: false
-        )
-        components?.queryItems = [
-            URLQueryItem(name: "rom_id", value: String(romId)),
-            URLQueryItem(name: "emulator", value: emulator),
-            URLQueryItem(name: "overwrite", value: "true"),
-        ]
-        guard let url = components?.url else {
-            throw RommError.transport("Could not build the request address.")
-        }
-
-        let boundary = "Boundary-\(UUID().uuidString)"
-        var req = URLRequest(url: url)
-        req.httpMethod = "POST"
-        req.setValue("multipart/form-data; boundary=\(boundary)", forHTTPHeaderField: "Content-Type")
-        if let accessToken {
-            req.setValue("Bearer \(accessToken)", forHTTPHeaderField: "Authorization")
-        }
-
-        var body = Data()
-        body.append("--\(boundary)\r\n".data(using: .utf8)!)
-        body.append("Content-Disposition: form-data; name=\"saveFile\"; filename=\"\(fileName)\"\r\n".data(using: .utf8)!)
-        body.append("Content-Type: application/octet-stream\r\n\r\n".data(using: .utf8)!)
-        body.append(saveData)
-        body.append("\r\n".data(using: .utf8)!)
-        body.append("--\(boundary)--\r\n".data(using: .utf8)!)
-        req.httpBody = body
-
-        _ = try await performExpectingSuccess(req)
-    }
-
-    /// The raw bytes of one battery save, the same content-endpoint
-    /// pattern as states, covers and firmware.
-    func saveContent(_ save: GameSave) async throws -> Data {
-        let req = request(path: "/api/saves/\(save.id)/content")
-        return try await performExpectingSuccess(req)
-    }
-
-    func states(romId: Int) async throws -> [GameState] {
-        try await sendQuery("/api/states", [URLQueryItem(name: "rom_id", value: String(romId))])
-    }
-
-    /// The raw bytes of one save state, confirmed real and standalone
-    /// (`/api/states/{id}/content`, `assets.read`) rather than assumed:
-    /// the launch screen used to seed a `state_id` into RomM's own
-    /// localStorage and trust its page to notice and load it, and nothing
-    /// ever confirmed that page actually did. It does not. This is the
-    /// same content-endpoint pattern as covers and firmware, fetched
-    /// directly and loaded through the emulator's own JavaScript API,
-    /// the one path already proven to work: the pause menu's Load button.
-    func stateContent(_ state: GameState) async throws -> Data {
-        let req = request(path: "/api/states/\(state.id)/content")
-        return try await performExpectingSuccess(req)
+        let (data, http) = try await perform(req)
+        return RommSnapshots.readPushAnswer(status: http.statusCode, body: data)
     }
 
     func firmware(platformId: Int) async throws -> [Firmware] {
@@ -873,25 +860,6 @@ actor RommClient {
               (200..<300).contains(http.statusCode)
         else { throw RommError.notFound }
         return data
-    }
-
-    /// Deletes one or more states. `assets.write`, already required for
-    /// pairing, so no re-pair is needed for this.
-    func deleteStates(ids: [Int]) async throws {
-        try await deleteAssets(path: "/api/states/delete", key: "states", ids: ids)
-    }
-
-    /// Deletes one or more saves, the cartridge battery kind. Same
-    /// endpoint shape as states, a different resource entirely.
-    func deleteSaves(ids: [Int]) async throws {
-        try await deleteAssets(path: "/api/saves/delete", key: "saves", ids: ids)
-    }
-
-    private func deleteAssets(path: String, key: String, ids: [Int]) async throws {
-        var req = request(path: path, method: "POST")
-        req.setValue("application/json", forHTTPHeaderField: "Content-Type")
-        req.httpBody = try JSONSerialization.data(withJSONObject: [key: ids])
-        _ = try await send(req, decoding: [Int].self)
     }
 
     /// An authenticated request for a file endpoint that is not JSON, ROM
@@ -1110,11 +1078,6 @@ enum RommError: LocalizedError, Equatable {
     /// fix themselves by moving somewhere with signal, so the UI answers
     /// it with a retry rather than an explanation.
     case offline
-    /// A reverse proxy in front of RomM rejecting an oversized request
-    /// body, most often a save state. RommClient.uploadState once had no
-    /// specific handling for it and fell through to the generic HTTP
-    /// message.
-    case stateTooLarge
     case http(Int)
     case transport(String)
     case decoding(String)
@@ -1155,7 +1118,6 @@ enum RommError: LocalizedError, Equatable {
         case (403, .some): self = .forbidden
         case (403, .none): self = .blocked
         case (404, _): self = .notFound
-        case (413, _): self = .stateTooLarge
         default: self = .http(status)
         }
     }
@@ -1176,8 +1138,6 @@ enum RommError: LocalizedError, Equatable {
             return "That address answered, but it does not look like a RomM server."
         case .offline:
             return "No connection to your server."
-        case .stateTooLarge:
-            return "That save state is too large for the server to accept. Saturn states run big; check your server's upload size limit."
         case .http(let code): return "The server returned an error. Code \(code)."
         case .transport(let message): return message
         case .decoding(let type):

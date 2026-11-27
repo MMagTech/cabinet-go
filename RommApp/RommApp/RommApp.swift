@@ -7,6 +7,12 @@ struct RommApp: App {
     @Environment(\.scenePhase) private var scenePhase
     @ObservedObject private var networkMonitor = NetworkMonitor.shared
 
+    init() {
+        // Before anything reads the kept games' folders: the old save stores
+        // go, once (GameSaves.removeOldStores).
+        GameSaves.removeOldStores()
+    }
+
     var body: some Scene {
         WindowGroup {
             // Debug builds with no such launch argument evaluate one
@@ -32,6 +38,14 @@ struct RommApp: App {
                     cardURL: FileManager.default.temporaryDirectory.appendingPathComponent("skin-bench-card.bin")
                 )
                 .environmentObject(session)
+            } else if ProcessInfo.processInfo.arguments.contains("-cabinetPauseMenuBench") {
+                // The pause menu's fade on its own (PauseMenuBench).
+                PauseMenuBench()
+                    .preferredColorScheme(.dark)
+            } else if ProcessInfo.processInfo.arguments.contains("-cabinetNoticeGallery") {
+                // The game's notices on their own (NoticeGallery), for
+                // judging them in a simulator, where no game can start.
+                NoticeGallery()
             } else {
                 appContent
             }
@@ -105,13 +119,18 @@ struct RommApp: App {
         // fourteen hundred games do not change between breakfast and
         // lunch, and the widget's recents do.
         SpotlightIndexer.refresh(session: session)
-        Task { await session.refreshServerVersion() }
         Task {
-            let savesUploaded = await KeptGameStore.shared.syncPendingStates(session: session)
+            // The server's version first: it says whether RomM has save
+            // channels, which every owed push waits on.
+            await session.refreshServerVersion()
+            // Every save and state still owed, sent without the game being
+            // started: a save made offline reaches RomM at the next
+            // foreground with a connection. Said nowhere, as on the TV.
+            _ = await SavePush.sendAllOwed(GameSaves.server(session))
             let sessionsUploaded = await session.syncPendingPlaySessions()
             await KeptGameStore.shared.refreshStaleMetadata(session: session)
-            if savesUploaded > 0 || sessionsUploaded > 0 {
-                session.lastSyncSummary = Self.summaryText(saves: savesUploaded, sessions: sessionsUploaded)
+            if sessionsUploaded > 0 {
+                session.lastSyncSummary = Self.summaryText(sessions: sessionsUploaded)
             }
         }
     }
@@ -119,10 +138,7 @@ struct RommApp: App {
     /// Terse on purpose, matching how every other offline-sync caption in
     /// this app reads: the fact that something uploaded is the whole
     /// message, nothing here needs restating why or how.
-    private static func summaryText(saves: Int, sessions: Int) -> String {
-        var parts: [String] = []
-        if saves > 0 { parts.append(saves == 1 ? "1 save" : "\(saves) saves") }
-        if sessions > 0 { parts.append(sessions == 1 ? "1 play session" : "\(sessions) play sessions") }
-        return parts.joined(separator: ", ") + " uploaded"
+    private static func summaryText(sessions: Int) -> String {
+        (sessions == 1 ? "1 play session" : "\(sessions) play sessions") + " uploaded"
     }
 }

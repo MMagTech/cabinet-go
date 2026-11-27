@@ -16,11 +16,8 @@ any code gets written.
   reach a Dreamcast game's launch screen and its VMU row. The plan is a
   Dreamcast entry listing only the games whose memory card holds a
   minigame, labelled as the VMU.
-- **A clean first launch for phones that played the old systems.** Saves a
-  phone still owes RomM for a system that left get sent first; only then
-  are that system's kept games and local files removed.
-- **Saves through RomM's save channels**, moving in step with CabinetOS so
-  saves keep crossing between the two.
+- **A clean first launch for phones that played the old systems.** A
+  system that left has its kept games and local files removed.
 
 ## Being explored
 
