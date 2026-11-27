@@ -237,8 +237,9 @@ struct NativePlayerView: View {
                 }
 
                 if menuVisible {
+                    PauseMenu.backdrop
                     pauseMenu
-                        .transition(.opacity)
+                        .transition(PauseMenu.cardArrives)
                 }
             }
             .overlay(alignment: .top) {
@@ -401,86 +402,82 @@ struct NativePlayerView: View {
         }
     }
 
-    /// The pause menu: a regularMaterial card, 280pt wide, with a "Paused"
-    /// subtitle. Quit leads, in the spot a stray tap is cheapest; Resume
-    /// trails, in the spot a reaching thumb naturally lands.
+    /// The pause menu's card, 280pt wide, with a "Paused" subtitle, over
+    /// PauseMenu.backdrop. Quit leads, in the spot a stray tap is cheapest;
+    /// Resume trails, in the spot a reaching thumb naturally lands.
     private var pauseMenu: some View {
-        ZStack {
-            Color.black.opacity(PauseMenu.dim)
-                .ignoresSafeArea()
-            VStack(spacing: 18) {
-                VStack(spacing: 4) {
-                    Text(rom.displayName)
-                        .font(.headline)
-                        .lineLimit(1)
-                    Text("Paused")
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
+        VStack(spacing: 18) {
+            VStack(spacing: 4) {
+                Text(rom.displayName)
+                    .font(.headline)
+                    .lineLimit(1)
+                Text("Paused")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
+            VStack(spacing: 10) {
+                Button(role: .destructive) {
+                    dismiss()
+                } label: {
+                    Label("Quit", systemImage: "xmark")
+                        .frame(maxWidth: .infinity)
+                        .padding(.vertical, 6)
                 }
-                VStack(spacing: 10) {
-                    Button(role: .destructive) {
-                        dismiss()
-                    } label: {
-                        Label("Quit", systemImage: "xmark")
-                            .frame(maxWidth: .infinity)
-                            .padding(.vertical, 6)
-                    }
-                    .buttonStyle(.bordered)
-                    Menu {
-                        ForEach(NativeShader.available(for: platform)) { candidate in
-                            Button {
-                                renderer.shader = candidate
-                                NativeShader.setCurrent(candidate, for: platform)
-                            } label: {
-                                if candidate == renderer.shader {
-                                    Label(candidate.label, systemImage: "checkmark")
-                                } else {
-                                    Text(candidate.label)
-                                }
+                .buttonStyle(.bordered)
+                Menu {
+                    ForEach(NativeShader.available(for: platform)) { candidate in
+                        Button {
+                            renderer.shader = candidate
+                            NativeShader.setCurrent(candidate, for: platform)
+                        } label: {
+                            if candidate == renderer.shader {
+                                Label(candidate.label, systemImage: "checkmark")
+                            } else {
+                                Text(candidate.label)
                             }
                         }
-                    } label: {
-                        Label("Shader", systemImage: "camera.filters")
-                            .frame(maxWidth: .infinity)
-                            .padding(.vertical, 6)
                     }
-                    .buttonStyle(.bordered)
-                    // Game & Watch has no save states (the core cannot
-                    // serialize), so the slots hide rather than fail.
-                    if platform.supportsSaveStates {
-                    Button {
-                        saveState()
-                    } label: {
-                        Label("Save state", systemImage: "square.and.arrow.down")
-                            .frame(maxWidth: .infinity)
-                            .padding(.vertical, 6)
-                    }
-                    .buttonStyle(.bordered)
-                    Button {
-                        loadLatestState()
-                    } label: {
-                        Label("Load latest state", systemImage: "arrow.uturn.backward")
-                            .frame(maxWidth: .infinity)
-                            .padding(.vertical, 6)
-                    }
-                    .buttonStyle(.bordered)
-                    }
-                    Button {
-                        closeMenu()
-                    } label: {
-                        Label("Resume", systemImage: "play.fill")
-                            .frame(maxWidth: .infinity)
-                            .padding(.vertical, 6)
-                    }
-                    .buttonStyle(.borderedProminent)
+                } label: {
+                    Label("Shader", systemImage: "camera.filters")
+                        .frame(maxWidth: .infinity)
+                        .padding(.vertical, 6)
                 }
+                .buttonStyle(.bordered)
+                // Game & Watch has no save states (the core cannot
+                // serialize), so the slots hide rather than fail.
+                if platform.supportsSaveStates {
+                Button {
+                    saveState()
+                } label: {
+                    Label("Save state", systemImage: "square.and.arrow.down")
+                        .frame(maxWidth: .infinity)
+                        .padding(.vertical, 6)
+                }
+                .buttonStyle(.bordered)
+                Button {
+                    loadLatestState()
+                } label: {
+                    Label("Load latest state", systemImage: "arrow.uturn.backward")
+                        .frame(maxWidth: .infinity)
+                        .padding(.vertical, 6)
+                }
+                .buttonStyle(.bordered)
+                }
+                Button {
+                    closeMenu()
+                } label: {
+                    Label("Resume", systemImage: "play.fill")
+                        .frame(maxWidth: .infinity)
+                        .padding(.vertical, 6)
+                }
+                .buttonStyle(.borderedProminent)
             }
-            .frame(maxWidth: 280)
-            .padding(24)
-            .pauseMenuCard()
-            .padding(40)
-            .disabled(menuBusy)
         }
+        .frame(maxWidth: 280)
+        .padding(24)
+        .pauseMenuCard()
+        .padding(40)
+        .disabled(menuBusy)
     }
 
     /// Mirrors RomM's own player's naming exactly (RomM 5.1.0's
@@ -552,19 +549,39 @@ struct NativePlayerView: View {
     }
 }
 
-/// HOW THE PAUSE MENU COMES AND GOES. Nothing else on screen moves or
-/// leaves: the touch controls stay where they are, under a backdrop dark
-/// enough that they read as background, and the card has a light edge and
-/// a shadow so it never reads as one shape with the D-pad it can sit over
-/// in portrait (seen on an iPhone Air in Pokemon Red). The backdrop and the
-/// card fade in together and out together. The controls fading out with
-/// the menu instead was tried on 2026-11-26 and looked abrupt: they left,
-/// and came back after the game was already running again. The VMU
-/// player's menu (VMUPlayerView) uses the same, so every player's menu
-/// comes and goes alike.
+/// HOW THE PAUSE MENU COMES AND GOES, the TV's numbers (CabinetOS's
+/// panels.h, kOverlayFade, and pausemenu.cpp): 620 ms on the design
+/// system's cubic ease-in-out, the card rising slightly as it arrives and
+/// sinking as it leaves. The TV tuned them with MMagTech on 2026-09-22:
+/// 350 ms read as the menu arriving "in pieces", which turned out to be
+/// speed, and an ease-out exit snaps away at the end. The phone's 200 ms
+/// ease-out looked abrupt for the same reasons (2026-11-26).
+///
+/// Nothing else on screen moves or leaves: the touch controls stay where
+/// they are, under a backdrop dark enough that they read as background,
+/// and the card has a light edge and a shadow so it never reads as one
+/// shape with the D-pad it can sit over in portrait (seen on an iPhone Air
+/// in Pokemon Red). The controls fading out with the menu instead was
+/// tried the same day and looked abrupt: they left, and came back after
+/// the game was already running again. The VMU player's menu
+/// (VMUPlayerView) uses the same, so every player's menu comes and goes
+/// alike.
 enum PauseMenu {
-    static let fade = Animation.easeOut(duration: 0.2)
+    static let fade = Animation.timingCurve(0.65, 0, 0.35, 1, duration: 0.62)
     static let dim = 0.7
+    /// The TV's 24 of its 1,080 rows, near enough the same share of a
+    /// phone's height.
+    static let rise: CGFloat = 20
+
+    static var backdrop: some View {
+        Color.black.opacity(dim)
+            .ignoresSafeArea()
+            .transition(.opacity)
+    }
+
+    static var cardArrives: AnyTransition {
+        .opacity.combined(with: .offset(y: rise))
+    }
 }
 
 extension View {
