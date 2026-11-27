@@ -1,7 +1,10 @@
 import SwiftUI
 
-/// Search across every game on the server, its own tab rather than a field
-/// buried inside the library.
+/// Search across every game on the server that this app plays (the
+/// playable platforms only, as the library shows them), its own tab rather
+/// than a field buried inside the library. Its words say so: the server
+/// holds games for systems the app does not play, and "every game on your
+/// server" promised those too.
 ///
 /// Looking for one specific game is a different intent from browsing
 /// platforms, and it was previously two taps and a reach to the far top
@@ -40,7 +43,7 @@ struct SearchScreen: View {
                         description: Text(
                             networkMonitor.isOffline
                                 ? "Every kept game, by name."
-                                : "Every game on your server, by name."
+                                : "Every game you can play here, by name."
                         )
                     )
                 } else if searching {
@@ -53,7 +56,7 @@ struct SearchScreen: View {
                 }
             }
             .navigationTitle("Search")
-            .searchable(text: $searchText, prompt: networkMonitor.isOffline ? "Search kept games" : "Search all games")
+            .searchable(text: $searchText, prompt: networkMonitor.isOffline ? "Search kept games" : "Search games")
             .searchFocused($fieldFocused)
             .onAppear { fieldFocused = true }
             .task(id: searchText) { await runSearch() }
