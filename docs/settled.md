@@ -93,3 +93,30 @@ the same wall, it also requires `me.write`. A direct phone-to-TV handoff over
 the local network is the only remaining route that removes typing the
 address, and it was not taken for now: it is the most code of the three and
 only helps at home.
+
+## Managing saves from the phone
+
+**Not built: RomM owns it.** A screen on the phone to list a game's saves,
+go back to an earlier one, pin, lend or delete one was weighed on
+2026-11-26, once saves moved onto RomM's save channels, and left out.
+CabinetOS's rule covers it: the console uses RomM and never manages it, so
+one place does the looking at, sorting, sharing and deleting for every
+client (CabinetOS's `docs/decisions/2026-10-21-romm-owns-management.md`).
+The phone follows the TV, which has no such screen. A start already takes
+the newest save and never puts an older one over a newer one, and anything
+a start replaces is in RomM's history, so going back is RomM's "Restore as
+current". Where RomM's own screen is hard to use, the fix belongs in RomM.
+Lending a save to another person is a separate question,
+MMagTech/cabinetos#362.
+
+## Resume
+
+**Loads the newest state, as on CabinetOS.** Re-examined on 2026-11-26,
+once saves moved onto RomM's save channels. Starting from the game's own
+save instead would start CabinetOS's arcade games fresh every time, since
+an arcade game's only save is the board's memory, and the phone keeps the
+TV's rule so the two behave alike. Emulators with no states already start
+from the save. The known catch: a game with states and real in-game saves
+can resume to a state older than its last in-game save. The only clean
+fix, an automatic state made at quit, would reverse "no autosave" and is
+CabinetOS's to decide first.
