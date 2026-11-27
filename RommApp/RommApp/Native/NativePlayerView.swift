@@ -568,7 +568,7 @@ private struct SetBackWhilePaused: ViewModifier {
 /// same over a Game Boy's white screen and a dark one, and the TV's dot
 /// before the words: white for news, the TV's amber for a save it could not
 /// use (CabinetOS's notice.cpp).
-private struct StartNotice: View {
+struct StartNotice: View {
     let words: String
     let problem: Bool
 
@@ -589,6 +589,32 @@ private struct StartNotice: View {
         .shadow(color: .black.opacity(0.35), radius: 10, y: 4)
     }
 }
+
+#if DEBUG
+/// The start's notices on their own, for judging them without starting a
+/// game (`-cabinetNoticeGallery`, RommApp): each over a Game Boy's white
+/// screen and over a dark one, where the player draws them.
+struct NoticeGallery: View {
+    var body: some View {
+        VStack(spacing: 0) {
+            panel(Color(white: 0.97), GameSaves.continuingElsewhere)
+            panel(Color(white: 0.97), GameSaves.couldNotUseNewest)
+            panel(Color(white: 0.10), GameSaves.continuingElsewhere)
+            panel(Color(white: 0.10), GameSaves.couldNotUseNewest)
+        }
+        .background(Color.black)
+        .ignoresSafeArea()
+    }
+
+    private func panel(_ screen: Color, _ words: String) -> some View {
+        screen
+            .overlay(alignment: .top) {
+                StartNotice(words: words, problem: words == GameSaves.couldNotUseNewest)
+                    .padding(.top, 70)
+            }
+    }
+}
+#endif
 
 /// The DS bottom screen as a touch surface, layered over the Metal view
 /// when melonDS runs. Occupies exactly DSScreenLayout's bottom-screen
